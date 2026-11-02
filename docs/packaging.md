@@ -380,7 +380,7 @@ brews:
   - name: slaw
     repository: { owner: SandwichLabs, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
     homepage: https://sandwichlabs.dev/projects/slaw/
-    description: Agentic data workspace — CLI and MCP server
+    description: Analyze your data in a secure private workspace
     test: system "#{bin}/slaw", "--version"
 changelog:
   use: github

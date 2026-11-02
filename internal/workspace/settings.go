@@ -105,7 +105,7 @@ func validateSettings(ws Workspace, s Settings, team string) (string, error) {
 		return "", fmt.Errorf("The team limit is %s, so this computer can't go above it.", team)
 	}
 	if !s.AskBeforeChanges && s.TeamAskBeforeChanges {
-		return "", errors.New("When the team requires the agent to ask before changes, it can't be turned off on this computer.")
+		return "", errors.New("When the team requires the Slaw assistant to ask before changes, it can't be turned off on this computer.")
 	}
 	if !ws.LocalTrusted() {
 		return "", errors.New("Your saved settings for this workspace were made for a different folder. Confirm them first.")
@@ -141,7 +141,7 @@ func SetLocalAgent(ws Workspace, sandbox string, ask bool) error {
 		return fmt.Errorf("The team limit in slaw.yaml is %s, so this computer can't go above it.", cfg.Sandbox)
 	}
 	if !ask && cfg.AskBeforeWrites != nil && *cfg.AskBeforeWrites {
-		return errors.New("slaw.yaml requires the agent to ask before changes, so this can't be turned off on this computer.")
+		return errors.New("slaw.yaml requires the Slaw assistant to ask before changes, so this can't be turned off on this computer.")
 	}
 	local := ws.Local()
 	local.Agent.Sandbox = mode

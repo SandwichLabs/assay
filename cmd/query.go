@@ -36,7 +36,7 @@ writing and DuckDB cannot read a file a writer holds, so --read-only (read
 without taking ownership, every connection attached read-only, no COPY ... TO)
 only reaches the workspace's other connections, such as MotherDuck or Postgres.
 
-This is you acting directly, not the assistant, so SQL runs as written. As a
+This is you acting directly, not the Slaw assistant, so SQL runs as written. As a
 courtesy, ATTACH, DETACH, INSTALL, LOAD, SET and CREATE SECRET are refused with
 an explanation (connections come from the workspace, credentials from your
 keychain). That is a check for common slips, not a security boundary.

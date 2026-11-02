@@ -30,8 +30,8 @@ var (
 
 var llmKeyCmd = &cobra.Command{
 	Use:   "llm-key",
-	Short: "Manage the assistant's API key in the OS keychain",
-	Long: `The assistant's model API key lives in your OS keychain, never in a config file.
+	Short: "Manage the Slaw assistant's API key in the OS keychain",
+	Long: `The Slaw assistant's model API key lives in your OS keychain, never in a config file.
 Where a key is read from, first match wins:
 
   1. SLAW_LLM_API_KEY

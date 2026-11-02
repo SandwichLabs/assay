@@ -149,7 +149,7 @@ defineExpose({ rows, toggleDrawer, refreshConn, expanded })
         </div>
         <div v-else-if="connectionList.length === 0" class="rail-empty" data-testid="rail-empty-none">
           <b>No connections</b>
-          Add one to read data where it lives.
+          Add a database, a bucket or a DuckDB file to query it here.
         </div>
       </div>
     </div>

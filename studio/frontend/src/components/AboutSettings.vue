@@ -21,7 +21,7 @@ onMounted(about.load)
     <div class="card card-pad col" style="gap: var(--sh-space-4);">
       <div>
         <div style="font-weight: 600;">Slaw: SandwichLabs analysis workspace</div>
-        <div class="sh-meta">An agentic workspace for working with data where it already lives.</div>
+        <div class="sh-meta">Analyze your data in a secure private workspace.</div>
       </div>
       <dl class="build" data-testid="about-build">
         <dt>Version</dt><dd data-testid="about-version">{{ about.info.value.version }}</dd>

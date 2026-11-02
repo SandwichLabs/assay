@@ -67,7 +67,7 @@ describe('SettingsView', () => {
     makeApp()
     const { w, router } = await mountAt('/settings?tab=app')
     expect(w.find('#settings-tab-app').attributes('aria-selected')).toBe('true')
-    expect(w.text()).toContain("The assistant's model")
+    expect(w.text()).toContain("The Slaw assistant's model")
     expect(w.text()).not.toContain('This workspace')
     await w.find('#settings-tab-workspace').trigger('click')
     await flushPromises()

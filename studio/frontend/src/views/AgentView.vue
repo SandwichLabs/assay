@@ -67,7 +67,7 @@ function onKeydown(e: KeyboardEvent) {
         v-model="draft"
         class="box agent-textarea"
         data-testid="agent-input"
-        placeholder="Ask the assistant to inspect data or build something…"
+        placeholder="Ask the Slaw assistant to inspect data or build something…"
         @keydown="onKeydown"
       ></textarea>
       <div class="agent-view__inputrow">

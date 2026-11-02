@@ -7,11 +7,11 @@ full — and the "Ask before changes" switch (vibe-app#79, on by default: the
 agent shows every write for approval before it runs) are per-workspace
 settings, since they're a security boundary for that specific workspace; the
 workspace's `slaw.yaml` can cap them for everyone. Both live in Studio's
-Settings → Workspace → The agent.)
+Settings → Workspace → The Slaw assistant.)
 
 ## Providers
 
-Pick one in Studio under Settings, App, "The assistant's model" (**Change provider or model**), or with `slaw config llm set`. Each provider shows its label and a one-line description, then only the fields it uses.
+Pick one in Studio under Settings, App, "The Slaw assistant's model" (**Change provider or model**), or with `slaw config llm set`. Each provider shows its label and a one-line description, then only the fields it uses.
 
 | Provider (picker order) | `llm.provider` | Backend | Credential |
 |---|---|---|---|
@@ -144,7 +144,7 @@ in a failure has it replaced with `[redacted]`. (OpenAI's own 401 already shows
 only a masked form ending in the key's last four characters; that text is
 passed through as is.)
 
-**Set it** in Studio under Settings, App, "The assistant's model" (paste a key,
+**Set it** in Studio under Settings, App, "The Slaw assistant's model" (paste a key,
 Save to keychain; then "In your keychain, Replace, Clear"), or from a terminal:
 
 ```bash

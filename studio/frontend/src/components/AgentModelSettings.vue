@@ -61,7 +61,7 @@ const {
 
 <template>
   <div data-testid="agent-model-settings">
-    <div class="sec-title"><h2 style="font-size: 22px;">The assistant's model</h2><span class="label">Every workspace</span></div>
+    <div class="sec-title"><h2 style="font-size: 22px;">The Slaw assistant's model</h2><span class="label">Every workspace</span></div>
     <div class="card card-pad col" style="gap: var(--sh-space-4);">
       <!-- Read-only: what the agent will actually use -->
       <div v-if="view && !changing" class="col" style="gap: var(--sh-space-2);" data-testid="llm-summary">
@@ -170,7 +170,7 @@ const {
 
         <div v-if="needsAccount" class="note warn" data-testid="llm-need-account">
           <Icon name="info" :size="16" />
-          <span>Cloudflare needs an account ID before the assistant can run. Add it here, or set <code>CLOUDFLARE_ACCOUNT_ID</code>.</span>
+          <span>Cloudflare needs an account ID before the Slaw assistant can run. Add it here, or set <code>CLOUDFLARE_ACCOUNT_ID</code>.</span>
         </div>
         <div v-if="fileKeyHazard" class="note attn" data-testid="llm-file-key-warning">
           <Icon name="lock" :size="16" />

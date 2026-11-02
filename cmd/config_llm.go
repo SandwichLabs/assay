@@ -14,7 +14,7 @@ import (
 
 var llmCmd = &cobra.Command{
 	Use:   "llm",
-	Short: "Show or change the assistant's model provider (mirrors Studio's Settings → App)",
+	Short: "Show or change the Slaw assistant's model provider (mirrors Studio's Settings → App)",
 	Long: `Show or change which model Slaw's own assistant uses. This edits llm.provider,
 llm.model, llm.endpoint, llm.account_id and llm.gateway in the config file
 (~/.slaw.yaml, or $SLAW_CONFIG_FILE), keeping its comments. API keys are not set

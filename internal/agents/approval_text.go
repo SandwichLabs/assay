@@ -12,7 +12,7 @@ import (
 const (
 	// SettingsAgentPath is the Studio section that holds the agent's tier and
 	// the ask-before-changes switch.
-	SettingsAgentPath = "Slaw → Settings → Workspace → The agent"
+	SettingsAgentPath = "Slaw → Settings → Workspace → The Slaw assistant"
 	// SettingsTierPath is the tier picker, in the "On this computer" half.
 	SettingsTierPath = SettingsAgentPath + " → On this computer"
 	// SettingsAskPath names the ask-before-changes gate and where its switch is.

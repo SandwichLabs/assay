@@ -20,8 +20,8 @@ import (
 // promptCeiling is the size ceiling (bytes) for the chat system prompt without a
 // skills block. Before #212 the prompt was 17-18 KB, of which ~7.4 KB repeated
 // every tool description the provider already receives. Raise it only on
-// purpose, with a reason.
-const promptCeiling = 11500
+// purpose, with a reason (11600: the opening identity sentence of the copy pass is longer).
+const promptCeiling = 11600
 
 func TestSystemPromptFor_SizeAndContent(t *testing.T) {
 	const dir = "/home/me/ws/data"

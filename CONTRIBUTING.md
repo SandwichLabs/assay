@@ -1,6 +1,6 @@
 # Contributing to Slaw
 
-Thanks for helping. Slaw is an agentic desktop workspace for working with data where it already lives. Read [`docs/direction.md`](docs/direction.md) (the north star) and [`docs/README.md`](docs/README.md) (index of every doc) before a larger change. [`CLAUDE.md`](CLAUDE.md) is a compact map of the code and conventions and is useful for humans too.
+Thanks for helping. Slaw is a desktop app to analyze your data in a secure private workspace. Read [`docs/direction.md`](docs/direction.md) (the north star) and [`docs/README.md`](docs/README.md) (index of every doc) before a larger change. [`CLAUDE.md`](CLAUDE.md) is a compact map of the code and conventions and is useful for humans too.
 
 By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md). Security problems go through [SECURITY.md](SECURITY.md), not a public issue.
 

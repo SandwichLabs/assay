@@ -161,7 +161,7 @@ Built-in skills are embedded in the binary; workspace skills live in ` + "`skill
 		Tags:    []string{"workspace", "folder", "connection", "connections", "slaw", "bundle", "file", "format", "duckdb", "data", "read-only", "credentials"},
 		Content: `# Workspaces and Connections
 
-A workspace is a folder (optionally a git repository) that holds your notebooks, saved queries and skills as plain files, plus a ` + "`slaw.yaml`" + ` that lists its connections. The data itself stays where it already lives.
+A workspace is a folder (optionally a git repository) that holds your notebooks, saved queries and skills as plain files, plus a ` + "`slaw.yaml`" + ` that lists its connections. Slaw reads the data from its connections and never copies it into the folder.
 
 ## Layout
 
@@ -228,7 +228,7 @@ func buildMCPToolsEntry() HelpEntry {
 	var b strings.Builder
 	b.WriteString("# MCP Server & Tools\n\n")
 	b.WriteString("Slaw exposes an MCP (Model Context Protocol) server — `slaw mcp serve --workspace <folder>` (stdio or SSE) headless, or Studio's built-in server (SSE, Settings → Workspace → Claude and other tools) — for external AI agents to read and modify a workspace with the same tool registry and sandbox gating the in-app agent uses.\n\n")
-	b.WriteString("When \"Ask before changes\" is on and nobody can approve (headless), a write is refused and nothing is changed. A notebook, skill or artifact write is checked first: an invalid request returns its validation error, and a valid one says it is valid and ready, so ask the person to approve it or to turn off \"Ask before changes\" in Settings → Workspace → The agent.\n")
+	b.WriteString("When \"Ask before changes\" is on and nobody can approve (headless), a write is refused and nothing is changed. A notebook, skill or artifact write is checked first: an invalid request returns its validation error, and a valid one says it is valid and ready, so ask the person to approve it or to turn off \"Ask before changes\" in Settings → Workspace → The Slaw assistant.\n")
 
 	tags := []string{"mcp", "server", "tool", "agent", "api"}
 	for _, cat := range mcpToolCategoryOrder {
