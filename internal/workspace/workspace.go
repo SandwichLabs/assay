@@ -326,7 +326,7 @@ func (w *workspace) reload() error {
 	// A connections.yaml inside the folder is whatever the repository
 	// committed: it is never read (D-A), only reported.
 	if _, _, ferr := filestore.Read(w.root, LocalDir+"/"+LocalConfigFile); ferr == nil || errors.Is(ferr, filestore.ErrTooLarge) {
-		warnings = append(warnings, ".slaw-local/"+LocalConfigFile+" was ignored: settings that affect the agent, connections and sign-in are only read from your own config directory ("+w.localPath(cfg.ID)+")")
+		warnings = append(warnings, ".slaw-local/"+LocalConfigFile+" was ignored: settings that affect the Slaw assistant, connections and sign-in are only read from your own config directory ("+w.localPath(cfg.ID)+")")
 	}
 
 	user, userWarnings, err := w.loadUserScope()

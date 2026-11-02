@@ -1,7 +1,7 @@
 # Slaw reference
 
 This is the shipped reference documentation for the Slaw application surface —
-an agentic data workspace: a folder of plain files that points at your data, which stays in its connections. It is split by
+the SandwichLabs analysis workspace: a folder of plain files that points at your data, which stays in its connections. It is split by
 surface so each area is easy to find:
 
 | Reference | Covers |

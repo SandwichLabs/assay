@@ -64,7 +64,7 @@ async function setTeamTier(m: string) {
   if (RANK[m] > RANK[teamLimit.value]) {
     const ok = await askConfirm({
       title: 'Raise the team limit?',
-      message: `This changes slaw.yaml for everyone who uses this workspace: the assistant will be allowed to do more (up to "${SANDBOX_MODES.find((x) => x.value === m)?.label ?? m}") for each of them once they pull the change. Anyone can still choose less on their own computer.`,
+      message: `This changes slaw.yaml for everyone who uses this workspace: the Slaw assistant will be allowed to do more (up to "${SANDBOX_MODES.find((x) => x.value === m)?.label ?? m}") for each of them once they pull the change. Anyone can still choose less on their own computer.`,
       variant: 'destructive',
       confirmLabel: 'Raise the limit',
     })
@@ -82,7 +82,7 @@ async function setTeamAsk(on: boolean, el?: HTMLInputElement) {
   if (!on) {
     const ok = await askConfirm({
       title: 'Stop requiring approval?',
-      message: 'This changes slaw.yaml for everyone who uses this workspace: it will no longer require the assistant to ask before changes. Each person can still keep it on for themselves.',
+      message: 'This changes slaw.yaml for everyone who uses this workspace: it will no longer require the Slaw assistant to ask before changes. Each person can still keep it on for themselves.',
       variant: 'destructive',
       confirmLabel: 'Stop requiring it',
     })
@@ -100,7 +100,7 @@ const isOwn = (c: ConnectionInfo) => c.name === 'local' && c.type === 'duckdb'
 <template>
   <div v-if="info" data-testid="agent-settings">
     <div class="sec-title">
-      <h2 style="font-size: 22px;">The assistant</h2>
+      <h2 style="font-size: 22px;">The Slaw assistant</h2>
       <span class="label">Two layers</span>
     </div>
 
@@ -108,7 +108,7 @@ const isOwn = (c: ConnectionInfo) => c.name === 'local' && c.type === 'duckdb'
       <!-- Team limit -->
       <fieldset class="col" style="gap: var(--sh-space-3); border: none; padding: 0; margin: 0;">
         <legend class="field-label" style="padding: 0; margin-bottom: 4px;">Team limit <span class="scope shared" style="margin-left: 6px;">Team</span></legend>
-        <p class="help" style="margin: 0;">What the assistant may do for everyone on the team. Saved in <code>slaw.yaml</code> and shared through git. This file can only make things <b>stricter</b>: a change someone pulls can never switch the assistant's safeguards off on your computer.</p>
+        <p class="help" style="margin: 0;">What the Slaw assistant may do for everyone on the team. Saved in <code>slaw.yaml</code> and shared through git. This file can only make things <b>stricter</b>: a change someone pulls can never switch its safeguards off on your computer.</p>
         <div class="seg" role="group" aria-label="Team limit">
           <button
             v-for="m in SANDBOX_MODES"
@@ -123,7 +123,7 @@ const isOwn = (c: ConnectionInfo) => c.name === 'local' && c.type === 'duckdb'
         </div>
         <label class="row" style="gap: 10px; cursor: pointer;">
           <input type="checkbox" :checked="teamRequiresAsk" data-testid="team-ask" @change="setTeamAsk(($event.target as HTMLInputElement).checked, $event.target as HTMLInputElement)" />
-          <span><span style="font-weight: 600; display: block;">Everyone is asked before changes</span><span class="sh-meta">The assistant shows each change and waits for an OK, for every person on the team, and nobody can turn that off.</span></span>
+          <span><span style="font-weight: 600; display: block;">Everyone is asked before changes</span><span class="sh-meta">The Slaw assistant shows each change and waits for an OK, for every person on the team, and nobody can turn that off.</span></span>
         </label>
       </fieldset>
 
@@ -131,7 +131,7 @@ const isOwn = (c: ConnectionInfo) => c.name === 'local' && c.type === 'duckdb'
       <fieldset class="col" style="gap: var(--sh-space-3); border: none; padding: var(--sh-space-4) 0 0; margin: 0; border-top: 1.5px dashed var(--slaw-border-subtle);">
         <legend class="field-label" style="padding: 0 8px 0 0; margin-bottom: 4px;">On this computer <span class="scope local" style="margin-left: 6px;">This computer</span></legend>
         <p class="help" style="margin: 0;">Just you. Saved outside the folder, so it is never committed. This is where you can <b>loosen</b>: raise the tier up to the team limit, or turn the gate off.</p>
-        <div class="seg" role="group" aria-label="What the assistant can do on this computer">
+        <div class="seg" role="group" aria-label="What the Slaw assistant can do on this computer">
           <button
             v-for="m in SANDBOX_MODES"
             :key="m.value"
@@ -157,7 +157,7 @@ const isOwn = (c: ConnectionInfo) => c.name === 'local' && c.type === 'duckdb'
           />
           <span>
             <span style="font-weight: 600; display: block;">Ask me before it changes data</span>
-            <span class="sh-meta">{{ teamRequiresAsk ? 'The team requires this, so it stays on.' : "The assistant shows you each change and waits for your OK. This covers the workspace's own local database. For every other connection the assistant always asks, and that can't be turned off." }}</span>
+            <span class="sh-meta">{{ teamRequiresAsk ? 'The team requires this, so it stays on.' : "The Slaw assistant shows you each change and waits for your OK. This covers the workspace's own local database. For every other connection it always asks, and that can't be turned off." }}</span>
           </span>
         </label>
       </fieldset>
@@ -165,8 +165,8 @@ const isOwn = (c: ConnectionInfo) => c.name === 'local' && c.type === 'duckdb'
       <!-- What can change -->
       <div style="padding-top: var(--sh-space-3); border-top: 1.5px dashed var(--slaw-border-subtle);">
         <table class="brutal-table" data-testid="agent-write-table">
-          <caption class="sr">Connections the assistant can change</caption>
-          <thead><tr><th scope="col">Connection</th><th scope="col">The assistant can change it</th></tr></thead>
+          <caption class="sr">Connections the Slaw assistant can change</caption>
+          <thead><tr><th scope="col">Connection</th><th scope="col">The Slaw assistant can change it</th></tr></thead>
           <tbody>
             <tr v-for="c in writable" :key="c.name">
               <td><code>{{ c.name }}</code></td>
@@ -177,7 +177,7 @@ const isOwn = (c: ConnectionInfo) => c.name === 'local' && c.type === 'duckdb'
             </tr>
             <tr>
               <td>Everything else</td>
-              <td>Read-only. The assistant can look but not change.</td>
+              <td>Read-only. It can look but not change.</td>
             </tr>
           </tbody>
         </table>

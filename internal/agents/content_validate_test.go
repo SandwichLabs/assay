@@ -207,7 +207,7 @@ func TestContentTools_ValidateBeforeTheApprovalGate(t *testing.T) {
 			assert.Equal(t, approvalNeededData(), resp.Error.Data)
 			assert.Contains(t, resp.Error.Message, "valid and ready")
 			assert.Contains(t, resp.Error.Message, "NOT saved")
-			assert.Contains(t, resp.Error.Message, "Settings → Workspace → The agent")
+			assert.Contains(t, resp.Error.Message, "Settings → Workspace → The Slaw assistant")
 			assert.NotContains(t, resp.Error.Message, "local database")
 			assert.Equal(t, 0, c.written(t, fx), "nothing may be written on refusal")
 		})
@@ -273,7 +273,7 @@ func TestDataApproval_HeadlessText(t *testing.T) {
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, ErrApprovalNeeded, resp.Error.Code)
 	assert.Nil(t, resp.Error.Data)
-	assert.Contains(t, resp.Error.Message, "Settings → Workspace → The agent")
+	assert.Contains(t, resp.Error.Message, "Settings → Workspace → The Slaw assistant")
 	assert.NotContains(t, resp.Error.Message, "Settings → Agent")
 	assert.NotContains(t, resp.Error.Message, "valid and ready")
 }
@@ -295,7 +295,7 @@ func TestTierRefusal_IsActionable(t *testing.T) {
 		assert.Equal(t, ErrPermission, resp.Error.Code)
 		assert.Contains(t, resp.Error.Message, "not allowed in "+c.mode+" mode")
 		assert.Contains(t, resp.Error.Message, c.need)
-		assert.Contains(t, resp.Error.Message, "Settings → Workspace → The agent")
+		assert.Contains(t, resp.Error.Message, "Settings → Workspace → The Slaw assistant")
 		assert.Contains(t, resp.Error.Message, "Nothing was changed")
 	}
 }

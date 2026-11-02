@@ -2,7 +2,7 @@
 Type=Application
 Name=Slaw
 GenericName=Data workspace
-Comment=An agentic workspace for working with data where it lives
+Comment=Analyze your data in a secure private workspace
 Exec=slaw-studio %U
 Icon=slaw
 Terminal=false

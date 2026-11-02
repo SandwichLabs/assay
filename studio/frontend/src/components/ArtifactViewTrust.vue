@@ -88,8 +88,8 @@ async function remeasure() { await nextTick(); for (const e of Object.values(edi
         <span>
           <template v-if="state === 'changed' && status.deps_changed" data-testid="view-trust-deps-changed">A metric this {{ isPage ? 'page' : 'view' }} reads changed ({{ (status.metrics_used ?? []).map((m) => m.name).join(', ') }}), though its own files did not. Read the metric below before you allow it again.</template>
           <template v-else-if="state === 'changed'">This {{ isPage ? 'page' : 'view' }} changed since you allowed it. Read it again before you allow it.</template>
-          <template v-else-if="isPage">Read the files below before you allow this page. It was written by someone else or by the assistant.</template>
-          <template v-else>This view runs code written by someone else or by the assistant. It cannot reach the network or your files, and can only run this artifact's queries.</template>
+          <template v-else-if="isPage">Read the files below before you allow this page. It was written by someone else or by the Slaw assistant.</template>
+          <template v-else>This view runs code written by someone else or by the Slaw assistant. It cannot reach the network or your files, and can only run this artifact's queries.</template>
         </span>
       </div>
 

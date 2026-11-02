@@ -15,7 +15,7 @@ const CredentialLine = "Slaw never asks for a password, key or token inside a pa
 // HostLine says where a page of the derived kind runs and what it can reach.
 func HostLine(kind string) string {
 	if kind == PageScripted {
-		return "This page has script, written by someone else or by the agent. It runs in its own window that cannot reach your files, your credentials or other pages, " +
+		return "This page has script, written by someone else or by the Slaw assistant. It runs in its own window that cannot reach your files, your credentials or other pages, " +
 			"and it can only run the queries listed here. It has no network it can use, except as noted below."
 	}
 	return "This page has no script. It shows inside Studio, in a frame that cannot reach the network, your files or other pages, " +

@@ -309,7 +309,7 @@ func init() {
 	studioCmd.Flags().Bool("read-only", false, "open without taking ownership of the workspace's database (reaches connections other than local DuckDB files)")
 	studioCmd.Flags().String("agent-cmd", "", "agent command to spawn (stdio transport)")
 	studioCmd.Flags().String("agent-listen", "", "agent socket address to listen on")
-	studioCmd.Flags().String("agent-mode", "read-only", "the agent's sandbox: read-only, read-write or full (can only tighten the workspace's own policy)")
+	studioCmd.Flags().String("agent-mode", "read-only", "the sandbox for --agent-cmd/--agent-listen: read-only, read-write or full (can only tighten the workspace's own policy)")
 	rootCmd.AddCommand(studioCmd)
 }
 

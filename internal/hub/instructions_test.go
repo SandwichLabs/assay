@@ -37,7 +37,7 @@ func TestInstructionsText_ByGateState(t *testing.T) {
 	assert.Contains(t, headless, `"Ask before changes" was on`)
 	assert.Contains(t, headless, "refused")
 	assert.Contains(t, headless, "valid and ready")
-	assert.Contains(t, headless, "Settings → Workspace → The agent")
+	assert.Contains(t, headless, "Settings → Workspace → The Slaw assistant")
 	assert.Contains(t, headless, "/w/sales/data/")
 	assert.Contains(t, headless, "local, prod_pg")
 	assert.Contains(t, headless, `help_search ""`)
@@ -56,7 +56,7 @@ func TestInstructionsText_ByGateState(t *testing.T) {
 	in.Policy.Mode = agents.ModeReadOnly
 	ro := instructionsText(in)
 	assert.Contains(t, ro, "Nothing can be changed")
-	assert.Contains(t, ro, "Settings → Workspace → The agent")
+	assert.Contains(t, ro, "Settings → Workspace → The Slaw assistant")
 }
 
 func TestInstructionsText_ReadOnlyMentionsSandboxFlagAndNameIsCapped(t *testing.T) {

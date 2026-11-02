@@ -147,7 +147,7 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
         <div class="empty-hero" style="padding-top: 36px;">
           <span class="glyph"><Icon name="folderOpen" :size="48" /></span>
           <h2>Pick a folder to start</h2>
-          <p class="lead">A workspace is just a folder. Your notebooks, live views and pages, saved queries and skills are kept in it as ordinary files, so you can back it up or share it with git. Your data stays wherever it is now.</p>
+          <p class="lead">A workspace is just a folder. Your notebooks, live views and pages, saved queries and skills are kept in it as ordinary files, so you can back it up or share it with git.</p>
           <div class="row" style="gap: 14px; margin-top: 6px;">
             <button ref="newBtn" class="btn btn-primary" type="button" data-testid="new-workspace" @click="newWorkspaceOpen = true">
               <Icon name="plus" :size="16" /> New workspace…
@@ -167,7 +167,7 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
         <div class="hero-mini">
           <div class="card"><b>Library</b><span>Notebooks, live views and pages that re-run on open. Answers are never frozen.</span></div>
           <div class="card"><b>Connections</b><span>Point Slaw at Postgres, MotherDuck, SQLite files or cloud storage. Add them whenever you're ready.</span></div>
-          <div class="card"><b>The assistant</b><span>Ask in plain words. It reads freely and asks you before it changes anything.</span></div>
+          <div class="card"><b>The Slaw assistant</b><span>Ask in plain words. It reads freely and asks you before it changes anything.</span></div>
         </div>
       </template>
 
@@ -249,7 +249,7 @@ onUnmounted(() => { if (undoTimer) clearTimeout(undoTimer) })
       <p class="trust-line" :style="firstRun ? 'margin-top: 32px;' : ''">
         <Icon name="shieldCheck" :size="16" />
         <span v-if="firstRun">Passwords and tokens go in this computer's keychain, not in your folder.</span>
-        <span v-else>Your data stays where it already lives. Slaw keeps passwords in this computer's keychain, never in the workspace folder, so a workspace is safe to put in git or share with a teammate.</span>
+        <span v-else>Passwords stay in this computer's keychain, never in the folder, so you can put a workspace in git or send it to a teammate.</span>
       </p>
     </div>
 

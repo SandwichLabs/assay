@@ -176,7 +176,7 @@ export function useLlmSettings() {
       changing.value = false
       await loadView()
       await refreshKey()
-      settingsMsg.value = `Saved. The assistant now uses ${savedInfo.value?.label ?? form.value.provider}.`
+      settingsMsg.value = `Saved. The Slaw assistant now uses ${savedInfo.value?.label ?? form.value.provider}.`
     } catch (e: any) {
       settingsErr.value = errorText(e)
     } finally { busy.value = false }

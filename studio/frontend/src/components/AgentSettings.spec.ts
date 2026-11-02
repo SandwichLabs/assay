@@ -44,7 +44,7 @@ describe('AgentSettings (two layers)', () => {
     expect(table.text()).toContain('prod_pg')
     expect(table.text()).toContain('always asks first')
     expect(table.text()).not.toContain('ro ')
-    expect(table.text()).toContain('Read-only. The assistant can look but not change.')
+    expect(table.text()).toContain('Read-only. It can look but not change.')
   })
 
   it('this-computer changes save through SetWorkspaceSettings keeping the committed fields', async () => {

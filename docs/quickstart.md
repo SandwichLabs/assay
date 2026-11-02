@@ -107,7 +107,7 @@ An artifact can be an HTML page, written by a teammate (it arrives with `git pul
 
 ## 5. Connect Claude Code (MCP)
 
-`slaw mcp serve` exposes the workspace's tools to any MCP client, with the same limits as Studio's own assistant. For Claude Code, from the workspace folder:
+`slaw mcp serve` exposes the workspace's tools to any MCP client, with the same limits as the Slaw assistant. For Claude Code, from the workspace folder:
 
 ```sh
 claude mcp add --scope user slaw-sales-demo -- "$(command -v slaw)" mcp serve --workspace "$PWD"
@@ -121,9 +121,9 @@ The default is safe: the client can read, and any write is refused until you dec
 
 Studio can also copy the config to your clipboard for you: **Settings, Workspace, Claude and other tools** has **Copy Claude Code config** and **Copy Claude Desktop config** buttons. You paste the result yourself. Studio's Claude Code command has no `--scope`, so it registers the server for the current directory only; add `--scope user` for every project.
 
-## 6. Optional: Studio's own assistant
+## 6. Optional: the Slaw assistant
 
-Studio has a chat assistant too. It needs a model: a local server (the default points at `http://localhost:8080/v1`), Ollama, or an API key for OpenAI, Anthropic, Gemini or Cloudflare. Set it in **Settings, App**, or with `slaw config llm`; keys go into your keychain with `slaw config llm-key`. See [LLM configuration](reference/llm-config.md). Everything else in Slaw works without a model.
+Studio has the Slaw assistant built in. It needs a model: a local server (the default points at `http://localhost:8080/v1`), Ollama, or an API key for OpenAI, Anthropic, Gemini or Cloudflare. Set it in **Settings, App**, or with `slaw config llm`; keys go into your keychain with `slaw config llm-key`. See [LLM configuration](reference/llm-config.md). Everything else in Slaw works without a model.
 
 ## Where next
 

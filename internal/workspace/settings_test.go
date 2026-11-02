@@ -164,7 +164,7 @@ func TestSetLocalAgent_TierAndGateAgainstTheCommittedLimit(t *testing.T) {
 	assert.Contains(t, err.Error(), "team limit in slaw.yaml is read-write")
 	err = SetLocalAgent(ws, SandboxReadWrite, false)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "requires the agent to ask")
+	assert.Contains(t, err.Error(), "requires the Slaw assistant to ask")
 	require.Error(t, SetLocalAgent(ws, "root", true))
 
 	require.NoError(t, SetLocalAgent(ws, SandboxReadOnly, true))

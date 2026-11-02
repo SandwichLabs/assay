@@ -5,7 +5,7 @@
 [![CI](https://github.com/SandwichLabs/slaw/actions/workflows/ci.yml/badge.svg)](https://github.com/SandwichLabs/slaw/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**The SandwichLabs analysis workspace: an agentic data workspace**
+**The SandwichLabs analysis workspace.**
 
 *by [Sandwich Labs](https://github.com/SandwichLabs)*
 
@@ -13,7 +13,7 @@
 
 ---
 
-Slaw is a desktop data tool in the DataGrip / DBeaver mould, with an AI assistant built in. Point it at the data where it already lives (local DuckDB, CSV and Parquet files, MotherDuck, Postgres, MySQL, SQLite, S3, GCS, R2, Azure, DuckLake, Iceberg, Delta), query and join across all of it with one embedded DuckDB, and keep your notebooks, saved queries and skills as plain files in a folder you can share through git. The assistant reads freely and asks before it writes; the same tools are available to Claude Code, Claude Desktop and other agents over MCP. Credentials stay in your OS keychain. Everything works without AI, and nothing is sent to Sandwich Labs.
+Slaw is a desktop app for working with small and medium-sized datasets, on your machine or in the cloud. It manages your connections and keeps credentials in your OS keychain. Your notebooks, saved queries and charts are plain files in a folder you can keep in git and share with your team. The Slaw assistant writes queries and builds notebooks for you; it shows its work as it goes and can create new data products with your permission. Claude Code and other MCP clients get the same tools with the same limits.
 
 <p align="center">
   <a href="docs/assets/hero.mp4">
@@ -56,17 +56,11 @@ No accounts or API keys needed. The full walkthrough, with notebooks and MCP, is
 
 ## What you get
 
-- **Workspaces.** A folder you open like a vault: `slaw.yaml`, `notebooks/`, `queries/`, `skills/`, `data/`. Plain files, git-friendly, shareable with a team.
-- **Connections.** Data stays where it lives, attached on first use into one DuckDB hub. Read-only by default. [Recipes](docs/connections.md) for each type.
-- **Live notebooks.** SQL, Markdown and dashboard cells. Notebooks store questions, not answers: every cell re-runs when you open it.
-- **Data artifacts.** Parameterised, live views kept as files in `artifacts/`: typed parameters, named queries, controls and drill-down. They store questions, not answers. [Reference](docs/reference/artifacts.md).
-- **A semantic layer.** Entities, metrics, joins and a glossary as reviewed files in `semantics/`, checked and profiled against the data, callable as `metric('revenue', by => 'country')` in any SQL. The assistant can only propose a definition; you accept it. [Reference](docs/reference/semantics.md), [examples](docs/examples/README.md).
-- **Skills.** Markdown documents that teach the assistant what your metrics mean and which joins are canonical, loaded on demand.
-- **An assistant with guardrails.** Sandbox tiers, an SQL allow-list, and an approval for every write that matters. Works with a local model, Ollama, OpenAI, Anthropic, Gemini or Cloudflare AI Gateway.
-- **MCP for your own agent.** `slaw mcp serve` gives Claude Code, Claude Desktop, Cursor and others the same tools with the same limits. [Setup](docs/mcp-clients.md).
-- **Credentials done properly.** OS keychain or environment variables, write-only across every boundary, never in the folder, a bundle or a log.
-- **Import, export and sharing.** CSV, TSV and Excel in; CSV, Parquet, JSON and Excel out; `.slaw` bundles of notebooks, queries and skills (no data, no credentials, optional passphrase).
-- **Three ways in.** The Studio desktop app, the `slaw` command line, and a terminal UI (`slaw studio`).
+- [Connection management](docs/connections.md)
+- [Notebooks, saved queries, live views and pages](docs/reference/artifacts.md)
+- [Semantic metric definitions](docs/reference/semantics.md)
+- [The Slaw assistant](docs/reference/agent-policy.md)
+- [Bring your own AI over MCP](docs/mcp-clients.md)
 
 ## Supported platforms
 
@@ -83,7 +77,7 @@ Slaw is **pre-1.0**. Studio, the command line and MCP all work on workspace fold
 
 - **macOS builds are unsigned** (ad-hoc signed, not notarised). The install script avoids the Gatekeeper prompt; a browser download needs **Open Anyway**. See [docs/install.md](docs/install.md#macos-and-gatekeeper).
 - No Windows build. Single-user: sharing is through shared backends and git.
-- The chat assistant needs a model you configure; a local model is the default. DuckDB extensions download once, when you ask for a feature that needs one.
+- The Slaw assistant needs a model you configure; a local model is the default. DuckDB extensions download once, when you ask for a feature that needs one.
 
 See the [CHANGELOG](CHANGELOG.md) and [docs/direction.md](docs/direction.md) for what is next.
 

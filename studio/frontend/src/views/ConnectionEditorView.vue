@@ -107,7 +107,7 @@ const {
             <div v-if="fd.help || fd.name === 'database'" :id="`f-${fd.name}-h`" class="help">{{ fd.help }}<template v-if="fd.name === 'database' && remote && fingerprintHelp">{{ ' ' + fingerprintHelp }}</template></div>
             <div v-if="fd.name === 'scope' && handoff.wholeBucket.value" class="help">
               <button type="button" class="linkbtn" data-testid="whole-bucket" @click="handoff.useWholeBucket">Use the whole bucket, <code>{{ handoff.wholeBucket.value }}</code></button>
-              Queries and the assistant can then read anything in it.
+              Queries and the Slaw assistant can then read anything in it.
             </div>
             <div v-if="storageSlot(fd)" class="storage-slot" role="status" aria-live="polite">
               <StorageNeed v-if="storageLine(fd)" :need="storageLine(fd)!" :testid="`storage-${fd.name}`" @setup="handoff.setup" />
@@ -221,7 +221,7 @@ const {
       <div v-if="spec?.capabilities.catalog" class="form-sec">
         <h3>Safety</h3>
         <template v-if="isMD">
-          <div class="note info" data-testid="md-note"><Icon name="info" :size="16" /><span>MotherDuck connections can't be set read-only here. For read-only access, sign in with a <b>read-scaling token</b>. The assistant still asks before every change.</span></div>
+          <div class="note info" data-testid="md-note"><Icon name="info" :size="16" /><span>MotherDuck connections can't be set read-only here. For read-only access, sign in with a <b>read-scaling token</b>. The Slaw assistant still asks before every change.</span></div>
         </template>
         <template v-else>
           <div class="switch-row">
@@ -229,8 +229,8 @@ const {
             <span>
               <span id="ro-t" class="st-t">Read-only{{ readOnly ? ' (recommended)' : '' }}</span>
               <span id="ro-d" class="st-d">
-                <template v-if="readOnly">Slaw will refuse to run changes on this connection, from you or the assistant. This is a safety belt inside Slaw, not a lock on the database: a determined query can still get around it.</template>
-                <template v-else>Changes are allowed. You and the assistant can edit data here. The assistant will still ask you before every change.</template>
+                <template v-if="readOnly">Slaw will refuse to run changes on this connection, from you or the Slaw assistant. This is a safety belt inside Slaw, not a lock on the database: a determined query can still get around it.</template>
+                <template v-else>Changes are allowed. You and the Slaw assistant can edit data here. It will still ask you before every change.</template>
               </span>
             </span>
           </div>
