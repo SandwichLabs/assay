@@ -70,18 +70,9 @@ Every row of `rename-to-assay.md` §3, with `assay` → `slaw`:
 
 ## 4. Cutover
 
-- **Old Vibe installs** (v0.1.2 to v0.5.0): as in the Assay plan. Uninstall Vibe first; an old `vibe update` that follows the repo redirect to v0.6.0 is unsupported.
-- **A workspace made with Vibe.** From its root:
+The steps for people coming from Vibe are in [docs/migrating-from-vibe.md](../migrating-from-vibe.md): clearing old credentials, uninstalling with the v0.5.0 installer (an old `vibe update` stops at the repo redirect), keeping the config folder, renaming a workspace's files (including each saved query's `-- vibe:` header and the contents of `.vibe-local/` worth keeping), page API names, and what must be allowed again.
 
-  ```sh
-  git mv vibe.yaml slaw.yaml
-  for f in notebooks/*.vnb; do git mv "$f" "${f%.vnb}.slnb"; done
-  rm -rf .vibe-local
-  sed -i.bak 's/^\.vibe-local\/$/.slaw-local\//' .gitignore && rm .gitignore.bak
-  ```
-
-  Then enter credentials again (`slaw config llm-key`, connection sign-ins), register MCP clients again (`slaw-*`), and allow scripted views, pages and `.env` files again.
-- **A workspace made with a main build between #315 and this PR** (`assay.yaml`, `*.asnb`): the same steps with `assay` in place of `vibe` and `.asnb` in place of `.vnb`.
+- **A workspace made with a main build between #315 and this PR** (`assay.yaml`, `*.asnb`, `-- assay:`): the same steps with `assay` in place of `vibe` and `.asnb` in place of `.vnb`.
 
 ---
 

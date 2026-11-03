@@ -9,6 +9,7 @@ Task-oriented guides for people who use Slaw. They are written to be linkable by
 | Doc | What it is |
 |---|---|
 | [`install.md`](install.md) | The install script and its options, supported platforms, macOS and Gatekeeper, upgrade, uninstall |
+| [`migrating-from-vibe.md`](migrating-from-vibe.md) | Moving from Vibe (v0.5.0 and older) to Slaw: uninstall, install, rename a workspace's files, keep your settings |
 | [`quickstart.md`](quickstart.md) | Install to a first query, a notebook and Claude Code over MCP, with no accounts |
 | [`connections.md`](connections.md) | Recipes for every connection type and sign-in method (the field-level reference is [`reference/connections.md`](reference/connections.md)) |
 | [`mcp-clients.md`](mcp-clients.md) | Claude Code, Claude Desktop and other MCP clients; sandbox tiers and approvals in plain words |
