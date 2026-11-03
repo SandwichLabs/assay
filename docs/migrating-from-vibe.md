@@ -33,7 +33,8 @@ The same script is attached to every release: `https://github.com/SandwichLabs/s
 Vibe's settings, your own connections and your themes are in the `vibe` config folder: `~/.config/vibe` on Linux, `~/Library/Application Support/vibe` on macOS. Slaw reads the `slaw` folder beside it. To keep them, copy what you want across before you first open Slaw:
 
 ```sh
-src=~/.config/vibe; dst=~/.config/slaw          # macOS: ~/Library/Application\ Support/{vibe,slaw}
+src="$HOME/.config/vibe"; dst="$HOME/.config/slaw"
+# macOS: src="$HOME/Library/Application Support/vibe"; dst="$HOME/Library/Application Support/slaw"
 mkdir -p "$dst"
 cp -R "$src/connections.yaml" "$src/settings.json" "$src/themes" "$dst/" 2>/dev/null
 ```
@@ -47,17 +48,17 @@ git mv vibe.yaml slaw.yaml
 for f in notebooks/*.vnb; do git mv "$f" "${f%.vnb}.slnb"; done
 sed -i.bak 's/^-- vibe: /-- slaw: /' queries/*.sql && rm queries/*.sql.bak
 mkdir -p .slaw-local
-mv .vibe-local/connections.yaml .vibe-local/proposals .slaw-local/ 2>/dev/null
+mv .vibe-local/connections.yaml .vibe-local/proposals .vibe-local/artifacts .vibe-local/repl .slaw-local/ 2>/dev/null
 rm -rf .vibe-local
 sed -i.bak 's/^\.vibe-local\/$/.slaw-local\//' .gitignore && rm .gitignore.bak
 ```
 
 - The `queries/*.sql` step matters: a saved query's first line, `-- vibe: {...}`, holds its title, connection and parameters. Slaw reads only `-- slaw:`, and reads an old header as plain SQL, so the query loses its parameters and the metrics built on it break.
-- `.vibe-local/` holds this machine's local connections and the proposals inbox; the `mv` keeps them. Everything else in it is rebuilt.
+- `.vibe-local/` holds this machine's local connections, the proposals inbox, pages' saved state and the console history; the `mv` keeps them. The rest (catalog snapshot, hub lock, edit buffers) is rebuilt.
 
 ## 6. Update pages and script views
 
-An HTML page or script view that uses the old page API needs its names changed: `vibe.run`, `vibe.state`, `vibe.download`, `vibe.ask` and `vibe.theme` become `slaw.*`, the theme file `_vibe/theme.css` becomes `_slaw/theme.css`, and `html/vibe-lib/` becomes `html/slaw-lib/`. An edit changes the page's hash, so Slaw asks you to allow it again (it would anyway, below).
+An HTML page or script view that uses the old page API needs its names changed: every `vibe.` name becomes `slaw.` (`vibe.run`, `vibe.params`, `vibe.use`, `vibe.lib`, `vibe.theme`, `vibe.state`, `vibe.download`, `vibe.ask`), the theme file `_vibe/theme.css` becomes `_slaw/theme.css`, and `html/vibe-lib/` becomes `html/slaw-lib/`. An edit changes the page's hash, so Slaw asks you to allow it again (it would anyway, below).
 
 ## 7. Allow and sign in again
 
@@ -69,5 +70,5 @@ The trust hashes changed with the name, so Slaw asks again for everything it ask
 
 ## What Slaw cannot open
 
-- `.vibe` bundles and notebook export files made by Vibe are refused ("this is not a Slaw bundle", "unrecognized file kind"). Take what you need from the workspace's own files instead.
+- `.vibe` bundles and notebook export files made by Vibe are refused as not Slaw files. Take what you need from the workspace's own files instead.
 - Older data-holding SQLCipher `.vibe` files were already unsupported and still are.

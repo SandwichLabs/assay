@@ -21,7 +21,7 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
 
 ### Changed
 
-- **Vibe is now Slaw.** The app, the `slaw` command and the Go module are renamed; there is no migration. Names that carried the old one change with it: `slaw.yaml`, `.slaw-local/`, `notebooks/*.slnb`, `.slaw` bundles, `SLAW_*` environment variables, the `slaw` keychain service and config folder, the saved-query header (`-- slaw:`), the page script API (`slaw.run`, `slaw.state`, `slaw.download`, `slaw.ask`, `slaw.theme`), the page theme file `_slaw/theme.css` and `html/slaw-lib/`, `--slaw-*` theme tokens, and the hash domain tags (so existing allow decisions and keychain bindings reset). `.vibe` bundles and notebook export files from Vibe cannot be imported. Steps: [Moving from Vibe to Slaw](https://github.com/SandwichLabs/slaw/blob/v0.6.0/docs/migrating-from-vibe.md).
+- **Vibe is now Slaw.** The app, the `slaw` command and the Go module are renamed; there is no migration. Names that carried the old one change with it: `slaw.yaml`, `.slaw-local/`, `notebooks/*.slnb`, `.slaw` bundles, `SLAW_*` environment variables, the `slaw` keychain service and config folder, the saved-query header (`-- slaw:`), the page and script-view API (`slaw.run`, `slaw.params`, `slaw.use`, `slaw.lib`, `slaw.theme`, `slaw.state`, `slaw.download`, `slaw.ask`), the page theme file `_slaw/theme.css` and `html/slaw-lib/`, `--slaw-*` theme tokens, and the hash domain tags (so existing allow decisions and keychain bindings reset). `.vibe` bundles and notebook export files from Vibe cannot be imported. Steps: [Moving from Vibe to Slaw](https://github.com/SandwichLabs/slaw/blob/v0.6.0/docs/migrating-from-vibe.md).
 - New wording across the README, CLI help, About and the launcher; the built-in AI is the Slaw assistant.
 - The terminal UI's REPL (`slaw studio` without `--gui`) now draws results with the console's duckbox renderer (`repl.RenderDuckbox`) instead of its own plain-text grid, so both show the same boxed table with a type row, and a result over 1,000 rows reads "1000+ rows (1000 shown)" (#262). Its table, notebook and catalog-snapshot reads now run under the context passed to `tui.WithContext` instead of `context.Background()`.
 - The Wails CLI pin in CI and release is now v2.17.0, matching `go.mod`, so `wails dev` and `wails build` no longer rewrite `go.mod` (#270).
@@ -45,7 +45,8 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
 ### Known limitations
 
 - A metric's `measure` cannot use `CAST(... AS ...)`, `extract(... FROM ...)` or `ORDER BY` inside an aggregate, and dimensions cannot be expressions (#287).
-- When another process holds the workspace and Studio falls back to read-only, Studio's runs cannot reach MotherDuck (#302).
+- When another process holds the workspace and Studio falls back to read-only, Studio's runs cannot reach MotherDuck.
+- Unchanged: page windows' platform requirements and the macOS page network limitation (#189).
 
 ## [0.5.0] - 2026-10-29
 
