@@ -4,8 +4,17 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-03
+
+**Vibe is now Slaw**, short for SandwichLabs analysis workspace. This release also adds a compile check and four assertion kinds to the semantic layer, a built-in skill for building one, and a Stop button for running queries.
+
+**Coming from Vibe:** uninstall Vibe first with its own installer (`curl -fsSL https://github.com/SandwichLabs/slaw/releases/download/v0.5.0/install.sh | sh -s -- --uninstall`), then install Slaw. `vibe update` cannot move you to Slaw. An existing workspace needs its files renamed by hand; the steps are in `docs/plans/rename-to-slaw.md` §4.
+
 ### Added
 
+- **A compile check for the semantic layer (#302).** `slaw semantics check` and Studio's Run assertions now start every entity and metric with a `compile` row: the definition is vetted against the real connection (the read-only policy, then `EXPLAIN`) without scanning rows. A definition that does not compile is a `fail` (exit 1) and its data checks show "not run"; a connection that cannot connect is an `error` (exit 2). `slaw semantics check --compile` runs only these rows. A statement the policy refuses is now a compile `fail` (exit 1), not an `error` (exit 2).
+- **Four assertion kinds (#307):** `range` (`min`/`max`, on an entity column or a metric), `unique` (fan-out on a metric's grain), `freshness` (`column`, `max_age` such as `7d` or `12h`, on an entity) and `row_count` (`min_rows`). Values are bound parameters; `min` and `max` must be plain decimals.
+- **A built-in `semantic-layer` skill (#302):** grain first, double-sourced rows, the assertion YAML shape, the `metric()` grammar, and propose-don't-write. The MCP instructions point agents at it.
 - A Stop button for a running query in the Query Explorer, and for Try it, Run assertions and Profile in the Semantics view. Stop interrupts DuckDB mid-statement (about 10-40 ms in testing) and the run ends as a neutral "cancelled" line, not an error. New `CancelRun` binding (#5, #287).
 - `slaw repl` is no longer hidden: the data console (Studio's Console tab) on a real terminal, with the same engine, gates, dot commands and history. `docs/reference/console.md` describes it (#262).
 - Example workspaces in `docs/examples/` (penguins, chinook, gapminder) showing the semantic layer, kept valid by a test in `internal/docsref`.
@@ -21,6 +30,8 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
 
 ### Fixed
 
+- `slaw semantics check` and `profile` reach MotherDuck connections, which they used to report as "not attached"; a connection that fails to connect now shows its own error (#302). When nothing passed or failed, `check` says "Nothing was verified".
+- Command help links to the docs on GitHub for the build's own release tag instead of a path that exists only in the source repo. `slaw semantics list` prints a file's whole error, and some YAML errors now say to quote a value inside `{...}` that contains `, ( ) : #` (#302).
 - `metric()` now works in a query export (the Query Explorer's export and `slaw export --sql`) and in the terminal UI's REPL, which used to fail with DuckDB's unknown-function error. An export also gets the editor's guard it used to skip (`INSTALL`, `LOAD`, secrets are refused with the editor's message). Every person-facing run path now prepares SQL in one place, `hub.PrepareForPerson` (#287). A file export now binds `$name` placeholders as a run does, so a `$word` inside exported text must be a parameter, as in the Query Explorer.
 - **Artifact queries now stop at 16 MB of result (#193).** A shared or pulled artifact with a query like `SELECT repeat('x', 1000000) FROM range(100)` could fill Studio's memory, because only rows (500) and time were capped. The size is now counted while rows are read, for level 1 artifacts, live A2UI bindings, notebook SQL cells, script views and HTML pages (a page's old check ran after all rows were read), and a result over it fails with "the result is too large". A single huge row is still built once before it is refused, and DuckDB still builds its own result first.
 - Two races behind flaky tests (#227). The file watcher no longer reports a store's own save or delete as an outside change: a store announces a write before it replaces the file, and the watcher now leaves a path alone until that write has landed (and re-checks a path whose write raced its hashing). Opening the hub lock no longer reports a phantom holder while another process is only reading who holds it (it retries for up to 250 ms before reporting a real holder). A decision that cannot be saved now logs its cause (#280).
@@ -295,7 +306,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/vibe/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/SandwichLabs/slaw/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/SandwichLabs/slaw/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/SandwichLabs/vibe/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/SandwichLabs/vibe/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/SandwichLabs/vibe/compare/v0.3.2...v0.3.3
