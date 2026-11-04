@@ -714,3 +714,123 @@ func TestAccept_EmptyPinIsAPlainSentence(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalid, "callers can still tell it from a conflict")
 	assert.Equal(t, "accepting needs the rev of the version you looked at (shown_rev from Show)", err.Error())
 }
+
+func TestAccept_GlossaryTermRevsAreIndependent(t *testing.T) {
+	ctx := context.Background()
+	props, sem := &Mock{}, &semantics.Mock{}
+	sem.SetFile("glossary.md", []byte("## A\n\na0\n\n## B\n\nb0\n\n## C\n\nc0\n"))
+	g, _ := sem.Glossary(ctx)
+	add := func(term, text, rev string) *Proposal {
+		p := mustBuild(t, Draft{Kind: semantics.KindGlossary, Rationale: "r", ReplacesRev: rev,
+			Definition: map[string]any{"term": term, "text": text}})
+		require.NoError(t, props.Create(ctx, p))
+		return p
+	}
+	termRev := func(term string) string {
+		r, ok := semantics.GlossaryTermRev(g.Text, term)
+		require.True(t, ok)
+		return r
+	}
+	// filed together, against the same file
+	pa, pb, pc := add("A", "a1", termRev("A")), add("B", "b1", termRev("B")), add("C", "c1", termRev("C"))
+	// shown before the others were accepted
+	pvb, err := Show(ctx, props, sem, pb.ID)
+	require.NoError(t, err)
+	_, err = acceptSeen(t, props, sem, pa.ID)
+	require.NoError(t, err)
+	_, err = Accept(ctx, props, sem, pb.ID, AcceptOptions{ShownRev: pvb.ShownRev})
+	require.NoError(t, err, "accepting A must not make B stale or change what was shown")
+	_, err = acceptSeen(t, props, sem, pc.ID)
+	require.NoError(t, err)
+	g, _ = sem.Glossary(ctx)
+	assert.Equal(t, "## A\n\na1\n\n## B\n\nb1\n\n## C\n\nc1\n", g.Text)
+
+	// a term someone else then edited is stale, "changed"
+	pa2 := add("A", "a2", termRev("A"))
+	require.NoError(t, sem.PutGlossary(ctx, &semantics.Glossary{Text: strings.Replace(g.Text, "a1", "a-by-hand", 1), Meta: semantics.Meta{Rev: g.Rev}}))
+	pv, err := Show(ctx, props, sem, pa2.ID)
+	require.NoError(t, err)
+	assert.True(t, pv.Stale)
+	assert.Equal(t, "changed", pv.StaleReason)
+	_, err = acceptSeen(t, props, sem, pa2.ID)
+	var stale *StaleError
+	require.ErrorAs(t, err, &stale)
+}
+
+func TestAccept_GlossaryFileRevProposalsStillWork(t *testing.T) {
+	ctx := context.Background()
+	props, sem := &Mock{}, &semantics.Mock{}
+	sem.SetFile("glossary.md", []byte("## A\n\na0\n\n## B\n\nb0\n"))
+	g, _ := sem.Glossary(ctx)
+	p := mustBuild(t, Draft{Kind: semantics.KindGlossary, Rationale: "r", ReplacesRev: g.Rev,
+		Definition: map[string]any{"term": "A", "text": "a1"}})
+	require.NoError(t, props.Create(ctx, p))
+	pv, err := Show(ctx, props, sem, p.ID)
+	require.NoError(t, err)
+	assert.False(t, pv.Stale, "the file rev is still current")
+	_, err = acceptSeen(t, props, sem, p.ID)
+	require.NoError(t, err)
+
+	// once the file moved on, the older form is stale
+	old := mustBuild(t, Draft{Kind: semantics.KindGlossary, Rationale: "r2", ReplacesRev: g.Rev,
+		Definition: map[string]any{"term": "B", "text": "b1"}})
+	require.NoError(t, props.Create(ctx, old))
+	_, err = acceptSeen(t, props, sem, old.ID)
+	assert.ErrorIs(t, err, ErrConflict)
+}
+
+func TestAccept_GlossaryPinCoversTheTermsOwnText(t *testing.T) {
+	ctx := context.Background()
+	for _, overwrite := range []bool{false, true} {
+		props, sem := &Mock{}, &semantics.Mock{}
+		sem.SetFile("glossary.md", []byte("## A\n\na0\n\n## B\n\nb0\n"))
+		p := mustBuild(t, Draft{Kind: semantics.KindGlossary, Rationale: "r",
+			Definition: map[string]any{"term": "B", "text": "b1"}, ReplacesRev: mustTermRev(t, "## A\n\na0\n\n## B\n\nb0\n", "B")})
+		require.NoError(t, props.Create(ctx, p))
+		pv, err := Show(ctx, props, sem, p.ID)
+		require.NoError(t, err)
+		g, _ := sem.Glossary(ctx)
+		require.NoError(t, sem.PutGlossary(ctx, &semantics.Glossary{Text: "## A\n\na0\n\n## B\n\nb-by-hand\n", Meta: semantics.Meta{Rev: g.Rev}}))
+		_, err = Accept(ctx, props, sem, p.ID, AcceptOptions{ShownRev: pv.ShownRev, Overwrite: overwrite})
+		var again *ChangedAgainError
+		require.ErrorAs(t, err, &again, "overwrite=%v", overwrite)
+	}
+}
+
+func mustTermRev(t *testing.T, text, term string) string {
+	t.Helper()
+	r, ok := semantics.GlossaryTermRev(text, term)
+	require.True(t, ok)
+	return r
+}
+
+func TestShow_GlossaryStaleCases(t *testing.T) {
+	ctx := context.Background()
+	text := "## A\n\na0\n\n## B\n\nb0\n"
+	draft := func(rev string) Draft {
+		return Draft{Kind: semantics.KindGlossary, Rationale: "r", ReplacesRev: rev,
+			Definition: map[string]any{"term": "A", "text": "a1"}}
+	}
+	cases := map[string]struct{ rev, after string }{
+		"legacy file rev, term text changed": {"", "## A\n\nhand\n\n## B\n\nb0\n"},
+		"heading case renamed":               {"term", "## a\n\na0\n\n## B\n\nb0\n"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			props, sem := &Mock{}, &semantics.Mock{}
+			sem.SetFile("glossary.md", []byte(text))
+			g, _ := sem.Glossary(ctx)
+			rev := g.Rev
+			if c.rev == "term" {
+				rev = mustTermRev(t, text, "A")
+			}
+			p := mustBuild(t, draft(rev))
+			require.NoError(t, props.Create(ctx, p))
+			require.NoError(t, sem.PutGlossary(ctx, &semantics.Glossary{Text: c.after, Meta: semantics.Meta{Rev: g.Rev}}))
+			pv, err := Show(ctx, props, sem, p.ID)
+			require.NoError(t, err)
+			assert.True(t, pv.Stale)
+			assert.Equal(t, "changed", pv.StaleReason)
+		})
+	}
+}

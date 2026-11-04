@@ -96,7 +96,7 @@ Three tools author and read [data artifacts](artifacts.md) (`artifacts/<name>/`)
 | Tool | Notes |
 |---|---|
 | `list_definitions` | `{entities, metrics, joins, glossary, proposals: {open}}`; each item has its `name` and `rev`, an unreadable file its `error` (paths scrubbed). |
-| `get_definition` | `kind` (`entity`, `metric`, `join`, `glossary`) and `name`. Returns `{kind, name, rev, definition}`; a metric adds `parameters` (the declared `$name` parameters of its saved query) and `query_connection`, or `query_error` when the saved query is missing. For the glossary, `name` is a term. |
+| `get_definition` | `kind` (`entity`, `metric`, `join`, `glossary`) and `name`. Returns `{kind, name, rev, definition}`; a metric adds `parameters` (the declared `$name` parameters of its saved query) and `query_connection`, or `query_error` when the saved query is missing. For the glossary, `name` is a term and `rev` is that term's own (`term-…`; `file_rev` is the file's); without `name`, `rev` is the file's. Send a term's rev as `replaces_rev` to change it. |
 | `propose_definition` | `kind`, `name`, `definition`, `rationale`, optional `evidence` (strings) and `replaces_rev` (the `rev` from `get_definition`; required to replace an existing name). The definition is validated with the kind's own decoder before anything is filed, so a bad measure or a reserved word is refused with the reason. The reply is `{proposed: true, id, ...}`; the `id` is made by Slaw. Refused past 200 open proposals ("accept or reject some first"). The approval card reads "goes to your proposals inbox; nothing in semantics/ changes until you accept it". |
 
 ### Saved queries

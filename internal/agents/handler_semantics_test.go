@@ -252,6 +252,17 @@ func TestProposeDefinition_Glossary(t *testing.T) {
 	resp = fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r2", "replaces_rev": got["rev"], "definition": map[string]any{"term": "churn", "text": "new"}})
 	require.Nil(t, resp.Error, errMsg(resp))
 
+	// the rev is the term's own, the file's is file_rev; a wrong one is refused
+	rev, _ := got["rev"].(string)
+	assert.True(t, semantics.IsTermRev(rev))
+	assert.NotEmpty(t, got["file_rev"])
+	resp = fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r2b", "replaces_rev": "term-0000000000000000", "definition": map[string]any{"term": "churn", "text": "newer"}})
+	require.NotNil(t, resp.Error)
+	assert.Contains(t, resp.Error.Message, "changed since the rev you sent")
+	// the older form, the file's rev, still works while it is current
+	resp = fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r2c", "replaces_rev": got["file_rev"], "definition": map[string]any{"term": "churn", "text": "newest"}})
+	require.Nil(t, resp.Error, errMsg(resp))
+
 	// a new term replaces nothing: Slaw clears replaces_rev
 	resp = fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r3", "definition": map[string]any{"term": "ARR", "text": "x"}})
 	require.Nil(t, resp.Error, errMsg(resp))
@@ -563,4 +574,71 @@ func TestProposeDefinition_GlossaryWithAnUnclosedFenceIsRefused(t *testing.T) {
 	require.NotNil(t, resp.Error)
 	assert.Contains(t, resp.Error.Message, "glossary.md has an unclosed ``` fence; fix it first")
 	assert.Empty(t, semProposals(t, fx))
+}
+
+func TestProposeDefinition_GlossaryFileRevIsFiledAsTheTermRev(t *testing.T) {
+	fx := semanticsFixture(t, ModeFull)
+	sem := writableSemantics(fx)
+	ctx := context.Background()
+	require.NoError(t, sem.PutGlossary(ctx, &semantics.Glossary{Text: "## A\n\na0\n\n## B\n\nb0\n"}))
+	got := mapOf(t, fx.call("get_definition", map[string]any{"kind": "glossary", "name": "A"}).Result)
+	fileRev, _ := got["file_rev"].(string)
+	propose := func(term, text string) *Response {
+		return fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r", "replaces_rev": fileRev,
+			"definition": map[string]any{"term": term, "text": text}})
+	}
+	require.Nil(t, propose("A", "a1").Error)
+	// the same proposal again is a duplicate, whichever rev kind it carries
+	resp := propose("A", "a1")
+	require.NotNil(t, resp.Error)
+	assert.Contains(t, resp.Error.Message, "already waiting")
+	require.Nil(t, propose("B", "b1").Error)
+
+	var a *proposals.Proposal
+	for _, p := range semProposals(t, fx) {
+		if p.Name == "a" {
+			a = &p
+		}
+	}
+	require.NotNil(t, a)
+	assert.True(t, semantics.IsTermRev(a.ReplacesRev), a.ReplacesRev)
+}
+
+// Two terms proposed through the handler against the file rev, then accepted in
+// turn the way a person would: the first accept must not make the second stale.
+func TestProposeDefinition_GlossaryFileRevProposalsAcceptInTurn(t *testing.T) {
+	fx := semanticsFixture(t, ModeFull)
+	sem := writableSemantics(fx)
+	ctx := context.Background()
+	require.NoError(t, sem.PutGlossary(ctx, &semantics.Glossary{Text: "## A\n\na0\n\n## B\n\nb0\n"}))
+	g, err := sem.Glossary(ctx)
+	require.NoError(t, err)
+	for _, term := range []string{"A", "B"} {
+		resp := fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r", "replaces_rev": g.Rev,
+			"definition": map[string]any{"term": term, "text": strings.ToLower(term) + "1"}})
+		require.Nil(t, resp.Error, errMsg(resp))
+	}
+	props, ok := fx.h.access.Proposals().(*proposals.Mock)
+	require.True(t, ok)
+	ids := map[string]string{}
+	for _, p := range semProposals(t, fx) {
+		ids[p.Name] = p.ID
+	}
+	require.Len(t, ids, 2)
+
+	accept := func(id string) (*proposals.Preview, error) {
+		pv, err := proposals.Show(ctx, props, sem, id)
+		require.NoError(t, err)
+		return proposals.Accept(ctx, props, sem, id, proposals.AcceptOptions{ShownRev: pv.ShownRev})
+	}
+	_, err = accept(ids["b"])
+	require.NoError(t, err)
+	pv, err := proposals.Show(ctx, props, sem, ids["a"])
+	require.NoError(t, err)
+	assert.False(t, pv.Stale, pv.StaleReason)
+	_, err = accept(ids["a"])
+	require.NoError(t, err)
+	g, err = sem.Glossary(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "## A\n\na1\n\n## B\n\nb1\n", g.Text)
 }

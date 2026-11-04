@@ -265,6 +265,9 @@ func (h *Handler) getGlossary(ctx context.Context, req *Request, term string) *R
 			return NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("the glossary has no term %q (terms: %s)", truncateRunesText(term, 80), strings.Join(g.Terms, ", ")))
 		}
 		res["name"], res["text"] = term, text
+		// A term has its own rev; the file's goes along as file_rev.
+		res["file_rev"] = g.Rev
+		res["rev"], _ = semantics.GlossaryTermRev(g.Text, term)
 	}
 	return NewResponse(req.ID, res)
 }
@@ -399,12 +402,19 @@ func (h *Handler) checkGlossaryTarget(ctx context.Context, req *Request, p *prop
 	if err != nil {
 		return proposalRefusal(req, err)
 	}
-	if _, exists := semantics.GlossarySection(g.Text, term); exists {
+	if termRev, exists := semantics.GlossaryTermRev(g.Text, term); exists {
 		switch {
 		case p.ReplacesRev == "":
-			return fail("the glossary already defines %q, so this would replace it. Read it with get_definition (kind glossary, name %q) and send the glossary's rev as replaces_rev.", term, term)
-		case p.ReplacesRev != g.Rev:
-			return fail("the glossary changed since the rev you sent. Call get_definition again and send the new rev.")
+			return fail("the glossary already defines %q, so this would replace it. Read it with get_definition (kind glossary, name %q) and send that rev as replaces_rev.", term, term)
+		case p.ReplacesRev == termRev:
+		case p.ReplacesRev == g.Rev:
+			// The file rev, current now, means the same as the term's rev
+			// now. Filing the term rev keeps the proposal from going stale
+			// when another term is accepted, and makes the duplicate check
+			// see one proposal, not one per rev kind.
+			p.ReplacesRev = termRev
+		default:
+			return fail("the term %q changed since the rev you sent. Call get_definition again (kind glossary, name %q) and send the new rev.", term, term)
 		}
 		return nil
 	}

@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"text/tabwriter"
@@ -44,7 +43,9 @@ var semanticsShowCmd = &cobra.Command{
 	Short: "Print one definition's file as stored",
 	Long: `Print one definition as it is stored (comments and layout kept; control
 characters are shown as <U+XXXX>).
-<kind> is entity, metric or join, then the name; "show glossary" takes no name.
+<kind> is entity, metric or join, then the name; "show glossary" prints the
+whole glossary, and "show glossary <term>" one term's section with its rev (the
+replaces_rev for a proposal that changes that term) on stderr.
 A file that fails validation is still printed, with the reason on stderr and
 a non-zero exit, so it can be read and fixed.`,
 	Args:         cobra.RangeArgs(1, 2),
@@ -185,9 +186,9 @@ func runSemanticsShow(cmd *cobra.Command, args []string) error {
 	}
 	name := ""
 	switch {
-	case kind == semantics.KindGlossary && len(args) == 1:
+	case kind == semantics.KindGlossary && len(args) == 2:
+		name = args[1]
 	case kind == semantics.KindGlossary:
-		return errors.New("the glossary has no name: use \"slaw semantics show glossary\"")
 	case len(args) != 2:
 		return fmt.Errorf("usage: slaw semantics show %s <name>", kind)
 	case kind != semantics.KindEntity && kind != semantics.KindMetric && kind != semantics.KindJoin:
@@ -205,11 +206,34 @@ func runSemanticsShow(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprint(cmd.OutOrStdout(), strictyaml.EscapeHidden(src.Text))
+	text := src.Text
+	if kind == semantics.KindGlossary && name != "" {
+		if text, err = showGlossaryTerm(cmd, src.Text, name); err != nil {
+			// A missing term in a file that fails validation: the file's
+			// problem is the more useful answer.
+			if problem := validateSemanticsSource(ctx, ws.Semantics(), kind, name); problem != "" {
+				return fmt.Errorf("this file does not pass validation: %s", problem)
+			}
+			return err
+		}
+	}
+	fmt.Fprint(cmd.OutOrStdout(), strictyaml.EscapeHidden(text))
 	if problem := validateSemanticsSource(ctx, ws.Semantics(), kind, name); problem != "" {
 		return fmt.Errorf("this file does not pass validation: %s", problem)
 	}
 	return nil
+}
+
+// showGlossaryTerm returns term's section as stored and prints the term's rev
+// to stderr.
+func showGlossaryTerm(cmd *cobra.Command, glossary, term string) (string, error) {
+	rev, ok := semantics.GlossaryTermRev(glossary, term)
+	if !ok {
+		return "", fmt.Errorf("the glossary has no term %q", term)
+	}
+	raw, _ := semantics.GlossaryRawSection(glossary, term)
+	fmt.Fprintf(cmd.ErrOrStderr(), "rev %s\n", rev)
+	return raw, nil
 }
 
 // validateSemanticsSource reads the definition through the store's strict
