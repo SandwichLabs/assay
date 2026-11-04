@@ -26,6 +26,18 @@ func PageFromText(name string, manifestText []byte, files []PageFile) (*Artifact
 	return &Artifact{Name: name, Manifest: *m, Files: files, Page: page}, nil
 }
 
+// IsStaticAsset reports whether a page file is one a static page's host serves
+// next to the rendered document: a stylesheet, an image, a font or JSON data
+// (the closed list, as Studio's page frame serves it), never a template or a
+// script.
+func IsStaticAsset(p string) bool {
+	switch path.Ext(p) {
+	case ".css", ".svg", ".png", ".jpg", ".webp", ".woff2", ".json":
+		return true
+	}
+	return false
+}
+
 // PageFileRole is the role a page file has in the hash and on the allow
 // screen: entry, partial, script, style, image, font or data.
 func PageFileRole(p, entry string) string { return pageRole(p, entry) }

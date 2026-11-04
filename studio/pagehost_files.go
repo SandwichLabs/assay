@@ -17,11 +17,11 @@ import (
 	"path"
 	"regexp"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/SandwichLabs/slaw/internal/artifacts"
 	"github.com/SandwichLabs/slaw/internal/pagehost"
+	"github.com/SandwichLabs/slaw/internal/pagetheme"
 )
 
 // sentFile is one file of the page window's file set.
@@ -32,7 +32,7 @@ type sentFile struct {
 }
 
 const (
-	themePath = "_slaw/theme.css"
+	themePath = pagetheme.Path
 	libPrefix = "slaw-lib/"
 	cssType   = "text/css; charset=utf-8"
 	jsType    = "text/javascript; charset=utf-8"
@@ -136,72 +136,13 @@ func docMessages(id int64, status int, body []byte) []*pagehost.Message {
 	return out
 }
 
-var headOpenRe = regexp.MustCompile(`(?i)<head(\s[^>]*)?>`)
-
-// withThemeLink puts the host stylesheet at the top of the document's head, so
-// the page's own styles come after it and win. A document with no head tag is
-// served as rendered: the theme is a convenience, not a requirement.
-func withThemeLink(doc []byte) []byte {
-	loc := headOpenRe.FindIndex(doc)
-	if loc == nil {
-		return doc
-	}
-	const link = `<link rel="stylesheet" href="` + themePath + `">`
-	var b bytes.Buffer
-	b.Grow(len(doc) + len(link))
-	b.Write(doc[:loc[1]])
-	b.WriteString(link)
-	b.Write(doc[loc[1]:])
-	return b.Bytes()
-}
-
-var (
-	themeNameRe  = regexp.MustCompile(`^--slaw-[a-z0-9][a-z0-9-]{0,40}$`)
-	themeValueRe = regexp.MustCompile(`^[A-Za-z0-9 #(),.%/'"_+-]{1,160}$`)
-)
+// withThemeLink puts the host stylesheet at the top of the document's head
+// (internal/pagetheme, shared with `slaw artifact render`).
+func withThemeLink(doc []byte) []byte { return pagetheme.LinkInto(doc) }
 
 // themeStylesheet builds _slaw/theme.css from the roles the person's theme set
-// on Studio's window. Only a --slaw-* name with a plain value gets through; a
-// value that could close a declaration, open a function that loads something
-// or unbalance a quote is dropped, so this is not a way to write CSS.
-func themeStylesheet(roles map[string]string) string {
-	names := make([]string, 0, len(roles))
-	for n := range roles {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	var b strings.Builder
-	b.WriteString(":root{")
-	scheme := ""
-	for _, n := range names {
-		v := strings.TrimSpace(roles[n])
-		if n == "--slaw-theme-type" {
-			if v == "light" || v == "dark" {
-				scheme = v
-			}
-			continue
-		}
-		if !themeNameRe.MatchString(n) || !safeThemeValue(v) {
-			continue
-		}
-		fmt.Fprintf(&b, "%s:%s;", n, v)
-	}
-	if scheme != "" {
-		// Also a property of its own: a page stylesheet that sets color-scheme
-		// replaces the host's, so this is how a page still reads the mode.
-		fmt.Fprintf(&b, "color-scheme:%s;--slaw-theme-type:%s;", scheme, scheme)
-	}
-	b.WriteString("}\n")
-	return b.String()
-}
-
-func safeThemeValue(v string) bool {
-	if !themeValueRe.MatchString(v) || strings.Count(v, `"`)%2 != 0 || strings.Count(v, "'")%2 != 0 {
-		return false
-	}
-	l := strings.ToLower(v)
-	return !strings.Contains(l, "url") && !strings.Contains(l, "expression") && !strings.Contains(l, "image") && !strings.Contains(l, "//") && !strings.Contains(l, "/*")
-}
+// on Studio's window (internal/pagetheme).
+func themeStylesheet(roles map[string]string) string { return pagetheme.Stylesheet(roles) }
 
 // Default window size when the manifest names none.
 const (
