@@ -146,3 +146,28 @@ describe('AgentSettings stale form', () => {
     expect(w.find('[data-testid="reload-settings"]').exists()).toBe(false)
   })
 })
+
+describe('AgentSettings (ask-before-changes hint)', () => {
+  beforeEach(() => { _resetForTests() })
+  const mountWith = (over: Partial<WorkspaceInfo>) => {
+    makeApp()
+    workspaceInfo.value = info(over)
+    return mount(AgentSettings, { global: { stubs: { Icon: true } } })
+  }
+
+  it('shows the hint when the tier is above read-only and the gate is on', () => {
+    const w = mountWith({ local: { sandbox: 'full', askBeforeWrites: true } })
+    expect(w.find('[data-testid="agent-ask-hint"]').text()).toBe(
+      'Ask before changes is still on, so the assistant and connected agents will ask before each change.')
+  })
+
+  it('shows it when only the team requires the gate', () => {
+    const w = mountWith({ local: { sandbox: 'read-write', askBeforeWrites: true }, team: { sandbox: 'full', askBeforeWrites: true } })
+    expect(w.find('[data-testid="agent-ask-hint"]').exists()).toBe(true)
+  })
+
+  it('hides it at read-only, or when the gate is off', () => {
+    expect(mountWith({ local: { sandbox: 'read-only', askBeforeWrites: true } }).find('[data-testid="agent-ask-hint"]').exists()).toBe(false)
+    expect(mountWith({ local: { sandbox: 'full', askBeforeWrites: false } }).find('[data-testid="agent-ask-hint"]').exists()).toBe(false)
+  })
+})

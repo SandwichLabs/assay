@@ -106,50 +106,63 @@ func TestProposeDefinition_FilesAProposalAndChangesNothingElse(t *testing.T) {
 	assert.Equal(t, map[string]any{"open": 1}, res["proposals"])
 }
 
-func TestProposeDefinition_ApprovalCardSaysNothingChangesUntilAccepted(t *testing.T) {
+// "Ask before changes" does not gate a proposal (feedback-2026-11 D1): the
+// inbox's accept step is the approval, so no card is shown and a headless
+// caller files the same way.
+func TestProposeDefinition_FilesUnderAskBeforeChangesWithoutACard(t *testing.T) {
 	fx := semanticsFixture(t, ModeReadWrite, withAsk(true), withApprover())
 	resp := fx.call("propose_definition", metricProposal("net_revenue"))
 	require.Nil(t, resp.Error, errMsg(resp))
-	require.Equal(t, 1, fx.approver.count())
-	card := fx.approver.asked[0]
-	assert.Equal(t, "propose_definition", card.Tool)
-	assert.Contains(t, card.Summary, "goes to your proposals inbox; nothing in semantics/ changes until you accept it")
-	assert.Contains(t, card.Summary, `Propose metric "net_revenue"`, "a new definition is not 'a change to'")
-	assert.NotContains(t, card.Summary, "a change to")
-	assert.Equal(t, "sum(amount)", card.SQL)
-	assert.False(t, card.Destructive)
+	assert.Equal(t, 0, fx.approver.count(), "no approval card for a proposal")
+	assert.Len(t, semProposals(t, fx), 1)
 
-	// An existing definition is "a change to"
+	// A replacement proposal files the same way.
 	m, _ := semantics.DecodeMetric("net_revenue", []byte("version: 1\nname: net_revenue\nquery: net_revenue_base\nmeasure: sum(a)\n"))
 	require.NoError(t, writableSemantics(fx).PutMetric(context.Background(), m))
 	p := metricProposal("net_revenue")
 	p["replaces_rev"] = m.Rev
 	require.Nil(t, fx.call("propose_definition", p).Error)
-	assert.Contains(t, fx.approver.asked[1].Summary, `Propose a change to metric "net_revenue"`)
-
-	// A declined card files nothing.
-	fx2 := semanticsFixture(t, ModeReadWrite, withAsk(true), withApprover())
-	fx2.approver.decision = ErrApprovalDeclined
-	resp = fx2.call("propose_definition", metricProposal("net_revenue"))
-	require.NotNil(t, resp.Error)
-	assert.Empty(t, semProposals(t, fx2))
+	assert.Equal(t, 0, fx.approver.count())
 }
 
-func TestProposeDefinition_HeadlessIsValidatedThenNeedsApproval(t *testing.T) {
+func TestProposeDefinition_HeadlessFilesUnderAskAndOtherWritesStayRefused(t *testing.T) {
 	fx := semanticsFixture(t, ModeReadWrite, withAsk(true))
 	resp := fx.call("propose_definition", metricProposal("net_revenue"))
+	require.Nil(t, resp.Error, errMsg(resp))
+	assert.Equal(t, true, mapOf(t, resp.Result)["proposed"])
+	assert.Len(t, semProposals(t, fx), 1)
+
+	// Every other content write is still held for the person.
+	resp = fx.call("save_query", map[string]any{"title": "Named rows", "sql": "SELECT region FROM sales"})
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, ErrApprovalNeeded, resp.Error.Code)
-	assert.Contains(t, resp.Error.Message, "valid and ready")
-	assert.Contains(t, resp.Error.Message, "nothing in semantics/ changes until the person accepts it")
-	assert.Empty(t, semProposals(t, fx))
 
-	bad := metricProposal("net_revenue")
+	// Validation still runs first.
+	bad := metricProposal("other")
 	badDef, _ := bad["definition"].(map[string]any)
 	badDef["measure"] = "sum(amount) FROM secrets"
 	resp = fx.call("propose_definition", bad)
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, ErrInvalidParams, resp.Error.Code)
+}
+
+func TestProposeDefinition_ReadOnlyTierStillRefusesUnderAsk(t *testing.T) {
+	for _, ask := range []bool{true, false} {
+		fx := semanticsFixture(t, ModeReadOnly, withAsk(ask), withApprover())
+		resp := fx.call("propose_definition", metricProposal("net_revenue"))
+		require.NotNil(t, resp.Error)
+		assert.Equal(t, ErrPermission, resp.Error.Code)
+		assert.Equal(t, 0, fx.approver.count())
+		assert.Empty(t, semProposals(t, fx))
+	}
+}
+
+// With "Ask before changes" off nothing differs: it files, and no card shows.
+func TestProposeDefinition_AskOffUnchanged(t *testing.T) {
+	fx := semanticsFixture(t, ModeFull, withAsk(false), withApprover())
+	require.Nil(t, fx.call("propose_definition", metricProposal("net_revenue")).Error)
+	assert.Equal(t, 0, fx.approver.count())
+	assert.Len(t, semProposals(t, fx), 1)
 }
 
 func TestProposeDefinition_Refusals(t *testing.T) {

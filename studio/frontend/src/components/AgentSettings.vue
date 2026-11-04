@@ -91,6 +91,8 @@ async function setTeamAsk(on: boolean, el?: HTMLInputElement) {
   await persist({ teamAskBeforeChanges: on, askBeforeChanges: on ? true : (info.value?.local.askBeforeWrites ?? true) })
 }
 const setMyAsk = (on: boolean) => persist({ askBeforeChanges: on })
+// A raised tier with the gate still on: say the two settings stack (feedback-2026-11 §2).
+const askHint = computed(() => !!info.value && info.value.local.sandbox !== 'read-only' && (info.value.local.askBeforeWrites || teamRequiresAsk.value))
 
 // Which connections the agent can change, and what it does first.
 const writable = computed(() => (info.value?.connections ?? []).filter((c) => !c.readOnly))
@@ -160,6 +162,7 @@ const isOwn = (c: ConnectionInfo) => c.name === 'local' && c.type === 'duckdb'
             <span class="sh-meta">{{ teamRequiresAsk ? 'The team requires this, so it stays on.' : "The Slaw assistant shows you each change and waits for your OK. This covers the workspace's own local database. For every other connection it always asks, and that can't be turned off." }}</span>
           </span>
         </label>
+        <p v-if="askHint" class="sh-meta" data-testid="agent-ask-hint" style="margin: 0;">Ask before changes is still on, so the assistant and connected agents will ask before each change.</p>
       </fieldset>
 
       <!-- What can change -->
