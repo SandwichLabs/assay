@@ -78,7 +78,6 @@ func TestSetGlossaryTerm_KeepsCRLF(t *testing.T) {
 func TestGlossaryOpenFence(t *testing.T) {
 	assert.True(t, GlossaryOpenFence("## A\n\n```\ncode\n"))
 	assert.False(t, GlossaryOpenFence("## A\n\n```\ncode\n```\n"))
-	assert.True(t, HasGlossaryTerm("## Churn\n\nx\n", "churn"))
 }
 
 func TestGlossaryTermRev(t *testing.T) {

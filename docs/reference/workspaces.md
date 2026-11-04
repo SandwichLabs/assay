@@ -90,7 +90,7 @@ Committed and shared. It carries no secrets and nothing per-person. Unknown keys
 | `name` | Display name. Defaults to the folder name. |
 | `default_connection` | Connection that unqualified table names run against. `Init` sets it to `local`. |
 | `sandbox` | The team limit for the agent: `read-only`, `read-write` or `full`. See "The agent limit". |
-| `ask_before_writes` | `true` makes the approval gate mandatory for everyone. |
+| `ask_before_writes` | `true` makes the approval gate mandatory for everyone. It does not cover `propose_definition`: a proposal goes to the machine-local inbox without a card and changes nothing until a person accepts it. |
 | `connections` | Shared connection definitions, below. |
 <!-- /keys -->
 
@@ -242,7 +242,7 @@ The committed `sandbox` and `ask_before_writes` are a **ceiling, not a switch**:
 What the agent actually gets is `EffectivePolicy(committed, local)`:
 
 - **Sandbox** is your own choice (read-write when you have not made one), lowered to the committed limit. You can go below the limit freely and up to it, never above. A committed `full` is not a grant: with nothing set locally you still get read-write.
-- **Ask before writes** is on unless you turned it off locally and the committed file does not require it. A committed `true` cannot be loosened by anyone. A committed `false` or no value loosens nobody.
+- **Ask before writes** is on unless you turned it off locally and the committed file does not require it. A committed `true` cannot be loosened by anyone. Neither setting covers `propose_definition`: it files into the machine-local proposals inbox without a card, and nothing under `semantics/` changes until a person accepts it (the tier still applies: read-only refuses it). A committed `false` or no value loosens nobody.
 - **Anything unrecognised** fails closed to `read-only`.
 
 The gate can be turned off only for the workspace's own local files (`duckdb` and `sqlite` connections). For every other connection (Postgres, MotherDuck, anything that is not a local file) the agent **always asks**, whatever your setting, and headless MCP refuses those writes. A write also needs the connection to be writable (`read_only: false`); see [agent-policy.md](agent-policy.md) for the whole policy, tier by tier.
@@ -343,6 +343,7 @@ The CLI works on a workspace found the way git finds `.git`: `--workspace DIR`, 
 | `slaw import <file> [--into [conn.]table] [--mode ...] [--key ...]` | See `import-office.md`. A `.slaw` file is routed to `slaw import bundle`. |
 | `slaw export bundle [-o file.slaw] [--notebooks a,b] [--queries ...] [--skills ...] [--artifacts a,b] [--with-connections] [--with-local-connections a,b] [--encrypt] [--force]` | Write a `.slaw` bundle of the workspace's content (everything unless some are named). Takes no hub lock: it only reads files. See "Sharing without git". |
 | `slaw artifact list [--json] [--workspace DIR]` | The workspace's data artifacts: name, title, view kind (`a2ui`, `script`, `html (static)` or `html (scripted)`) and (for a broken one) the error, as the artifact kinds in Studio's Library show them. Reads files only; there is no `slaw artifact run` or `write`. |
+| `slaw artifact render <name> [--out DIR] [-p name=value ...] [--force] [--workspace DIR]` | Draws an allowed **static** `view: html` page to `index.html`, `_slaw/theme.css` and the page's static files (default folder `./<name>-render`), through the read-only, policy-checked query path. Refuses scripted pages, A2UI and script views, and a page that is not allowed as it is now. See [artifacts.md](artifacts.md#rendering-and-the-static-host). |
 | `slaw artifact view status\|allow\|deny\|revoke <name> [--hash H] [--json] [--workspace DIR]` | A `view: script` artifact's or HTML page's trust decision, as the Studio prompt and Settings > Workspace > Pages make it: `status` shows state, hash and source (for a page also its kind, queries with their connections, declared capabilities and files); `allow` shows the source and asks (or takes `--hash` from `status` with `--yes`) and is refused if the files changed since; `deny` holds until `revoke`. Kept in `views.json` in your config directory. |
 | `slaw export notebook <id> [-o file.slnb]` / `slaw import notebook <file.slnb> [--on-conflict ...]` | One notebook, through the same checks as a bundle. |
 | `slaw import bundle <file.slaw> [--on-conflict rename\|overwrite\|skip] [--with-connections all\|a,b] [--dry-run]` | Import a bundle into the workspace. |

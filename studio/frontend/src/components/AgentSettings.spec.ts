@@ -146,3 +146,32 @@ describe('AgentSettings stale form', () => {
     expect(w.find('[data-testid="reload-settings"]').exists()).toBe(false)
   })
 })
+
+describe('AgentSettings (ask-before-changes hint)', () => {
+  beforeEach(() => { _resetForTests() })
+  const mountWith = (over: Partial<WorkspaceInfo>) => {
+    makeApp()
+    workspaceInfo.value = info(over)
+    return mount(AgentSettings, { global: { stubs: { Icon: true } } })
+  }
+  const hint = (w: ReturnType<typeof mountWith>) => w.find('[data-testid="agent-ask-hint"]')
+
+  it('shows the hint at full with the gate on, naming slaw mcp serve', () => {
+    const w = mountWith({ local: { sandbox: 'full', askBeforeWrites: true } })
+    expect(hint(w).text()).toContain('Ask before changes is still on, so every change waits for your OK here')
+    expect(hint(w).text()).toContain('slaw mcp serve')
+    expect(hint(w).text()).toContain('Turn it off')
+  })
+
+  it('has a team variant when the team requires the gate', () => {
+    const w = mountWith({ local: { sandbox: 'full', askBeforeWrites: true }, team: { sandbox: 'full', askBeforeWrites: true } })
+    expect(hint(w).text()).toContain('The team requires asking before changes')
+    expect(hint(w).text()).not.toContain('Turn it off')
+  })
+
+  it('shows nothing at read-write with the gate on, at read-only, or with the gate off', () => {
+    expect(hint(mountWith({ local: { sandbox: 'read-write', askBeforeWrites: true } })).exists()).toBe(false)
+    expect(hint(mountWith({ local: { sandbox: 'read-only', askBeforeWrites: true } })).exists()).toBe(false)
+    expect(hint(mountWith({ local: { sandbox: 'full', askBeforeWrites: false } })).exists()).toBe(false)
+  })
+})

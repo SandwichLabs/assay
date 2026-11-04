@@ -144,7 +144,7 @@ if the gap matters.
 Agents never write under `semantics/`. File a definition with
 `propose_definition` (`kind`, `name`, `definition`, `rationale`, and
 `evidence`: the queries or values you checked, for example the grain result).
-It is validated now and waits in the person's inbox; **nothing changes and
+It is validated now and waits in the person's inbox without an approval card, even when "Ask before changes" is on (accepting it is the person's approval); **nothing changes and
 `metric()` will not find it until they accept it** (`slaw semantics proposals`,
 `accept`, `reject`, or Studio). Save the query first (`save_query`), since a
 metric's saved query must exist. To change a definition send the `rev` from

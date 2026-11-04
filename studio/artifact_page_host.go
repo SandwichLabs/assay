@@ -26,33 +26,35 @@ type ArtifactPageGrant struct {
 }
 
 // openPageGrant checks, in ws, that the artifact is an HTML page that is
-// allowed and static, rebuilds it from the bytes that were hashed (checking
-// the hash again over them), and holds them under a new token.
+// allowed and static (workspace.AllowedStaticPage, the one check shared with
+// `slaw artifact render`), which hands back the page rebuilt from the bytes that
+// were hashed, and holds them under a new token. Its refusals map to Studio's
+// fixed texts.
 func openPageGrant(vs *viewServer, ws workspace.Workspace, name, origin string, runner func(m *artifacts.Manifest, pins map[string]string) artifacts.PageRunner) (*ArtifactPageGrant, error) {
-	st, err := ws.ArtifactViewState(name)
+	ok, err := workspace.AllowedStaticPage(ws, name)
 	if err != nil {
-		return nil, viewError(err)
+		return nil, pageGrantError(err)
 	}
-	if st.Kind != artifacts.ViewHTML || st.State != string(stateAllowed) || st.Hash == "" {
-		return nil, errViewNotAllowed
-	}
-	if st.PageKind != artifacts.PageStatic {
-		return nil, errPageScripted
-	}
-	// The bytes held are the bytes the allowed hash covers, checked here rather
-	// than assumed: what renders is what was hashed.
-	page, err := artifacts.PageFromText(name, []byte(st.Manifest), st.PageFiles)
-	if err != nil || page.Page.Hash != st.ContentHash {
-		return nil, errViewNotAllowed
-	}
-	token, err := vs.issue(&viewGrant{name: name, hash: st.Hash, origin: origin, ws: ws, page: page, run: runner(&page.Manifest, st.Pins)})
+	token, err := vs.issue(&viewGrant{name: name, hash: ok.Hash, origin: origin, ws: ws, page: ok.Page, run: runner(&ok.Page.Manifest, ok.Pins)})
 	if err != nil {
 		if errors.Is(err, errBadViewOrigin) {
 			return nil, err
 		}
 		return nil, errors.New("the page could not be opened")
 	}
-	return &ArtifactPageGrant{Token: token, Hash: st.Hash}, nil
+	return &ArtifactPageGrant{Token: token, Hash: ok.Hash}, nil
+}
+
+// pageGrantError maps AllowedStaticPage's refusals to the fixed errors the
+// bridge shows.
+func pageGrantError(err error) error {
+	switch {
+	case errors.Is(err, workspace.ErrPageScripted):
+		return errPageScripted
+	case errors.Is(err, workspace.ErrNotStaticPage), errors.Is(err, workspace.ErrPageNotAllowed), errors.Is(err, artifacts.ErrNotFound):
+		return errViewNotAllowed
+	}
+	return viewError(err)
 }
 
 // pageRunner answers a page's queries from the manifest the page was hashed

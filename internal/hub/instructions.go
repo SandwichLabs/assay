@@ -110,11 +110,11 @@ func gateSentence(in instructionsInput) string {
 		return "Nothing can be changed. To allow changes the person sets the agent to \"Change rows\" or higher in " + agents.SettingsTierPath +
 			"; a --sandbox flag on `slaw mcp serve` or a team limit in slaw.yaml can cap it lower."
 	case in.Policy.AskBeforeWrites && in.HasApprover:
-		return "Each change shows the person an approval card in Slaw and waits for their OK."
+		return "Each change shows the person an approval card in Slaw and waits for their OK. propose_definition is the exception: it files into the proposals inbox without a card, and nothing in semantics/ changes until the person accepts it."
 	case in.Policy.AskBeforeWrites:
 		return "Writes need the person's OK and nobody can give it over this connection, so they are refused. " +
-			"write_artifact, the notebook cell tools (add_query_cell, add_markdown_cell, update_cell, delete_cell, move_cell, create_dashboard), save_query, build_query, propose_definition and create_or_update_skill check your request first: when one says it is valid and ready, ask the person to approve it, or to turn off " +
-			agents.SettingsAskPath + "; that applies when the MCP server restarts."
+			"write_artifact, the notebook cell tools (add_query_cell, add_markdown_cell, update_cell, delete_cell, move_cell, create_dashboard), save_query, build_query and create_or_update_skill check your request first: when one says it is valid and ready, ask the person to approve it, or to turn off " +
+			agents.SettingsAskPath + "; that applies when the MCP server restarts. propose_definition is the exception: it files into the proposals inbox without asking, and nothing in semantics/ changes until the person accepts it."
 	}
 	return "Changes to this workspace's own local files run without asking; any other connection always needs the person's approval in Slaw."
 }

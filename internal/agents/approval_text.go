@@ -81,8 +81,6 @@ func contentTarget(req *Request) string {
 		return "skills/" + nameOr(req, "<name>") + "/SKILL.md in the workspace folder"
 	case "save_query", "build_query":
 		return "a saved query in queries/ in the workspace folder"
-	case "propose_definition":
-		return "a proposal in .slaw-local/proposals/ in the workspace folder (nothing in semantics/ changes until the person accepts it)"
 	default:
 		return "a notebook in the workspace folder"
 	}

@@ -191,6 +191,9 @@ func TestContentTools_AllHaveAValidateFirstCase(t *testing.T) {
 // a valid one is told it is valid and ready and needs approval; neither writes.
 func TestContentTools_ValidateBeforeTheApprovalGate(t *testing.T) {
 	for _, c := range contentCases() {
+		if approvalExempt(c.tool) {
+			continue // never gated; see handler_semantics_test.go
+		}
 		t.Run(c.tool, func(t *testing.T) {
 			fx := newArtifactFixture(t, ModeReadWrite, withAsk(true))
 
@@ -223,6 +226,9 @@ func TestContentTools_ValidateBeforeTheApprovalGate(t *testing.T) {
 // With someone present the card is shown and the write happens, as before.
 func TestContentTools_ApprovedWriteStillLands(t *testing.T) {
 	for _, c := range contentCases() {
+		if approvalExempt(c.tool) {
+			continue // never gated; see handler_semantics_test.go
+		}
 		t.Run(c.tool, func(t *testing.T) {
 			fx := newArtifactFixture(t, ModeReadWrite, withAsk(true), withApprover())
 			valid, _ := c.requests(t, fx)
