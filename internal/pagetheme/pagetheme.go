@@ -22,7 +22,6 @@ const ThemeTypeRole = "--slaw-theme-type"
 var (
 	nameRe  = regexp.MustCompile(`^--slaw-[a-z0-9][a-z0-9-]{0,40}$`)
 	valueRe = regexp.MustCompile(`^[A-Za-z0-9 #(),.%/'"_+-]{1,160}$`)
-	headRe  = regexp.MustCompile(`(?i)<head(\s[^>]*)?>`)
 )
 
 // Stylesheet builds _slaw/theme.css from the roles a theme set. Only a
@@ -68,20 +67,30 @@ func safeValue(v string) bool {
 	return !strings.Contains(l, "url") && !strings.Contains(l, "expression") && !strings.Contains(l, "image") && !strings.Contains(l, "//") && !strings.Contains(l, "/*")
 }
 
-// LinkInto puts a link to the stylesheet at the top of the document's head, so
-// the page's own styles come after it and win. A document with no head tag is
-// returned as it is: the theme is a convenience, not a requirement.
-func LinkInto(doc []byte) []byte {
-	loc := headRe.FindIndex(doc)
-	if loc == nil {
-		return doc
+// LinkInto puts a link to the stylesheet at the start of the document (see
+// insertAtStart), so the page's own styles come after it and win.
+func LinkInto(doc []byte) []byte { return insertAtStart(doc, []byte(linkTag)) }
+
+const linkTag = `<link rel="stylesheet" href="` + Path + `">`
+
+// docStartRe is the leading comments and doctype of a document, which the host's
+// tags must follow (anything before a doctype puts the page in quirks mode).
+var docStartRe = regexp.MustCompile(`(?is)^(?:\s*<!--.*?-->)*\s*<!doctype[^>]*>`)
+
+// insertAtStart puts tags right after a leading doctype, or at the very start
+// of a document without one. It does not look for a <head>: such a search can
+// be fooled by an attribute value or by content before the head, and the HTML
+// parser puts a <meta> or <link> that comes first into the implied head anyway.
+func insertAtStart(doc, tags []byte) []byte {
+	at := 0
+	if loc := docStartRe.FindIndex(doc); loc != nil {
+		at = loc[1]
 	}
-	const link = `<link rel="stylesheet" href="` + Path + `">`
 	var b bytes.Buffer
-	b.Grow(len(doc) + len(link))
-	b.Write(doc[:loc[1]])
-	b.WriteString(link)
-	b.Write(doc[loc[1]:])
+	b.Grow(len(doc) + len(tags))
+	b.Write(doc[:at])
+	b.Write(tags)
+	b.Write(doc[at:])
 	return b.Bytes()
 }
 
@@ -91,37 +100,13 @@ func LinkInto(doc []byte) []byte {
 // has no such headers.
 const ExportCSP = "default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; form-action 'none'; base-uri 'none'"
 
-var (
-	htmlOpenRe = regexp.MustCompile(`(?i)<html(\s[^>]*)?>`)
-	doctypeRe  = regexp.MustCompile(`(?i)^\s*<!doctype[^>]*>`)
-)
-
 // ForExport adds to a finished static page's document the CSP <meta> and then
-// the link to the stylesheet, both first in its head (the CSP first, so nothing
-// of the page's own comes before it). A document without a head gets one.
+// the link to the stylesheet, at the very start of the document (after a
+// doctype), so the CSP is in force before anything the page wrote and the page
+// cannot move it out of effect: the parser puts them in the implied head.
 func ForExport(doc []byte) []byte {
-	meta := []byte(`<meta http-equiv="Content-Security-Policy" content="` + ExportCSP + `">`)
-	if headRe.Match(doc) {
-		return insertAfter(LinkInto(doc), headRe, meta)
-	}
-	tags := append(append([]byte("<head>"), meta...), []byte(`<link rel="stylesheet" href="`+Path+`"></head>`)...)
-	switch {
-	case htmlOpenRe.Match(doc):
-		return insertAfter(doc, htmlOpenRe, tags)
-	case doctypeRe.Match(doc):
-		return insertAfter(doc, doctypeRe, tags)
-	}
-	return append(tags, doc...)
-}
-
-func insertAfter(doc []byte, re *regexp.Regexp, tags []byte) []byte {
-	loc := re.FindIndex(doc)
-	var b bytes.Buffer
-	b.Grow(len(doc) + len(tags))
-	b.Write(doc[:loc[1]])
-	b.Write(tags)
-	b.Write(doc[loc[1]:])
-	return b.Bytes()
+	meta := `<meta http-equiv="Content-Security-Policy" content="` + ExportCSP + `">`
+	return insertAtStart(doc, []byte(meta+linkTag))
 }
 
 // DefaultRoles is the built-in light theme (SchoolHouse, the app's default) as

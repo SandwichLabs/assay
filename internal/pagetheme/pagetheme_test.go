@@ -1,6 +1,7 @@
 package pagetheme
 
 import (
+	"bytes"
 	"os"
 	"regexp"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/html"
 )
 
 func TestStylesheet_OnlyPlainRolesGetThrough(t *testing.T) {
@@ -26,10 +28,65 @@ func TestStylesheet_OnlyPlainRolesGetThrough(t *testing.T) {
 	assert.NotContains(t, Stylesheet(map[string]string{ThemeTypeRole: "sepia"}), "theme-type")
 }
 
-func TestLinkInto(t *testing.T) {
-	got := string(LinkInto([]byte(`<html><head><title>x</title></head></html>`)))
-	assert.Equal(t, `<html><head><link rel="stylesheet" href="_slaw/theme.css"><title>x</title></head></html>`, got)
-	assert.Equal(t, "<p>no head</p>", string(LinkInto([]byte("<p>no head</p>"))))
+func TestLinkInto_GoesFirstAfterTheDoctype(t *testing.T) {
+	link := `<link rel="stylesheet" href="_slaw/theme.css">`
+	assert.Equal(t, `<!doctype html>`+link+`<html><head></head></html>`, string(LinkInto([]byte(`<!doctype html><html><head></head></html>`))))
+	assert.Equal(t, link+"<p>no doctype</p>", string(LinkInto([]byte("<p>no doctype</p>"))))
+	assert.Equal(t, "<!-- c -->\n<!DOCTYPE html>"+link+"<p>x</p>", string(LinkInto([]byte("<!-- c -->\n<!DOCTYPE html><p>x</p>"))))
+}
+
+// The CSP meta must end up in the document's head and before everything the
+// page wrote, whatever the page's markup does to look like it has a head.
+func TestForExport_TheCSPMetaIsFirstInTheHead(t *testing.T) {
+	for name, in := range map[string]string{
+		"plain":               `<!doctype html><html><head><title>x</title></head><body><p id="p">b</p></body></html>`,
+		"no head":             `<!doctype html><html><body><p id="p">b</p></body></html>`,
+		"no html, no doctype": `<p id="p">b</p>`,
+		"head in attribute":   `<!doctype html><html data-x="<head>"><head><title>x</title></head><body><p id="p">b</p></body></html>`,
+		"head after body":     `<!doctype html><p id="p">early</p><head><meta http-equiv="x"></head>`,
+		"leading comment":     "<!-- c --><!doctype html><html><head></head><body><p id=\"p\">b</p></body></html>",
+	} {
+		out := ForExport([]byte(in))
+		doc, err := html.Parse(bytes.NewReader(out))
+		require.NoError(t, err, name)
+
+		var metaNode *html.Node
+		var order []*html.Node // elements in document order
+		var walk func(n *html.Node)
+		walk = func(n *html.Node) {
+			if n.Type == html.ElementNode {
+				order = append(order, n)
+				if n.Data == "meta" && attrOf(n, "http-equiv") == "Content-Security-Policy" && metaNode == nil {
+					metaNode = n
+				}
+			}
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walk(c)
+			}
+		}
+		walk(doc)
+		require.NotNil(t, metaNode, name)
+		assert.Equal(t, ExportCSP, attrOf(metaNode, "content"), name)
+		require.NotNil(t, metaNode.Parent, name)
+		assert.Equal(t, "head", metaNode.Parent.Data, name)
+		// Only html and head may come before it: nothing the page wrote.
+		for _, n := range order {
+			if n == metaNode {
+				break
+			}
+			assert.Contains(t, []string{"html", "head"}, n.Data, "%s: <%s> comes before the CSP meta", name, n.Data)
+		}
+		assert.Contains(t, string(out), `href="_slaw/theme.css"`, name)
+	}
+}
+
+func attrOf(n *html.Node, key string) string {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return a.Val
+		}
+	}
+	return ""
 }
 
 // DefaultRoles is the frontend's built-in light theme: this fails when
@@ -83,20 +140,4 @@ func TestDefaultRoles_AllSurviveTheFilter(t *testing.T) {
 		assert.Contains(t, css, name+":", "%s was dropped by the filter", name)
 	}
 	assert.Contains(t, css, "color-scheme:light;--slaw-theme-type:light;")
-}
-
-func TestForExport_CSPFirstThenTheme(t *testing.T) {
-	meta := `<meta http-equiv="Content-Security-Policy" content="` + ExportCSP + `">`
-	link := `<link rel="stylesheet" href="_slaw/theme.css">`
-	got := string(ForExport([]byte(`<!doctype html><html><head><title>x</title></head><body></body></html>`)))
-	assert.Equal(t, `<!doctype html><html><head>`+meta+link+`<title>x</title></head><body></body></html>`, got)
-}
-
-func TestForExport_DocumentsWithoutAHead(t *testing.T) {
-	for _, in := range []string{`<html><body>b</body></html>`, `<!doctype html><p>b</p>`, `<p>b</p>`} {
-		got := string(ForExport([]byte(in)))
-		assert.Contains(t, got, ExportCSP, in)
-		assert.Contains(t, got, `href="_slaw/theme.css"`, in)
-		assert.Less(t, strings.Index(got, "Content-Security-Policy"), strings.Index(got, "b</"), in)
-	}
 }

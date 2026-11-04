@@ -51,7 +51,7 @@ func pageGrantError(err error) error {
 	switch {
 	case errors.Is(err, workspace.ErrPageScripted):
 		return errPageScripted
-	case errors.Is(err, workspace.ErrNotStaticPage), errors.Is(err, workspace.ErrPageNotAllowed):
+	case errors.Is(err, workspace.ErrNotStaticPage), errors.Is(err, workspace.ErrPageNotAllowed), errors.Is(err, artifacts.ErrNotFound):
 		return errViewNotAllowed
 	}
 	return viewError(err)

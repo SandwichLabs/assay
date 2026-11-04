@@ -403,3 +403,11 @@ func pageWithFiles(t *testing.T, paths ...string) *artifacts.Artifact {
 	}
 	return a
 }
+
+func TestArtifactRender_AMissingArtifactReadsNaturally(t *testing.T) {
+	ws := newWS(t)
+	_, _, err := runSlaw("artifact", "render", "nope", "--out", filepath.Join(t.TempDir(), "o"), "--workspace", ws)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `artifact "nope"`)
+	assert.NotContains(t, err.Error(), "static page")
+}

@@ -40,6 +40,9 @@ func AllowedStaticPage(ws Workspace, name string) (*AllowedPage, error) {
 	if err != nil {
 		return nil, err
 	}
+	if st.Error == viewErrNotFound {
+		return nil, fmt.Errorf("artifact %q: %w", name, artifacts.ErrNotFound)
+	}
 	if st.Error != "" {
 		return nil, fmt.Errorf("artifact %q cannot be read (%w): %s", name, ErrNotStaticPage, st.Error)
 	}

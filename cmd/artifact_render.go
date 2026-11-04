@@ -236,7 +236,8 @@ func writeRenderFiles(dest string, files []renderFile) error {
 		return fmt.Errorf("failed to create %s: %w", dest, err)
 	}
 	// The folder may have been replaced since it was checked: look again.
-	if fi, err := os.Lstat(dest); err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+	before, err := os.Lstat(dest)
+	if err != nil || before.Mode()&os.ModeSymlink != 0 || !before.IsDir() {
 		return fmt.Errorf("%s is not a plain folder", dest)
 	}
 	root, err := os.OpenRoot(dest)
@@ -244,6 +245,10 @@ func writeRenderFiles(dest string, files []renderFile) error {
 		return fmt.Errorf("failed to open %s: %w", dest, err)
 	}
 	defer root.Close() //nolint:errcheck
+	// The folder opened is the folder checked, not one swapped in between.
+	if opened, err := root.Stat("."); err != nil || !os.SameFile(before, opened) {
+		return fmt.Errorf("%s changed while it was being opened", dest)
+	}
 	for _, rel := range rels {
 		if err := checkRenderTarget(root, rel); err != nil {
 			return err
