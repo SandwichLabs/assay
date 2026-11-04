@@ -4,6 +4,23 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-04
+
+Fixes from the first agent-experience report on 0.6.0 (#321, #322): glossary proposals that no longer go stale one another, clearer refusals for agents, and Studio opening artifacts with `_` in their name.
+
+### Changed
+
+- **A refused agent write names the setting that stopped it.** When a write is valid but nobody can approve it (headless `slaw mcp serve`), the refusal now names both settings and which one blocks, for example `Sandbox: read-write ("Change rows", allows this). Ask before changes: on (this is what stopped it)`, and notes when the team's `slaw.yaml` requires it (#321).
+- A `write_artifact`, `save_query` or `build_query` refused only for approval now returns the result columns the save-time check read (`queries: [{name, columns}]` or `columns`), so an agent can check a view's column references without a write. Over MCP, an error's structured payload is also repeated as a text block, for clients that show the model only an error's text (#321).
+- Page windows' theme stylesheet also sets `--slaw-theme-type: light|dark`, so a page that sets its own `color-scheme` can still tell the mode. `docs/reference/artifacts.md` documents it and links the colour roles (#321).
+- `slaw conn add --read-only` writes `read_only: true` into `slaw.yaml`, so a teammate reading the committed file can see it (#321).
+
+### Fixed
+
+- **Glossary terms have their own revision (#321).** Every term used to share the glossary file's revision, so after one of several term proposals was accepted the others were stale and had to be filed again one at a time. `get_definition` with a term now returns the term's `rev` (`term-…`) plus `file_rev`; a proposal filed with either is held to the term, and edits to other terms no longer make it stale. Proposals already in an inbox keep working. `slaw semantics show glossary <term>` prints one term as stored, with its revision on stderr.
+- Studio opens an artifact whose name contains `_` instead of saying "That is not a valid artifact name." The view now uses the same name rule as the New dialog and the store, and a test keeps the two in step (#322).
+- `docs/reference/mcp.md` said an empty workspace's `list_queries` gives `[]`; every `list_*` tool returns an object (#321).
+
 ## [0.6.0] - 2026-11-03
 
 **Vibe is now Slaw**, short for SandwichLabs analysis workspace. This release also adds a compile check and three assertion kinds (and `unique` on a metric) to the semantic layer, a built-in skill for building one, and a Stop button for running queries.
@@ -312,7 +329,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/slaw/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/SandwichLabs/slaw/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/SandwichLabs/slaw/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/SandwichLabs/slaw/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/SandwichLabs/vibe/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/SandwichLabs/vibe/compare/v0.3.3...v0.4.0
