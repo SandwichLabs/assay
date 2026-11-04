@@ -413,10 +413,11 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 		if tool := GetTool(req.Method); tool.DryRunSafe && len(nonLocal) == 0 {
 			// Validate first: an invalid request gets its own error, and a valid
 			// one is told it is ready and only needs the person's OK.
-			if resp := h.validateOnly(ctx, req); resp != nil {
+			resp, dry := h.validateOnly(ctx, req)
+			if resp != nil {
 				return resp
 			}
-			return contentNeedsApproval(req, sb)
+			return contentNeedsApproval(req, sb, dry)
 		}
 		if len(nonLocal) > 0 {
 			return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
@@ -485,18 +486,20 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 }
 
 // validateOnly dry-runs a DryRunSafe tool. It returns the tool's error, or nil
-// when the request is valid. A "success" that does not carry the dry-run marker
+// when the request is valid, plus the dry run's result map (what a clean vet
+// learned, such as each query's columns). A "success" that does not carry the dry-run marker
 // means the handler did not stop before its write; that is reported as an
 // internal error and never as a valid request.
-func (h *Handler) validateOnly(ctx context.Context, req *Request) *Response {
+func (h *Handler) validateOnly(ctx context.Context, req *Request) (*Response, map[string]any) {
 	resp := h.dispatch(withDryRun(ctx), req)
 	if resp.Error != nil {
-		return resp
+		return resp, nil
 	}
-	if m, ok := resp.Result.(map[string]any); !ok || m["dry_run"] != true {
-		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("%s could not be checked without saving; nothing was reported as valid", req.Method))
+	m, ok := resp.Result.(map[string]any)
+	if !ok || m["dry_run"] != true {
+		return NewErrorResponse(req.ID, ErrInternal, fmt.Sprintf("%s could not be checked without saving; nothing was reported as valid", req.Method)), nil
 	}
-	return nil
+	return nil, m
 }
 
 // dispatch routes the request to the appropriate handler method.

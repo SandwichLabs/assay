@@ -239,3 +239,19 @@ func TestWriteArtifact_TrailingCommentQuery(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 }
+
+// A write that only lacks approval still tells the agent each query's columns.
+func TestWriteArtifact_RefusalForApprovalCarriesColumns(t *testing.T) {
+	fx := newArtifactFixture(t, ModeFull, withAsk(true))
+	resp := fx.write("sales", artifactManifest(rowsQuery(okSQL)), artifactView, "")
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, ErrApprovalNeeded, resp.Error.Code)
+	data, ok := resp.Error.Data.(map[string]any)
+	require.True(t, ok)
+	qs, ok := data["queries"].([]ArtifactQueryColumns)
+	require.True(t, ok, "queries: %T", data["queries"])
+	require.Len(t, qs, 1)
+	assert.Equal(t, "rows", qs[0].Name)
+	assert.Equal(t, []ArtifactColumn{{"id", "INTEGER"}, {"name", "VARCHAR"}}, qs[0].Columns)
+	assert.Contains(t, resp.Error.Message, "Sandbox: full (allows this). Ask before changes: on")
+}

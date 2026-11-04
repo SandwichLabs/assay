@@ -187,7 +187,9 @@ func themeStylesheet(roles map[string]string) string {
 		fmt.Fprintf(&b, "%s:%s;", n, v)
 	}
 	if scheme != "" {
-		fmt.Fprintf(&b, "color-scheme:%s;", scheme)
+		// Also a property of its own: a page stylesheet that sets color-scheme
+		// replaces the host's, so this is how a page still reads the mode.
+		fmt.Fprintf(&b, "color-scheme:%s;--slaw-theme-type:%s;", scheme, scheme)
 	}
 	b.WriteString("}\n")
 	return b.String()

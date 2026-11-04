@@ -127,12 +127,18 @@ func runConnAdd(cmd *cobra.Command, args []string) error {
 	def.Database, _ = f.GetString("database")
 	def.Region, _ = f.GetString("region")
 	def.Scope, _ = f.GetString("prefix")
-	if ro, _ := f.GetBool("read-only"); !ro {
+	ro, _ := f.GetBool("read-only")
+	switch {
+	case !ro:
 		def.ReadOnly = workspace.Bool(false)
-	} else if typ == "motherduck" && f.Changed("read-only") {
+	case typ == "motherduck" && f.Changed("read-only"):
 		// MotherDuck has no read-only attach: refuse instead of saving a
 		// definition that can never attach. Left unset it defaults to writable.
 		return errors.New(connections.ErrMotherDuckReadOnly)
+	case f.Changed("read-only"):
+		// Read-only is the default, so an unset flag leaves the line out; said
+		// out loud, it is written, so a teammate reading slaw.yaml can tell.
+		def.ReadOnly = workspace.Bool(true)
 	}
 	signIn, _ := f.GetString("sign-in")
 	if def.Options, err = connOptions(f, typ, def.Region); err != nil {

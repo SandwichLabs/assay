@@ -204,7 +204,13 @@ func TestContentTools_ValidateBeforeTheApprovalGate(t *testing.T) {
 			resp = fx.call(c.tool, valid)
 			require.NotNil(t, resp.Error)
 			assert.Equal(t, ErrApprovalNeeded, resp.Error.Code)
-			assert.Equal(t, approvalNeededData(), resp.Error.Data)
+			data, ok := resp.Error.Data.(map[string]any)
+			require.True(t, ok, "data: %T", resp.Error.Data)
+			for k, v := range approvalNeededData(nil) {
+				assert.Equal(t, v, data[k], k)
+			}
+			assert.Contains(t, resp.Error.Message, "Ask before changes: on (this is what stopped it)")
+			assert.Contains(t, resp.Error.Message, "Sandbox: read-write (allows this)")
 			assert.Contains(t, resp.Error.Message, "valid and ready")
 			assert.Contains(t, resp.Error.Message, "NOT saved")
 			assert.Contains(t, resp.Error.Message, "Settings → Workspace → The Slaw assistant")
@@ -319,7 +325,8 @@ func TestContentTool_NotMarkedDryRunSafeIsRefusedUnvalidated(t *testing.T) {
 func TestValidateOnly_UnmarkedSuccessIsAnInternalError(t *testing.T) {
 	fx := newArtifactFixture(t, ModeReadWrite, withAsk(true))
 	// list_artifacts ignores the dry run and returns a plain result.
-	resp := fx.h.validateOnly(context.Background(), &Request{JSONRPC: "2.0", ID: 1, Method: "list_artifacts", Params: map[string]any{}})
+	resp, dry := fx.h.validateOnly(context.Background(), &Request{JSONRPC: "2.0", ID: 1, Method: "list_artifacts", Params: map[string]any{}})
+	assert.Nil(t, dry)
 	require.NotNil(t, resp)
 	require.NotNil(t, resp.Error)
 	assert.Equal(t, ErrInternal, resp.Error.Code)

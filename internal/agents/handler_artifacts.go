@@ -303,7 +303,7 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 	page := vet.page
 
 	if isDryRun(ctx) {
-		return artifactDryRun(ctx, req.ID, store, name, rev)
+		return artifactDryRun(ctx, req.ID, store, name, rev, vet.cols)
 	}
 
 	// The revision the agent read (get_artifact / list_artifacts), or none.
@@ -336,8 +336,8 @@ func (h *Handler) handleWriteArtifact(ctx context.Context, req *Request) *Respon
 // artifactDryRun is the end of a dry run: everything above passed, so only a
 // stale or missing rev could still make the real write fail. It reads the
 // stored artifact and reports that conflict the way the write would; it writes
-// nothing.
-func artifactDryRun(ctx context.Context, id any, store artifacts.Store, name, rev string) *Response {
+// nothing. The reply carries each query's result columns, as a write does.
+func artifactDryRun(ctx context.Context, id any, store artifacts.Store, name, rev string, cols []ArtifactQueryColumns) *Response {
 	cur, err := store.Get(ctx, name)
 	switch {
 	case err == nil && (rev == "" || cur.Rev != rev):
@@ -350,7 +350,7 @@ func artifactDryRun(ctx context.Context, id any, store artifacts.Store, name, re
 		// A stored artifact that cannot be read is not a request that is ready.
 		return NewErrorResponse(id, ErrInvalidParams, fmt.Sprintf("artifact %q is stored but cannot be read, so nothing was checked as ready: %s", name, scrubStoreText(err.Error())))
 	}
-	return dryRunOK(id)
+	return dryRunOKWith(id, map[string]any{"queries": queriesForAgent(cols)})
 }
 
 func conflictMessage(name, rev string) string {

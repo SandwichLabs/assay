@@ -9,6 +9,12 @@ export type StarterKind = 'a2ui' | 'html' | 'html-script' | 'script'
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
 // Windows device names, mirrored from filestore.ValidID.
 const RESERVED_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/
+
+/** True when value is a name filestore.ValidID accepts (artifacts, queries); the one rule the route checks reuse. */
+export function validName(value: string): boolean {
+  return NAME_RE.test(value) && !RESERVED_RE.test(value)
+}
+
 export const MAX_TITLE = 200
 export const RUNS_AFTER_ALLOW = 'Runs after you allow it'
 

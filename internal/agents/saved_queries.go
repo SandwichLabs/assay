@@ -119,7 +119,10 @@ func (h *Handler) storeSavedQuery(ctx context.Context, req *Request, spec savedQ
 		return NewErrorResponse(req.ID, vf.code, vf.msg)
 	}
 	if isDryRun(ctx) {
-		return dryRunOK(req.ID)
+		if cols == nil {
+			return dryRunOK(req.ID)
+		}
+		return dryRunOKWith(req.ID, map[string]any{"columns": cols})
 	}
 	verb := "created"
 	if existing != nil {

@@ -210,3 +210,13 @@ func isDryRun(ctx context.Context) bool {
 func dryRunOK(id any) *Response {
 	return NewResponse(id, map[string]any{"dry_run": true, "valid": true})
 }
+
+// dryRunOKWith is dryRunOK plus fields the vet learned, so a refusal for lack of
+// approval can hand them on (see approvalNeededData).
+func dryRunOKWith(id any, extra map[string]any) *Response {
+	res := map[string]any{"dry_run": true, "valid": true}
+	for k, v := range extra {
+		res[k] = v
+	}
+	return NewResponse(id, res)
+}

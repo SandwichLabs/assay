@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,4 +57,15 @@ func readSharedConfig(t *testing.T, root string) string {
 	b, err := os.ReadFile(filepath.Join(root, "slaw.yaml"))
 	require.NoError(t, err)
 	return string(b)
+}
+
+func TestConnAdd_ReadOnlyFlagIsWrittenOnlyWhenGiven(t *testing.T) {
+	root := newWS(t)
+	_, stderr, err := runSlaw("conn", "add", "explicit", "--type", "duckdb", "--path", "data/a.duckdb", "--read-only", "--scope", "shared", "--workspace", root)
+	require.NoError(t, err, stderr)
+	_, stderr, err = runSlaw("conn", "add", "implicit", "--type", "duckdb", "--path", "data/b.duckdb", "--scope", "shared", "--workspace", root)
+	require.NoError(t, err, stderr)
+	data := readSharedConfig(t, root)
+	assert.Equal(t, 1, strings.Count(data, "read_only: true"), data)
+	assert.Contains(t, data, "name: explicit")
 }
