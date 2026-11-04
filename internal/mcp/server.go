@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/SandwichLabs/slaw/internal/agents"
+	"github.com/SandwichLabs/slaw/internal/jsonenc"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -481,11 +482,15 @@ func toolDefToMCPTool(td agents.ToolDef) mcp.Tool {
 // errorResult is the tool error for a refused call. Its text is the message; a
 // refusal that carries data (a valid request that only lacks an approval) also
 // returns it as structuredContent so a client can act on it without parsing
-// the sentence.
+// the sentence, and as a second text block (the MCP spec's advice) for clients
+// that show the model only the text of an error.
 func errorResult(e *agents.Error) *mcp.CallToolResult {
 	res := mcp.NewToolResultError(e.Message)
 	if e.Data != nil {
 		res.StructuredContent = e.Data
+		if b, err := jsonenc.Encode(e.Data, ""); err == nil {
+			res.Content = append(res.Content, mcp.NewTextContent(strings.TrimSpace(string(b))))
+		}
 	}
 	return res
 }

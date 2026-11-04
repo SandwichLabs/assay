@@ -8,10 +8,10 @@
 import { ref, shallowRef, watch, onMounted, onUnmounted } from 'vue'
 import { App } from '../lib/bindings'
 import { errorText } from '../lib/errors'
+import { validName } from '../lib/newItem'
 import { hasWailsRuntime } from '../lib/wails'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 
-const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/
 const RELOAD_COALESCE_MS = 150
 
 export function useArtifact(name: () => string) {
@@ -25,7 +25,7 @@ export function useArtifact(name: () => string) {
   async function load() {
     const n = name()
     const mine = ++seq
-    if (!ARTIFACT_NAME.test(n)) {
+    if (!validName(n)) {
       detail.value = null
       failure.value = 'That is not a valid artifact name.'
       loading.value = false

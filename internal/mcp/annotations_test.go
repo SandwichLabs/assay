@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -260,4 +261,22 @@ func TestSemanticsToolsOverMCP(t *testing.T) {
 		}
 		assert.Nil(t, resp.Error, mode)
 	}
+}
+
+// A refusal's data is also a second text block, for clients that show the
+// model only the text of an error.
+func TestErrorResult_DataIsAlsoATextBlock(t *testing.T) {
+	r := agents.NewErrorResponse(1, agents.ErrApprovalNeeded, "valid and ready, not saved")
+	r.Error.Data = map[string]any{"valid": true, "columns": []string{"id"}}
+	res := errorResult(r.Error)
+	require.Len(t, res.Content, 2)
+	assert.NotNil(t, res.StructuredContent)
+	tc, ok := res.Content[1].(mcpgo.TextContent)
+	require.True(t, ok, "%T", res.Content[1])
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(tc.Text), &got))
+	assert.Equal(t, true, got["valid"])
+
+	plain := errorResult(agents.NewErrorResponse(1, agents.ErrInvalidParams, "bad").Error)
+	assert.Len(t, plain.Content, 1)
 }

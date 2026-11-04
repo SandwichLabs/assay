@@ -555,7 +555,8 @@ func TestThemeStylesheetAcceptsRolesOnly(t *testing.T) {
 	})
 	assert.Contains(t, css, "--slaw-bg:#fff;")
 	assert.Contains(t, css, `--slaw-font-body:"Fraunces", serif;`)
-	assert.Contains(t, css, "color-scheme:dark;")
+	assert.Contains(t, css, "color-scheme:dark;--slaw-theme-type:dark;")
+	assert.NotContains(t, themeStylesheet(map[string]string{"--slaw-theme-type": "sepia"}), "theme-type")
 	for _, bad := range []string{"color:red", "--other", "url(", "--slaw-x", "--slaw-z", "--slaw-w", "--slaw-v", "}"} {
 		assert.NotContains(t, strings.TrimSuffix(strings.TrimSpace(css), "}"), bad)
 	}

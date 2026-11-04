@@ -136,6 +136,13 @@ describe('ArtifactView', () => {
     expect(app.RunArtifactQuery).not.toHaveBeenCalled()
   })
 
+  it('a name with an underscore is a valid artifact name', async () => {
+    const app = makeApp(detail({ name: 'liveops_dashboard' }))
+    const w = await mountAt('liveops_dashboard')
+    expect(app.GetArtifact).toHaveBeenCalledWith('liveops_dashboard')
+    expect(w.find('[data-testid="artifact-failure"]').exists()).toBe(false)
+  })
+
   it('a view carrying a raw sql component renders, shows it refused, and never reaches a run binding', async () => {
     const d = detail({
       view: { title: 'X', components: [{ id: 'q', type: 'table', sql: 'SELECT 1' }, { id: 's', type: 'stat', label: 'x', sql: 'SELECT 2' }] },

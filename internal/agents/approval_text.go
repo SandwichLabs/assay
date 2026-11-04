@@ -96,19 +96,35 @@ func nameOr(req *Request, fallback string) string {
 }
 
 // approvalNeededData is the structured payload of a content refusal: the
-// request passed validation and only the person's OK is missing.
-func approvalNeededData() map[string]any {
-	return map[string]any{"valid": true, "needs_approval": true, "nothing_written": true}
+// request passed validation and only the person's OK is missing. dry is the
+// dry run's result; what its vet learned (a write_artifact's "queries", a
+// save_query's "columns") rides along, so the agent has the result columns
+// without a write.
+func approvalNeededData(dry map[string]any) map[string]any {
+	data := map[string]any{"valid": true, "needs_approval": true, "nothing_written": true}
+	for _, k := range []string{"queries", "columns"} {
+		if v, ok := dry[k]; ok {
+			data[k] = v
+		}
+	}
+	return data
+}
+
+// askBlocks is the clause that says both settings and which one stopped the
+// write: the tier allows it (the write got this far), the ask switch is what
+// blocks it.
+func askBlocks(sb *SandboxConfig) string {
+	return fmt.Sprintf(`Sandbox: %s ("%s", allows this). Ask before changes: on (this is what stopped it)`, sb.Mode, TierLabel(sb.Mode))
 }
 
 // contentNeedsApproval is the answer to a valid content write that needs an OK
 // nobody can give here (no approver: headless MCP).
-func contentNeedsApproval(req *Request, sb *SandboxConfig) *Response {
+func contentNeedsApproval(req *Request, sb *SandboxConfig, dry map[string]any) *Response {
 	resp := NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
-		"%s: your request is valid and ready, but it was NOT saved yet. It writes %s, and this workspace asks before the agent changes anything (sandbox: %s), with no one here to approve over MCP. "+
-			"Nothing was written. Ask the person to approve it: they can make the same change from Slaw's agent chat, or with Studio's MCP server on (`slaw mcp serve` passes through to it) it shows them an approval card; or they can turn off %s; that applies when the MCP server restarts (reconnect the client, or restart `slaw mcp serve`), so send the same call again after that.",
-		req.Method, contentTarget(req), sb.Mode, SettingsAskPath))
-	resp.Error.Data = approvalNeededData()
+		"%s: your request is valid and ready, but it was NOT saved yet. It writes %s. %s, and there is no one here to approve over MCP. "+
+			"Nothing was written. Ask the person to approve it: they can make the same change from Slaw's agent chat, or with Studio's MCP server on (`slaw mcp serve` passes through to it) it shows them an approval card; or they can turn off %s (unless the team's slaw.yaml requires it); that applies when the MCP server restarts (reconnect the client, or restart `slaw mcp serve`), so send the same call again after that.",
+		req.Method, contentTarget(req), askBlocks(sb), SettingsAskPath))
+	resp.Error.Data = approvalNeededData(dry)
 	return resp
 }
 
@@ -116,8 +132,8 @@ func contentNeedsApproval(req *Request, sb *SandboxConfig) *Response {
 // nobody can give here.
 func dataNeedsApproval(req *Request, sb *SandboxConfig) *Response {
 	return NewErrorResponse(req.ID, ErrApprovalNeeded, fmt.Sprintf(
-		"%s needs your OK before it runs: it changes data in the workspace's local database, and this workspace asks before the agent changes anything (sandbox: %s), with no one here to approve over MCP. "+
+		"%s needs your OK before it runs: it changes data in the workspace's local database. %s, and there is no one here to approve over MCP. "+
 			"Nothing was changed. Changes to any connection other than the workspace's local database always need Slaw: open the workspace there and approve the change. "+
-			"To let MCP clients change the local database without asking, turn off %s; it applies when the MCP server restarts (reconnect the client, or restart `slaw mcp serve`).",
-		req.Method, sb.Mode, SettingsAskPath))
+			"To let MCP clients change the local database without asking, turn off %s (unless the team's slaw.yaml requires it); it applies when the MCP server restarts (reconnect the client, or restart `slaw mcp serve`).",
+		req.Method, askBlocks(sb), SettingsAskPath))
 }
