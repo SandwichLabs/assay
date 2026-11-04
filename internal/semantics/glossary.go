@@ -162,12 +162,6 @@ func GlossaryOpenFence(text string) bool {
 	return open
 }
 
-// HasGlossaryTerm reports whether the glossary defines term (without regard to case).
-func HasGlossaryTerm(text, term string) bool {
-	secs, _ := scanGlossary(text)
-	return findTerm(secs, strings.TrimSpace(term)) != nil
-}
-
 // SetGlossaryTerm returns the glossary with term's section set to body: the
 // existing section replaced in place (matching the term without regard to
 // case, spelled as given), or a new one appended. replaced says which. The
