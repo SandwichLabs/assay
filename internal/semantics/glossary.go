@@ -4,6 +4,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/SandwichLabs/slaw/internal/filestore"
 	"github.com/SandwichLabs/slaw/internal/strictyaml"
 )
 
@@ -79,6 +80,30 @@ func GlossarySection(text, term string) (string, bool) {
 	}
 	return strings.TrimSpace(block), true
 }
+
+// TermRevPrefix starts every glossary term revision, so one can never be
+// mistaken for a file revision (a bare hash).
+const TermRevPrefix = "term-"
+
+// GlossaryTermRev is the revision of one glossary term: a short hash of its
+// "## term" section (heading and body, line endings and trailing blank lines
+// ignored), matching the term without regard to case. It changes only when that
+// section changes, not when another term is edited, added or removed. ok is
+// false when the glossary has no such term.
+func GlossaryTermRev(text, term string) (rev string, ok bool) {
+	secs, _ := scanGlossary(text)
+	s := findTerm(secs, strings.TrimSpace(term))
+	if s == nil {
+		return "", false
+	}
+	block := strings.ReplaceAll(text[s.start:s.end], "\r\n", "\n")
+	block = strings.TrimRight(block, " \t\r\n")
+	return TermRevPrefix + filestore.HashBytes([]byte(block))[:16], true
+}
+
+// IsTermRev reports whether rev is a glossary term revision (as opposed to the
+// revision of the glossary file).
+func IsTermRev(rev string) bool { return strings.HasPrefix(rev, TermRevPrefix) }
 
 // ValidateGlossaryTerm checks a term and its text as a proposal carries them:
 // the term is one line that reads back as the same heading, the text is bounded,

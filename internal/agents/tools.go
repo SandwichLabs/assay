@@ -350,7 +350,7 @@ var Tools = []ToolDef{
 	},
 	{
 		Name:        "get_definition",
-		Description: "Get one semantic definition as data, with its rev. For a metric it also returns the declared parameters of its saved query. kind is entity, metric, join or glossary. For the glossary, send name (a term) to get that term's text, or omit it for the list of terms.",
+		Description: "Get one semantic definition as data, with its rev. For a metric it also returns the declared parameters of its saved query. kind is entity, metric, join or glossary. For the glossary, send name (a term) to get that term's text and the term's own rev, or omit it for the list of terms and the file's rev.",
 		Category:    "introspect",
 		Params: []ParamDef{
 			{Name: "kind", Type: "string", Required: true, Desc: "entity | metric | join | glossary"},

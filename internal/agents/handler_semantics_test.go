@@ -252,6 +252,17 @@ func TestProposeDefinition_Glossary(t *testing.T) {
 	resp = fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r2", "replaces_rev": got["rev"], "definition": map[string]any{"term": "churn", "text": "new"}})
 	require.Nil(t, resp.Error, errMsg(resp))
 
+	// the rev is the term's own, the file's is file_rev; a wrong one is refused
+	rev, _ := got["rev"].(string)
+	assert.True(t, semantics.IsTermRev(rev))
+	assert.NotEmpty(t, got["file_rev"])
+	resp = fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r2b", "replaces_rev": "term-0000000000000000", "definition": map[string]any{"term": "churn", "text": "newer"}})
+	require.NotNil(t, resp.Error)
+	assert.Contains(t, resp.Error.Message, "changed since the rev you sent")
+	// the older form, the file's rev, still works while it is current
+	resp = fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r2c", "replaces_rev": got["file_rev"], "definition": map[string]any{"term": "churn", "text": "newest"}})
+	require.Nil(t, resp.Error, errMsg(resp))
+
 	// a new term replaces nothing: Slaw clears replaces_rev
 	resp = fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r3", "definition": map[string]any{"term": "ARR", "text": "x"}})
 	require.Nil(t, resp.Error, errMsg(resp))

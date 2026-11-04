@@ -70,6 +70,11 @@ func TestSemanticsShow_PrintsTheFileAsStored(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "## Refund")
 
+	out, stderr, err = runSlaw("semantics", "show", "glossary", "active customer", "--workspace", ws)
+	require.NoError(t, err, stderr)
+	assert.Contains(t, out, "Bought lately.")
+	assert.Contains(t, stderr, "rev term-")
+
 	out, stderr, err = runSlaw("semantics", "show", "metric", "broken", "--workspace", ws)
 	require.Error(t, err)
 	assert.Contains(t, out, "name: broken", "a broken file is still printed")

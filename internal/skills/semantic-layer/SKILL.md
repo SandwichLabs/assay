@@ -148,7 +148,8 @@ It is validated now and waits in the person's inbox; **nothing changes and
 `metric()` will not find it until they accept it** (`slaw semantics proposals`,
 `accept`, `reject`, or Studio). Save the query first (`save_query`), since a
 metric's saved query must exist. To change a definition send the `rev` from
-`get_definition` as `replaces_rev`. Do not use a proposed definition in
+`get_definition` as `replaces_rev` (for a glossary term, the term's own rev: proposals for
+different terms can be filed together). Do not use a proposed definition in
 answers until accepted. Use `list_definitions` first: reuse a name that
 exists rather than proposing a near-duplicate.
 

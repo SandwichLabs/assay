@@ -80,3 +80,27 @@ func TestGlossaryOpenFence(t *testing.T) {
 	assert.False(t, GlossaryOpenFence("## A\n\n```\ncode\n```\n"))
 	assert.True(t, HasGlossaryTerm("## Churn\n\nx\n", "churn"))
 }
+
+func TestGlossaryTermRev(t *testing.T) {
+	text := "# Terms\n\n## A\n\nalpha\n\n## B\n\nbeta\n"
+	a, ok := GlossaryTermRev(text, "a")
+	require.True(t, ok)
+	assert.True(t, IsTermRev(a))
+	_, ok = GlossaryTermRev(text, "nothing")
+	assert.False(t, ok)
+
+	// another term changing, a term appended, or CRLF endings do not move it
+	for _, other := range []string{
+		"# Terms\n\n## A\n\nalpha\n\n## B\n\nCHANGED\n",
+		text + "\n## C\n\ngamma\n",
+		strings.ReplaceAll(text, "\n", "\r\n"),
+		text + "\n\n\n",
+	} {
+		got, ok := GlossaryTermRev(other, "A")
+		require.True(t, ok)
+		assert.Equal(t, a, got)
+	}
+	// its own text moves it
+	got, _ := GlossaryTermRev("## A\n\nalpha2\n", "A")
+	assert.NotEqual(t, a, got)
+}

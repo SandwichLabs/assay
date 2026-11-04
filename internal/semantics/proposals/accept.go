@@ -71,7 +71,7 @@ type Preview struct {
 	Stale       bool   `json:"stale"`
 	StaleReason string `json:"stale_reason,omitempty"`
 	// ShownRev pins what the person is looking at: a token over the target's
-	// current revision and the proposal file's. Accept with it refuses if
+	// current revision (a glossary term's own) and the proposal file's. Accept with it refuses if
 	// either changed since ("changed again since you looked"), and accepting
 	// over a stale target (Overwrite) requires it.
 	ShownRev string `json:"shown_rev"`
@@ -130,9 +130,27 @@ func Show(ctx context.Context, props Store, sem semantics.ReadStore, id string, 
 		return nil, err
 	}
 	pv.markStale()
-	pv.ShownRev = shownToken(pv.CurrentRev, p.Rev)
+	pv.ShownRev = shownToken(pv.shownTarget(), p.Rev)
 	pv.warn(ctx, cfg)
 	return pv, nil
+}
+
+// shownTarget is what the person's review is pinned to: the target's rev, or
+// for a glossary term the term's own rev (the file's changes when any other
+// term is accepted, which would make every other proposal's review stale).
+func (pv *Preview) shownTarget() string {
+	if pv.Proposal.Kind != semantics.KindGlossary {
+		return pv.CurrentRev
+	}
+	term, _, err := pv.Proposal.GlossaryTerm()
+	if err != nil {
+		return pv.CurrentRev
+	}
+	rev := "" // a term not in the file yet
+	if pv.Exists {
+		rev, _ = semantics.GlossaryTermRev(pv.CurrentText, term)
+	}
+	return "glossary\x00" + rev
 }
 
 func shownToken(targetRev, proposalRev string) string {
@@ -155,11 +173,14 @@ func (pv *Preview) markStale() {
 		if err != nil {
 			return
 		}
-		has := pv.Exists && semantics.HasGlossaryTerm(pv.CurrentText, term)
+		termRev, has := "", false
+		if pv.Exists {
+			termRev, has = semantics.GlossaryTermRev(pv.CurrentText, term)
+		}
 		switch {
 		case has && p.ReplacesRev == "":
 			pv.Stale, pv.StaleReason = true, "was created"
-		case has && pv.CurrentRev != p.ReplacesRev:
+		case has && !pv.glossaryRevCurrent(termRev):
 			pv.Stale, pv.StaleReason = true, "changed"
 		case !has && p.ReplacesRev != "":
 			pv.Stale, pv.StaleReason = true, "the term was deleted"
@@ -174,6 +195,17 @@ func (pv *Preview) markStale() {
 	case !pv.Exists && p.ReplacesRev != "":
 		pv.Stale, pv.StaleReason = true, "was deleted"
 	}
+}
+
+// glossaryRevCurrent reports whether the proposal's replaces_rev still names
+// the term it replaces: the term's own rev, or, for a proposal filed with the
+// older file rev, the glossary file's rev while that is still current.
+func (pv *Preview) glossaryRevCurrent(termRev string) bool {
+	rev := pv.Proposal.ReplacesRev
+	if semantics.IsTermRev(rev) {
+		return rev == termRev
+	}
+	return rev == pv.CurrentRev
 }
 
 func (pv *Preview) warn(ctx context.Context, cfg showCfg) {
