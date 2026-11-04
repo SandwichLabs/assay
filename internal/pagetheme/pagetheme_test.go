@@ -45,6 +45,7 @@ func TestForExport_TheCSPMetaIsFirstInTheHead(t *testing.T) {
 		"head in attribute":   `<!doctype html><html data-x="<head>"><head><title>x</title></head><body><p id="p">b</p></body></html>`,
 		"head after body":     `<!doctype html><p id="p">early</p><head><meta http-equiv="x"></head>`,
 		"leading comment":     "<!-- c --><!doctype html><html><head></head><body><p id=\"p\">b</p></body></html>",
+		"comment crossing":    `<!-- a --><p id="p">content</p><!-- b --><!doctype html><p>x</p>`,
 	} {
 		out := ForExport([]byte(in))
 		doc, err := html.Parse(bytes.NewReader(out))

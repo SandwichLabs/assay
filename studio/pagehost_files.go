@@ -136,7 +136,7 @@ func docMessages(id int64, status int, body []byte) []*pagehost.Message {
 	return out
 }
 
-// withThemeLink puts the host stylesheet at the top of the document's head
+// withThemeLink puts the host stylesheet at the start of the document
 // (internal/pagetheme, shared with `slaw artifact render`).
 func withThemeLink(doc []byte) []byte { return pagetheme.LinkInto(doc) }
 

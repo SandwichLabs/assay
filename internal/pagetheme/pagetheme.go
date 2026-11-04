@@ -73,19 +73,38 @@ func LinkInto(doc []byte) []byte { return insertAtStart(doc, []byte(linkTag)) }
 
 const linkTag = `<link rel="stylesheet" href="` + Path + `">`
 
-// docStartRe is the leading comments and doctype of a document, which the host's
-// tags must follow (anything before a doctype puts the page in quirks mode).
-var docStartRe = regexp.MustCompile(`(?is)^(?:\s*<!--.*?-->)*\s*<!doctype[^>]*>`)
+// doctypeRe is a doctype at the start of what docStart has left.
+var doctypeRe = regexp.MustCompile(`(?i)^\s*<!doctype[^>]*>`)
+
+// docStart is the length of a document's leading comments and doctype, which
+// the host's tags must follow (anything before a doctype puts the page in
+// quirks mode), or 0 when there is no doctype. Each comment ends at its own
+// first "-->", so a skip can never cross page content.
+func docStart(doc []byte) int {
+	at := 0
+	for {
+		rest := bytes.TrimLeft(doc[at:], " \t\r\n\f")
+		if !bytes.HasPrefix(rest, []byte("<!--")) {
+			break
+		}
+		end := bytes.Index(rest[4:], []byte("-->"))
+		if end < 0 {
+			return 0
+		}
+		at = len(doc) - len(rest) + 4 + end + 3
+	}
+	if loc := doctypeRe.FindIndex(doc[at:]); loc != nil {
+		return at + loc[1]
+	}
+	return 0
+}
 
 // insertAtStart puts tags right after a leading doctype, or at the very start
 // of a document without one. It does not look for a <head>: such a search can
 // be fooled by an attribute value or by content before the head, and the HTML
 // parser puts a <meta> or <link> that comes first into the implied head anyway.
 func insertAtStart(doc, tags []byte) []byte {
-	at := 0
-	if loc := docStartRe.FindIndex(doc); loc != nil {
-		at = loc[1]
-	}
+	at := docStart(doc)
 	var b bytes.Buffer
 	b.Grow(len(doc) + len(tags))
 	b.Write(doc[:at])
