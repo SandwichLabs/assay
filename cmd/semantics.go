@@ -208,10 +208,12 @@ func runSemanticsShow(cmd *cobra.Command, args []string) error {
 	}
 	text := src.Text
 	if kind == semantics.KindGlossary && name != "" {
-		if problem := validateSemanticsSource(ctx, ws.Semantics(), kind, ""); problem != "" {
-			return fmt.Errorf("this file does not pass validation: %s", problem)
-		}
 		if text, err = showGlossaryTerm(cmd, src.Text, name); err != nil {
+			// A missing term in a file that fails validation: the file's
+			// problem is the more useful answer.
+			if problem := validateSemanticsSource(ctx, ws.Semantics(), kind, name); problem != "" {
+				return fmt.Errorf("this file does not pass validation: %s", problem)
+			}
 			return err
 		}
 	}

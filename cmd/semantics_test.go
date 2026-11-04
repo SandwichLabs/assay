@@ -89,6 +89,22 @@ func TestSemanticsShow_PrintsTheFileAsStored(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestSemanticsShow_GlossaryTermIsPrintedEvenWhenTheFileFailsValidation(t *testing.T) {
+	ws := newWS(t)
+	dir := filepath.Join(ws, "semantics")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "glossary.md"), []byte("## Refund\n\nMoney back.\n\n## Broken\n\nbad \x01 text\n"), 0o644))
+
+	out, stderr, err := runSlaw("semantics", "show", "glossary", "refund", "--workspace", ws)
+	require.Error(t, err)
+	assert.Contains(t, out, "Money back.", "the term is still printed")
+	assert.Contains(t, err.Error()+stderr, "does not pass validation")
+
+	_, stderr, err = runSlaw("semantics", "show", "glossary", "absent", "--workspace", ws)
+	require.Error(t, err)
+	assert.Contains(t, err.Error()+stderr, "does not pass validation", "the file's problem beats a missing term")
+}
+
 func TestBundle_SemanticsRoundTripThroughTheCLI(t *testing.T) {
 	src := newWS(t)
 	seedSemantics(t, src)
