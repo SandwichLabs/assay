@@ -253,5 +253,5 @@ func TestWriteArtifact_RefusalForApprovalCarriesColumns(t *testing.T) {
 	require.Len(t, qs, 1)
 	assert.Equal(t, "rows", qs[0].Name)
 	assert.Equal(t, []ArtifactColumn{{"id", "INTEGER"}, {"name", "VARCHAR"}}, qs[0].Columns)
-	assert.Contains(t, resp.Error.Message, "Sandbox: full (allows this). Ask before changes: on")
+	assert.Contains(t, resp.Error.Message, `Sandbox: full ("Full control", allows this). Ask before changes: on`)
 }

@@ -137,8 +137,9 @@ describe('ArtifactView', () => {
   })
 
   it('a name with an underscore is a valid artifact name', async () => {
-    makeApp(detail({ name: 'liveops_dashboard' }))
+    const app = makeApp(detail({ name: 'liveops_dashboard' }))
     const w = await mountAt('liveops_dashboard')
+    expect(app.GetArtifact).toHaveBeenCalledWith('liveops_dashboard')
     expect(w.find('[data-testid="artifact-failure"]').exists()).toBe(false)
   })
 

@@ -210,7 +210,7 @@ func TestContentTools_ValidateBeforeTheApprovalGate(t *testing.T) {
 				assert.Equal(t, v, data[k], k)
 			}
 			assert.Contains(t, resp.Error.Message, "Ask before changes: on (this is what stopped it)")
-			assert.Contains(t, resp.Error.Message, "Sandbox: read-write (allows this)")
+			assert.Contains(t, resp.Error.Message, `Sandbox: read-write ("Change rows", allows this)`)
 			assert.Contains(t, resp.Error.Message, "valid and ready")
 			assert.Contains(t, resp.Error.Message, "NOT saved")
 			assert.Contains(t, resp.Error.Message, "Settings → Workspace → The Slaw assistant")
