@@ -36,7 +36,10 @@ type Response struct {
 type Error struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
-	Data    any    `json:"data,omitempty"`
+	// Data is shown to the agent verbatim over MCP (structuredContent and a
+	// second text block): never put a credential, raw SQL from another
+	// connection or row values in it.
+	Data any `json:"data,omitempty"`
 }
 
 // Standard error codes.
