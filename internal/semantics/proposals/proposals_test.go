@@ -778,3 +778,59 @@ func TestAccept_GlossaryFileRevProposalsStillWork(t *testing.T) {
 	_, err = acceptSeen(t, props, sem, old.ID)
 	assert.ErrorIs(t, err, ErrConflict)
 }
+
+func TestAccept_GlossaryPinCoversTheTermsOwnText(t *testing.T) {
+	ctx := context.Background()
+	for _, overwrite := range []bool{false, true} {
+		props, sem := &Mock{}, &semantics.Mock{}
+		sem.SetFile("glossary.md", []byte("## A\n\na0\n\n## B\n\nb0\n"))
+		p := mustBuild(t, Draft{Kind: semantics.KindGlossary, Rationale: "r",
+			Definition: map[string]any{"term": "B", "text": "b1"}, ReplacesRev: mustTermRev(t, "## A\n\na0\n\n## B\n\nb0\n", "B")})
+		require.NoError(t, props.Create(ctx, p))
+		pv, err := Show(ctx, props, sem, p.ID)
+		require.NoError(t, err)
+		g, _ := sem.Glossary(ctx)
+		require.NoError(t, sem.PutGlossary(ctx, &semantics.Glossary{Text: "## A\n\na0\n\n## B\n\nb-by-hand\n", Meta: semantics.Meta{Rev: g.Rev}}))
+		_, err = Accept(ctx, props, sem, p.ID, AcceptOptions{ShownRev: pv.ShownRev, Overwrite: overwrite})
+		var again *ChangedAgainError
+		require.ErrorAs(t, err, &again, "overwrite=%v", overwrite)
+	}
+}
+
+func mustTermRev(t *testing.T, text, term string) string {
+	t.Helper()
+	r, ok := semantics.GlossaryTermRev(text, term)
+	require.True(t, ok)
+	return r
+}
+
+func TestShow_GlossaryStaleCases(t *testing.T) {
+	ctx := context.Background()
+	text := "## A\n\na0\n\n## B\n\nb0\n"
+	draft := func(rev string) Draft {
+		return Draft{Kind: semantics.KindGlossary, Rationale: "r", ReplacesRev: rev,
+			Definition: map[string]any{"term": "A", "text": "a1"}}
+	}
+	cases := map[string]struct{ rev, after string }{
+		"legacy file rev, term text changed": {"", "## A\n\nhand\n\n## B\n\nb0\n"},
+		"heading case renamed":               {"term", "## a\n\na0\n\n## B\n\nb0\n"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			props, sem := &Mock{}, &semantics.Mock{}
+			sem.SetFile("glossary.md", []byte(text))
+			g, _ := sem.Glossary(ctx)
+			rev := g.Rev
+			if c.rev == "term" {
+				rev = mustTermRev(t, text, "A")
+			}
+			p := mustBuild(t, draft(rev))
+			require.NoError(t, props.Create(ctx, p))
+			require.NoError(t, sem.PutGlossary(ctx, &semantics.Glossary{Text: c.after, Meta: semantics.Meta{Rev: g.Rev}}))
+			pv, err := Show(ctx, props, sem, p.ID)
+			require.NoError(t, err)
+			assert.True(t, pv.Stale)
+			assert.Equal(t, "changed", pv.StaleReason)
+		})
+	}
+}

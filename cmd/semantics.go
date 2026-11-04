@@ -208,6 +208,9 @@ func runSemanticsShow(cmd *cobra.Command, args []string) error {
 	}
 	text := src.Text
 	if kind == semantics.KindGlossary && name != "" {
+		if problem := validateSemanticsSource(ctx, ws.Semantics(), kind, ""); problem != "" {
+			return fmt.Errorf("this file does not pass validation: %s", problem)
+		}
 		if text, err = showGlossaryTerm(cmd, src.Text, name); err != nil {
 			return err
 		}
@@ -226,9 +229,9 @@ func showGlossaryTerm(cmd *cobra.Command, glossary, term string) (string, error)
 	if !ok {
 		return "", fmt.Errorf("the glossary has no term %q", term)
 	}
-	body, _ := semantics.GlossarySection(glossary, term)
+	raw, _ := semantics.GlossaryRawSection(glossary, term)
 	fmt.Fprintf(cmd.ErrOrStderr(), "rev %s\n", rev)
-	return "## " + strings.TrimSpace(term) + "\n\n" + body + "\n", nil
+	return raw, nil
 }
 
 // validateSemanticsSource reads the definition through the store's strict

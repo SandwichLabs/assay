@@ -81,6 +81,17 @@ func GlossarySection(text, term string) (string, bool) {
 	return strings.TrimSpace(block), true
 }
 
+// GlossaryRawSection returns term's section exactly as stored, from its heading
+// line to the next heading (or the end), matching the term without regard to case.
+func GlossaryRawSection(text, term string) (string, bool) {
+	secs, _ := scanGlossary(text)
+	s := findTerm(secs, strings.TrimSpace(term))
+	if s == nil {
+		return "", false
+	}
+	return text[s.start:s.end], true
+}
+
 // TermRevPrefix starts every glossary term revision, so one can never be
 // mistaken for a file revision (a bare hash).
 const TermRevPrefix = "term-"

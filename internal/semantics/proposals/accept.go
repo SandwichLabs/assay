@@ -280,7 +280,9 @@ func (pv *Preview) propose() error {
 // target or the proposal changed after it was shown) is a *ChangedAgainError,
 // even with Overwrite.
 // The bytes written are exactly Preview.ProposedText of that same Show, which
-// is the text the person reviewed. A target that already reads as proposed
+// is the text the person reviewed. For a glossary the pin covers the term's own
+// section and the proposal, not the rest of the file, so edits to other terms
+// since the Show are kept as they are in the file. A target that already reads as proposed
 // (a crash after the write) is not written again, only marked accepted. Only
 // a person's surface calls this.
 func Accept(ctx context.Context, props Store, sem semantics.Store, id string, opts AcceptOptions, show ...ShowOption) (*Preview, error) {

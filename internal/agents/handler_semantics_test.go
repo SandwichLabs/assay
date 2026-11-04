@@ -575,3 +575,31 @@ func TestProposeDefinition_GlossaryWithAnUnclosedFenceIsRefused(t *testing.T) {
 	assert.Contains(t, resp.Error.Message, "glossary.md has an unclosed ``` fence; fix it first")
 	assert.Empty(t, semProposals(t, fx))
 }
+
+func TestProposeDefinition_GlossaryFileRevIsFiledAsTheTermRev(t *testing.T) {
+	fx := semanticsFixture(t, ModeFull)
+	sem := writableSemantics(fx)
+	ctx := context.Background()
+	require.NoError(t, sem.PutGlossary(ctx, &semantics.Glossary{Text: "## A\n\na0\n\n## B\n\nb0\n"}))
+	got := mapOf(t, fx.call("get_definition", map[string]any{"kind": "glossary", "name": "A"}).Result)
+	fileRev, _ := got["file_rev"].(string)
+	propose := func(term, text string) *Response {
+		return fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r", "replaces_rev": fileRev,
+			"definition": map[string]any{"term": term, "text": text}})
+	}
+	require.Nil(t, propose("A", "a1").Error)
+	// the same proposal again is a duplicate, whichever rev kind it carries
+	resp := propose("A", "a1")
+	require.NotNil(t, resp.Error)
+	assert.Contains(t, resp.Error.Message, "already waiting")
+	require.Nil(t, propose("B", "b1").Error)
+
+	var a *proposals.Proposal
+	for _, p := range semProposals(t, fx) {
+		if p.Name == "a" {
+			a = &p
+		}
+	}
+	require.NotNil(t, a)
+	assert.True(t, semantics.IsTermRev(a.ReplacesRev), a.ReplacesRev)
+}

@@ -406,9 +406,13 @@ func (h *Handler) checkGlossaryTarget(ctx context.Context, req *Request, p *prop
 		switch {
 		case p.ReplacesRev == "":
 			return fail("the glossary already defines %q, so this would replace it. Read it with get_definition (kind glossary, name %q) and send that rev as replaces_rev.", term, term)
-		case p.ReplacesRev == termRev, p.ReplacesRev == g.Rev:
-			// The term's rev is current; a file rev still current is the
-			// older form and stays valid.
+		case p.ReplacesRev == termRev:
+		case p.ReplacesRev == g.Rev:
+			// The file rev, current now, means the same as the term's rev
+			// now. Filing the term rev keeps the proposal from going stale
+			// when another term is accepted, and makes the duplicate check
+			// see one proposal, not one per rev kind.
+			p.ReplacesRev = termRev
 		default:
 			return fail("the term %q changed since the rev you sent. Call get_definition again (kind glossary, name %q) and send the new rev.", term, term)
 		}

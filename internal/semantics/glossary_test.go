@@ -104,3 +104,16 @@ func TestGlossaryTermRev(t *testing.T) {
 	got, _ := GlossaryTermRev("## A\n\nalpha2\n", "A")
 	assert.NotEqual(t, a, got)
 }
+
+func TestGlossaryTermRev_LastSectionAndRawSection(t *testing.T) {
+	text := "## A\n\nalpha\n\n## B\n\nbeta"
+	b, ok := GlossaryTermRev(text, "B")
+	require.True(t, ok)
+	got, _ := GlossaryTermRev(text+"\n", "B")
+	assert.Equal(t, b, got, "a final newline does not move the last term's rev")
+	got, _ = GlossaryTermRev("## A\n\nalpha\n\n## B\n\nbeta\n\n\n", "b")
+	assert.Equal(t, b, got)
+	raw, ok := GlossaryRawSection("## A\n\nalpha\n\n## Bee\n\nbeta\n", "bee")
+	assert.True(t, ok)
+	assert.Equal(t, "## Bee\n\nbeta\n", raw)
+}
