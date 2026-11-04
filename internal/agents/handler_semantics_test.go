@@ -603,3 +603,42 @@ func TestProposeDefinition_GlossaryFileRevIsFiledAsTheTermRev(t *testing.T) {
 	require.NotNil(t, a)
 	assert.True(t, semantics.IsTermRev(a.ReplacesRev), a.ReplacesRev)
 }
+
+// Two terms proposed through the handler against the file rev, then accepted in
+// turn the way a person would: the first accept must not make the second stale.
+func TestProposeDefinition_GlossaryFileRevProposalsAcceptInTurn(t *testing.T) {
+	fx := semanticsFixture(t, ModeFull)
+	sem := writableSemantics(fx)
+	ctx := context.Background()
+	require.NoError(t, sem.PutGlossary(ctx, &semantics.Glossary{Text: "## A\n\na0\n\n## B\n\nb0\n"}))
+	g, err := sem.Glossary(ctx)
+	require.NoError(t, err)
+	for _, term := range []string{"A", "B"} {
+		resp := fx.call("propose_definition", map[string]any{"kind": "glossary", "rationale": "r", "replaces_rev": g.Rev,
+			"definition": map[string]any{"term": term, "text": strings.ToLower(term) + "1"}})
+		require.Nil(t, resp.Error, errMsg(resp))
+	}
+	props, ok := fx.h.access.Proposals().(*proposals.Mock)
+	require.True(t, ok)
+	ids := map[string]string{}
+	for _, p := range semProposals(t, fx) {
+		ids[p.Name] = p.ID
+	}
+	require.Len(t, ids, 2)
+
+	accept := func(id string) (*proposals.Preview, error) {
+		pv, err := proposals.Show(ctx, props, sem, id)
+		require.NoError(t, err)
+		return proposals.Accept(ctx, props, sem, id, proposals.AcceptOptions{ShownRev: pv.ShownRev})
+	}
+	_, err = accept(ids["b"])
+	require.NoError(t, err)
+	pv, err := proposals.Show(ctx, props, sem, ids["a"])
+	require.NoError(t, err)
+	assert.False(t, pv.Stale, pv.StaleReason)
+	_, err = accept(ids["a"])
+	require.NoError(t, err)
+	g, err = sem.Glossary(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "## A\n\na1\n\n## B\n\nb1\n", g.Text)
+}
