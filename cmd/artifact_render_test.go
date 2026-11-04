@@ -1,13 +1,19 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/SandwichLabs/slaw/internal/artifacts"
+	"github.com/SandwichLabs/slaw/internal/queries"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 const renderManifest = `version: 1
@@ -83,6 +89,9 @@ func TestArtifactRender_AStaticPageIsDrawnWithItsQueryResults(t *testing.T) {
 	assert.Contains(t, html, "<li>north=7</li>")
 	assert.NotContains(t, html, "west", "the parameter filtered the rows in SQL")
 	assert.Contains(t, html, `<link rel="stylesheet" href="_slaw/theme.css">`)
+	meta := `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; form-action 'none'; base-uri 'none'">`
+	assert.Contains(t, html, meta)
+	assert.Less(t, strings.Index(html, meta), strings.Index(html, `href="assets/style.css"`), "the CSP comes before the page's own head")
 
 	theme, err := os.ReadFile(filepath.Join(out, "_slaw", "theme.css"))
 	require.NoError(t, err)
@@ -290,4 +299,107 @@ func TestWriteRenderFiles_StaysInsideTheFolder(t *testing.T) {
 	assert.Equal(t, "safe", string(b), "the link was replaced, not written through")
 	b, _ = os.ReadFile(filepath.Join(dest, "index.html"))
 	assert.Equal(t, "new", string(b))
+}
+
+// A hand-edited or pulled page whose query writes is held to the SQL policy at
+// render time, as in Studio: nothing is drawn, written or created.
+func TestArtifactRender_AQueryThatWritesIsRefusedAtRender(t *testing.T) {
+	for name, sql := range map[string]string{
+		"copy":   "COPY (SELECT 42) TO '%s/x.csv'",
+		"insert": "INSERT INTO sales VALUES ('x', 1)",
+	} {
+		ws := newWS(t)
+		_, stderr, err := runSlaw("query", "--workspace", ws, "CREATE TABLE sales AS SELECT 'east' AS region, 1 AS amount")
+		require.NoError(t, err, stderr)
+		dir := seedRenderPage(t, ws)
+		victim := t.TempDir()
+		stmt := sql
+		if strings.Contains(sql, "%s") {
+			stmt = strings.Replace(sql, "%s", victim, 1)
+		}
+		m := "version: 1\ntitle: T\nview: html\nqueries:\n  - name: q\n    sql: " + stmt + "\n"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "artifact.yaml"), []byte(m), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "index.html.tmpl"), []byte(`<p>{{ len (query "q").Rows }}</p>`), 0o644))
+		require.NoError(t, os.Remove(filepath.Join(dir, "html", "assets", "style.css")))
+		require.NoError(t, os.Remove(filepath.Join(dir, "html", "assets", "logo.svg")))
+		allowPage(t, ws, "pg") // the person allowed what they saw; the policy still applies
+
+		out := filepath.Join(t.TempDir(), "site")
+		_, _, err = runSlaw("artifact", "render", "pg", "--out", out, "--workspace", ws)
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), "could not run", name)
+		assert.NoDirExists(t, out, name)
+		assert.NoFileExists(t, filepath.Join(victim, "x.csv"), name)
+		rows, stderr, err := runSlaw("query", "--workspace", ws, "SELECT count(*) AS n FROM sales")
+		require.NoError(t, err, stderr)
+		assert.Contains(t, rows, "1", name)
+		assert.NotContains(t, rows, "2", name)
+	}
+}
+
+func TestArtifactRender_AMetricPageIsRefusedOnceTheMetricChanged(t *testing.T) {
+	ws := newWS(t)
+	_, stderr, err := runSlaw("query", "--workspace", ws, "CREATE TABLE sales AS SELECT * FROM (VALUES ('east', 10), ('west', 5)) t(region, amount)")
+	require.NoError(t, err, stderr)
+	w, err := workspace.Open(ws, workspace.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	require.NoError(t, w.Queries().Create(context.Background(), &queries.Query{ID: "base", Title: "base", SQL: "SELECT region, amount FROM sales"}))
+	require.NoError(t, w.Close())
+	metric := filepath.Join(ws, "semantics", "metrics", "revenue.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(metric), 0o755))
+	require.NoError(t, os.WriteFile(metric, []byte("version: 1\nname: revenue\nquery: base\nmeasure: sum(amount)\ndimensions: [region]\n"), 0o644))
+
+	dir := seedRenderPage(t, ws)
+	m := "version: 1\ntitle: T\nview: html\nqueries:\n  - name: q\n    sql: SELECT * FROM metric('revenue')\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "artifact.yaml"), []byte(m), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "html", "index.html.tmpl"), []byte(`<p>total={{ index (index (query "q").Rows 0) 0 }}</p>`), 0o644))
+	require.NoError(t, os.Remove(filepath.Join(dir, "html", "assets", "style.css")))
+	require.NoError(t, os.Remove(filepath.Join(dir, "html", "assets", "logo.svg")))
+	allowPage(t, ws, "pg")
+
+	out := filepath.Join(t.TempDir(), "site")
+	_, stderr, err = runSlaw("artifact", "render", "pg", "--out", out, "--workspace", ws)
+	require.NoError(t, err, stderr)
+	doc, err := os.ReadFile(filepath.Join(out, "index.html"))
+	require.NoError(t, err)
+	assert.Contains(t, string(doc), "total=15")
+
+	require.NoError(t, os.WriteFile(metric, []byte("version: 1\nname: revenue\nquery: base\nmeasure: sum(amount) * 2\ndimensions: [region]\n"), 0o644))
+	out2 := filepath.Join(t.TempDir(), "site2")
+	_, _, err = runSlaw("artifact", "render", "pg", "--out", out2, "--workspace", ws)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "changed since you allowed it")
+	assert.NoDirExists(t, out2)
+}
+
+func TestRenderedFiles_RefusesNamesThatDifferOnlyInCase(t *testing.T) {
+	page := pageWithFiles(t, "assets/Logo.svg", "assets/logo.svg")
+	_, err := renderedFiles(page, []byte("<p>x</p>"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "without case")
+
+	page = pageWithFiles(t, "_slaw/Theme.css")
+	_, err = renderedFiles(page, []byte("<p>x</p>"))
+	require.Error(t, err)
+}
+
+func TestWriteRenderFiles_ChecksEveryTargetBeforeTheFirstWrite(t *testing.T) {
+	dest := t.TempDir()
+	require.NoError(t, os.Symlink(t.TempDir(), filepath.Join(dest, "assets")))
+	err := writeRenderFiles(dest, []renderFile{{rel: "index.html", data: []byte("x")}, {rel: "assets/a.css", data: []byte("y")}})
+	require.Error(t, err)
+	assert.NoFileExists(t, filepath.Join(dest, "index.html"), "a later target's link stops the render before anything is written")
+
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(t.TempDir(), link))
+	require.Error(t, writeRenderFiles(link, []renderFile{{rel: "index.html", data: []byte("x")}}), "a folder that is a link is refused")
+}
+
+func pageWithFiles(t *testing.T, paths ...string) *artifacts.Artifact {
+	t.Helper()
+	a := &artifacts.Artifact{}
+	for _, p := range paths {
+		a.Files = append(a.Files, artifacts.PageFile{Path: p, Data: []byte("x")})
+	}
+	return a
 }

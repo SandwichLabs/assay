@@ -397,8 +397,7 @@ func (h *Handler) Handle(ctx context.Context, req *Request) *Response {
 // approvalExempt reports whether "Ask before changes" does not gate a tool.
 // propose_definition only files into the machine-local inbox; the person's
 // accept step is the approval, so asking first would approve the same change
-// twice (feedback-2026-11 D1). The tier gate and the inbox caps still apply,
-// and a non-local target would still force approval in the caller.
+// twice (feedback-2026-11 D1). The tier gate and the inbox caps still apply.
 func approvalExempt(method string) bool { return method == "propose_definition" }
 
 // awaitApproval is the one place Handle/handleRunQuery ask for the user's OK
@@ -438,9 +437,6 @@ func (h *Handler) awaitApproval(ctx context.Context, req *Request, sb *SandboxCo
 	userDB := h.access.DuckDBDB()
 	ar := describeWrite(ctx, req, userDB, class)
 	h.describeCellEdit(ctx, req, &ar)
-	if req.Method == "propose_definition" {
-		ar.Summary = h.proposeSummary(ctx, req)
-	}
 	if sqlText != "" {
 		ar.SQL = sqlText
 	}

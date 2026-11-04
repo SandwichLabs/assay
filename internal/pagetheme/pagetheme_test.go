@@ -43,11 +43,27 @@ func TestDefaultRoles_MatchTheFrontendLightTheme(t *testing.T) {
 	end := strings.Index(text, "export const SCHOOLHOUSE_DARK")
 	require.True(t, start >= 0 && end > start)
 	want := map[string]string{}
-	for _, m := range regexp.MustCompile(`'([a-z0-9.]+)':\s*'(#[0-9A-Fa-f]+)'`).FindAllStringSubmatch(text[start:end], -1) {
+	block := text[start:end]
+	matches := regexp.MustCompile(`'([a-z0-9.]+)':\s*'(#[0-9A-Fa-f]+)'`).FindAllStringSubmatch(block, -1)
+	// Every "'role':" line of the light colours was read (none missed by the pattern).
+	assert.Equal(t, len(regexp.MustCompile(`(?m)^\s*'[a-z0-9.]+':`).FindAllString(block, -1)), len(matches))
+	for _, m := range matches {
 		want["--slaw-"+strings.ReplaceAll(m[1], ".", "-")] = m[2]
 	}
 	schema, err := os.ReadFile("../../studio/frontend/src/theme/schema.ts")
 	require.NoError(t, err)
+	// The colour keys are exactly COLOR_ROLES, named as cssVarName does.
+	rolesBlock := string(schema)[strings.Index(string(schema), "export const COLOR_ROLES = ["):]
+	rolesBlock = rolesBlock[:strings.Index(rolesBlock, "] as const")]
+	var roles, got []string
+	for _, m := range regexp.MustCompile(`(?m)^\s*'([a-z0-9.]+)',`).FindAllStringSubmatch(rolesBlock, -1) {
+		roles = append(roles, "--slaw-"+strings.ReplaceAll(m[1], ".", "-"))
+	}
+	require.NotEmpty(t, roles)
+	for k := range want {
+		got = append(got, k)
+	}
+	assert.ElementsMatch(t, roles, got, "the light theme sets exactly COLOR_ROLES")
 	fonts := regexp.MustCompile("(?m)^  (display|body|mono): \"(.*)\",$").FindAllStringSubmatch(string(schema), -1)
 	require.Len(t, fonts, 3)
 	for _, m := range fonts {
@@ -67,4 +83,20 @@ func TestDefaultRoles_AllSurviveTheFilter(t *testing.T) {
 		assert.Contains(t, css, name+":", "%s was dropped by the filter", name)
 	}
 	assert.Contains(t, css, "color-scheme:light;--slaw-theme-type:light;")
+}
+
+func TestForExport_CSPFirstThenTheme(t *testing.T) {
+	meta := `<meta http-equiv="Content-Security-Policy" content="` + ExportCSP + `">`
+	link := `<link rel="stylesheet" href="_slaw/theme.css">`
+	got := string(ForExport([]byte(`<!doctype html><html><head><title>x</title></head><body></body></html>`)))
+	assert.Equal(t, `<!doctype html><html><head>`+meta+link+`<title>x</title></head><body></body></html>`, got)
+}
+
+func TestForExport_DocumentsWithoutAHead(t *testing.T) {
+	for _, in := range []string{`<html><body>b</body></html>`, `<!doctype html><p>b</p>`, `<p>b</p>`} {
+		got := string(ForExport([]byte(in)))
+		assert.Contains(t, got, ExportCSP, in)
+		assert.Contains(t, got, `href="_slaw/theme.css"`, in)
+		assert.Less(t, strings.Index(got, "Content-Security-Policy"), strings.Index(got, "b</"), in)
+	}
 }

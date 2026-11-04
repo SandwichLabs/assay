@@ -86,11 +86,12 @@ func runArtifactRender(cmd *cobra.Command, args []string) error {
 	}
 	defer o.Close()
 
-	page, pins, err := workspace.AllowedStaticPage(o.WS, name)
+	allowed, err := workspace.AllowedStaticPage(o.WS, name)
 	if err != nil {
 		return err
 	}
-	doc, err := drawPage(cmd, o, name, page, pins, query)
+	page := allowed.Page
+	doc, err := drawPage(cmd, o, name, page, allowed.Pins, query)
 	if err != nil {
 		return err
 	}
@@ -131,7 +132,8 @@ func truncateArg(s string) string {
 }
 
 // drawPage runs the page's queries through the read-only policy-gated runner
-// and returns the finished document, with the host stylesheet linked.
+// and returns the finished document, with the CSP meta and the host stylesheet
+// added after the render checks passed.
 func drawPage(cmd *cobra.Command, o *openedWorkspace, name string, page *artifacts.Artifact, pins map[string]string, query url.Values) ([]byte, error) {
 	values, err := artifacts.ParsePageQuery(&page.Manifest, query)
 	if err != nil {
@@ -145,7 +147,7 @@ func drawPage(cmd *cobra.Command, o *openedWorkspace, name string, page *artifac
 	if err := artifacts.RenderHTMLPage(cmdCtx(cmd), run, page, values, &body); err != nil {
 		return nil, renderFailed(name, err)
 	}
-	return pagetheme.LinkInto(body.Bytes()), nil
+	return pagetheme.ForExport(body.Bytes()), nil
 }
 
 // renderFailed words a failed draw. The renderer's text is fixed on purpose
@@ -172,15 +174,17 @@ func renderedFiles(page *artifacts.Artifact, doc []byte) ([]renderFile, error) {
 		{rel: "index.html", data: doc},
 		{rel: pagetheme.Path, data: []byte(pagetheme.Stylesheet(pagetheme.DefaultRoles()))},
 	}
-	taken := map[string]bool{"index.html": true, pagetheme.Path: true}
+	// Compared in lower case: on a case-insensitive disk "Index.html" is index.html.
+	taken := map[string]bool{"index.html": true, strings.ToLower(pagetheme.Path): true}
 	for _, f := range page.Files {
 		if !artifacts.IsStaticAsset(f.Path) {
 			continue
 		}
-		if taken[f.Path] {
-			return nil, fmt.Errorf("the page has a file %q that the render writes itself; rename it", f.Path)
+		key := strings.ToLower(f.Path)
+		if taken[key] {
+			return nil, fmt.Errorf("the page has a file %q that collides with another file of the render (names are compared without case); rename it", f.Path)
 		}
-		taken[f.Path] = true
+		taken[key] = true
 		files = append(files, renderFile{rel: f.Path, data: f.Data})
 	}
 	return files, nil
@@ -215,79 +219,92 @@ func prepareRenderOut(out string, force bool) (string, error) {
 }
 
 // writeRenderFiles writes every file under dest, creating folders as needed.
-// All paths are checked before the first write; each write refuses to go through
-// a symbolic link, and replaces its file by rename, so an existing link is
-// replaced, never followed.
+// Everything goes through an os.Root on dest, so no path can leave it. Before
+// the first write every target is checked: its path must be local and no
+// folder on the way may be a link or a file (a link at the file itself is
+// replaced, never followed). A write goes to a temporary name and is renamed
+// into place.
 func writeRenderFiles(dest string, files []renderFile) error {
-	targets := make([]string, len(files))
+	rels := make([]string, len(files))
 	for i, f := range files {
-		rel := filepath.FromSlash(f.rel)
-		if !filepath.IsLocal(rel) {
+		rels[i] = filepath.FromSlash(f.rel)
+		if !filepath.IsLocal(rels[i]) {
 			return fmt.Errorf("refusing to write %q outside the output folder", f.rel)
 		}
-		targets[i] = filepath.Join(dest, rel)
 	}
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return fmt.Errorf("failed to create %s: %w", dest, err)
 	}
+	// The folder may have been replaced since it was checked: look again.
+	if fi, err := os.Lstat(dest); err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		return fmt.Errorf("%s is not a plain folder", dest)
+	}
+	root, err := os.OpenRoot(dest)
+	if err != nil {
+		return fmt.Errorf("failed to open %s: %w", dest, err)
+	}
+	defer root.Close() //nolint:errcheck
+	for _, rel := range rels {
+		if err := checkRenderTarget(root, rel); err != nil {
+			return err
+		}
+	}
 	for i, f := range files {
-		if err := writeInside(dest, targets[i], f.data); err != nil {
+		if err := writeInRoot(root, rels[i], f.data); err != nil {
 			return fmt.Errorf("failed to write %s: %w", f.rel, err)
 		}
 	}
 	return nil
 }
 
-func writeInside(root, target string, data []byte) error {
-	dir := filepath.Dir(target)
-	if err := mkdirNoLinks(root, dir); err != nil {
+// checkRenderTarget refuses a target with a link or a file where a folder must
+// be, or a folder where the file goes. Elements that do not exist yet are fine.
+func checkRenderTarget(root *os.Root, rel string) error {
+	parts := strings.Split(rel, string(filepath.Separator))
+	cur := ""
+	for i, el := range parts {
+		cur = filepath.Join(cur, el)
+		fi, err := root.Lstat(cur)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("failed to check %s: %w", rel, err)
+		}
+		last := i == len(parts)-1
+		switch {
+		case last && fi.IsDir():
+			return fmt.Errorf("%s is a folder", rel)
+		case !last && (fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir()):
+			return fmt.Errorf("%s is a link or a file, not a folder", cur)
+		}
+	}
+	return nil
+}
+
+func writeInRoot(root *os.Root, rel string, data []byte) error {
+	dir := filepath.Dir(rel)
+	if err := root.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	if fi, err := os.Lstat(target); err == nil && fi.IsDir() {
-		return fmt.Errorf("%s is a folder", target)
-	}
-	tmp, err := os.CreateTemp(dir, ".render-*")
+	tmp := filepath.Join(dir, fmt.Sprintf(".render-%d.tmp", os.Getpid()))
+	root.Remove(tmp) //nolint:errcheck // a stale name from an earlier run
+	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name()) //nolint:errcheck
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close() //nolint:errcheck
+	if _, err := f.Write(data); err != nil {
+		f.Close()        //nolint:errcheck
+		root.Remove(tmp) //nolint:errcheck
 		return err
 	}
-	if err := tmp.Close(); err != nil {
+	if err := f.Close(); err != nil {
+		root.Remove(tmp) //nolint:errcheck
 		return err
 	}
-	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+	if err := root.Rename(tmp, rel); err != nil {
+		root.Remove(tmp) //nolint:errcheck
 		return err
-	}
-	return os.Rename(tmp.Name(), target)
-}
-
-// mkdirNoLinks creates dir (inside root) one element at a time and refuses an
-// element that exists as a link or as a file.
-func mkdirNoLinks(root, dir string) error {
-	rel, err := filepath.Rel(root, dir)
-	if err != nil || (rel != "." && !filepath.IsLocal(rel)) {
-		return fmt.Errorf("%s is outside the output folder", dir)
-	}
-	cur := root
-	for _, el := range strings.Split(rel, string(filepath.Separator)) {
-		if el == "." || el == "" {
-			continue
-		}
-		cur = filepath.Join(cur, el)
-		fi, err := os.Lstat(cur)
-		switch {
-		case errors.Is(err, os.ErrNotExist):
-			if err := os.Mkdir(cur, 0o755); err != nil {
-				return err
-			}
-		case err != nil:
-			return err
-		case !fi.IsDir():
-			return fmt.Errorf("%s is a link or a file, not a folder", cur)
-		}
 	}
 	return nil
 }

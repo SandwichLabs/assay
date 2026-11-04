@@ -90,7 +90,7 @@ Committed and shared. It carries no secrets and nothing per-person. Unknown keys
 | `name` | Display name. Defaults to the folder name. |
 | `default_connection` | Connection that unqualified table names run against. `Init` sets it to `local`. |
 | `sandbox` | The team limit for the agent: `read-only`, `read-write` or `full`. See "The agent limit". |
-| `ask_before_writes` | `true` makes the approval gate mandatory for everyone. |
+| `ask_before_writes` | `true` makes the approval gate mandatory for everyone. It does not cover `propose_definition`: a proposal goes to the machine-local inbox without a card and changes nothing until a person accepts it. |
 | `connections` | Shared connection definitions, below. |
 <!-- /keys -->
 
@@ -242,7 +242,7 @@ The committed `sandbox` and `ask_before_writes` are a **ceiling, not a switch**:
 What the agent actually gets is `EffectivePolicy(committed, local)`:
 
 - **Sandbox** is your own choice (read-write when you have not made one), lowered to the committed limit. You can go below the limit freely and up to it, never above. A committed `full` is not a grant: with nothing set locally you still get read-write.
-- **Ask before writes** is on unless you turned it off locally and the committed file does not require it. A committed `true` cannot be loosened by anyone. A committed `false` or no value loosens nobody.
+- **Ask before writes** is on unless you turned it off locally and the committed file does not require it. A committed `true` cannot be loosened by anyone. Neither setting covers `propose_definition`: it files into the machine-local proposals inbox without a card, and nothing under `semantics/` changes until a person accepts it (the tier still applies: read-only refuses it). A committed `false` or no value loosens nobody.
 - **Anything unrecognised** fails closed to `read-only`.
 
 The gate can be turned off only for the workspace's own local files (`duckdb` and `sqlite` connections). For every other connection (Postgres, MotherDuck, anything that is not a local file) the agent **always asks**, whatever your setting, and headless MCP refuses those writes. A write also needs the connection to be writable (`read_only: false`); see [agent-policy.md](agent-policy.md) for the whole policy, tier by tier.

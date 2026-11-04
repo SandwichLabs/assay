@@ -478,28 +478,3 @@ func (h *Handler) checkProposalRoom(ctx context.Context, req *Request, p *propos
 	}
 	return nil
 }
-
-// proposeSummary is the approval card's line for propose_definition. It says
-// what the call does and, as plainly, what it does not: the proposal waits in
-// the person's inbox, and nothing in semantics/ changes until they accept it.
-// It says "a change to" only when the definition already exists.
-func (h *Handler) proposeSummary(ctx context.Context, req *Request) string {
-	kind := strings.TrimSpace(stringParam(req.Params["kind"]))
-	name := strings.TrimSpace(stringParam(req.Params["name"]))
-	exists := false
-	sem := h.access.Semantics()
-	if def, ok := req.Params["definition"].(map[string]any); ok && kind == "glossary" {
-		name = stringParam(def["term"])
-		if g, err := sem.Glossary(ctx); err == nil && g.Error == "" {
-			exists = semantics.HasGlossaryTerm(g.Text, name)
-		}
-	} else if proposals.ValidKind(semantics.Kind(kind)) && name != "" {
-		_, err := sem.Source(ctx, semantics.Kind(kind), name)
-		exists = err == nil
-	}
-	verb := "Propose"
-	if exists {
-		verb = "Propose a change to"
-	}
-	return fmt.Sprintf("%s %s %q (goes to your proposals inbox; nothing in semantics/ changes until you accept it)", verb, kind, name)
-}

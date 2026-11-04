@@ -85,6 +85,45 @@ func LinkInto(doc []byte) []byte {
 	return b.Bytes()
 }
 
+// ExportCSP is the Content-Security-Policy an exported static page carries as a
+// <meta> tag: no script, no network, only its own files, no form posts. Studio's
+// frame gets the same limits from response headers; a folder opened from disk
+// has no such headers.
+const ExportCSP = "default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; form-action 'none'; base-uri 'none'"
+
+var (
+	htmlOpenRe = regexp.MustCompile(`(?i)<html(\s[^>]*)?>`)
+	doctypeRe  = regexp.MustCompile(`(?i)^\s*<!doctype[^>]*>`)
+)
+
+// ForExport adds to a finished static page's document the CSP <meta> and then
+// the link to the stylesheet, both first in its head (the CSP first, so nothing
+// of the page's own comes before it). A document without a head gets one.
+func ForExport(doc []byte) []byte {
+	meta := []byte(`<meta http-equiv="Content-Security-Policy" content="` + ExportCSP + `">`)
+	if headRe.Match(doc) {
+		return insertAfter(LinkInto(doc), headRe, meta)
+	}
+	tags := append(append([]byte("<head>"), meta...), []byte(`<link rel="stylesheet" href="`+Path+`"></head>`)...)
+	switch {
+	case htmlOpenRe.Match(doc):
+		return insertAfter(doc, htmlOpenRe, tags)
+	case doctypeRe.Match(doc):
+		return insertAfter(doc, doctypeRe, tags)
+	}
+	return append(tags, doc...)
+}
+
+func insertAfter(doc []byte, re *regexp.Regexp, tags []byte) []byte {
+	loc := re.FindIndex(doc)
+	var b bytes.Buffer
+	b.Grow(len(doc) + len(tags))
+	b.Write(doc[:loc[1]])
+	b.Write(tags)
+	b.Write(doc[loc[1]:])
+	return b.Bytes()
+}
+
 // DefaultRoles is the built-in light theme (SchoolHouse, the app's default) as
 // the roles Stylesheet takes: every colour and font role, and the mode. The
 // frontend's theme/builtin.ts is the source; a test keeps the two in step.

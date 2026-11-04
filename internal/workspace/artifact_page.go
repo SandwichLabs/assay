@@ -20,6 +20,14 @@ var (
 	ErrPageNotAllowed = errors.New("the page is not allowed")
 )
 
+// AllowedPage is a page that passed AllowedStaticPage: the page, the revisions
+// its allow pinned, and the hash the decision is keyed by (the one a grant binds).
+type AllowedPage struct {
+	Page *artifacts.Artifact
+	Pins map[string]string
+	Hash string
+}
+
 // AllowedStaticPage is what Studio's OpenArtifactPage checks before it serves a
 // page, for a surface with no window (`slaw artifact render`): the artifact must
 // be a view: html page, static, and allowed for this person right now. It returns
@@ -27,27 +35,27 @@ var (
 // them, so what is drawn is what was reviewed) and the metric and saved-query
 // revisions the allow pinned (for semantics.WithPins). A refusal names the
 // `slaw artifact view` command that fixes it.
-func AllowedStaticPage(ws Workspace, name string) (*artifacts.Artifact, map[string]string, error) {
+func AllowedStaticPage(ws Workspace, name string) (*AllowedPage, error) {
 	st, err := ws.ArtifactViewState(name)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if st.Error != "" {
-		return nil, nil, fmt.Errorf("artifact %q cannot be read: %s", name, st.Error)
+		return nil, fmt.Errorf("artifact %q cannot be read (%w): %s", name, ErrNotStaticPage, st.Error)
 	}
 	if err := refuseNonStatic(name, st); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if err := refuseUnallowed(name, st); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	// The bytes held are the bytes the allowed hash covers, checked here rather
 	// than assumed.
 	page, err := artifacts.PageFromText(name, []byte(st.Manifest), st.PageFiles)
 	if err != nil || page.Page.Hash != st.ContentHash {
-		return nil, nil, fmt.Errorf("artifact %q: %w (its files changed while it was read; review it with `slaw artifact view status %s`)", name, ErrPageNotAllowed, name)
+		return nil, fmt.Errorf("artifact %q: %w (its files changed while it was read; review it with `slaw artifact view status %s`)", name, ErrPageNotAllowed, name)
 	}
-	return page, st.Pins, nil
+	return &AllowedPage{Page: page, Pins: st.Pins, Hash: st.Hash}, nil
 }
 
 func refuseNonStatic(name string, st ArtifactViewStatus) error {
