@@ -87,25 +87,28 @@ function indexOfName(cols: string[], ...names: string[]): number {
 const text = (v: unknown): string => String(v ?? '')
 
 // isLongTriple: is this three-column result (label, series, value)? The second
-// column must be text and the third numeric. A column named `series` settles it.
-// Otherwise a column named label or name makes the result a plain (label,
-// value) chart with an attribute beside it (`SELECT id, name, total`), and some
-// label has to carry two or more series: a one-to-one label to text column
-// (`day, top_product, sales`) is an attribute, not a series. Shared with
-// notebookViews.ts so the cell's suggested view agrees (and internal/agents).
+// column must be text and the third numeric. A second column named `series`
+// settles it. Otherwise a second column named label or name makes the result a
+// plain (label, value) chart with an attribute beside it (`SELECT id, name,
+// total`), and the data has to look like series: some label carries two or more
+// of them and some series appears at two or more labels. A one-to-one text
+// column (`day, top_product, sales`), or one a single tie breaks, is an
+// attribute. Shared with notebookViews.ts so the cell's suggested view agrees
+// (and mirrored in internal/agents).
 export function isLongTriple(cols: string[], numeric: boolean[], rows: any[][]): boolean {
   if (cols.length !== 3 || numeric[1] || !numeric[2]) return false
   if (cols[1].toLowerCase() === 'series') return true
-  if (indexOfName(cols, 'label', 'name') >= 0) return false
-  const per = new Map<string, Set<string>>()
+  if (['label', 'name'].includes(cols[1].toLowerCase())) return false
+  const perLabel = new Map<string, Set<string>>()
+  const perSeries = new Map<string, Set<string>>()
   for (const r of rows) {
     const l = text(r[0])
-    let set = per.get(l)
-    if (!set) per.set(l, (set = new Set()))
-    set.add(text(r[1]))
-    if (set.size >= 2) return true
+    const sr = text(r[1])
+    perLabel.set(l, (perLabel.get(l) ?? new Set()).add(sr))
+    perSeries.set(sr, (perSeries.get(sr) ?? new Set()).add(l))
   }
-  return false
+  const some = (m: Map<string, Set<string>>) => [...m.values()].some((set) => set.size >= 2)
+  return some(perLabel) && some(perSeries)
 }
 
 type Roles =
@@ -180,10 +183,8 @@ function singlePoints(t: ResultTable, cols: string[], numeric: boolean[]): Multi
 // repeated pair is summed: it is the same measure listed twice, as a result with
 // no GROUP BY returns it (and then `merged` says a point is no longer one row).
 //
-// Label order merges the order each series saw its labels in, so
-// `ORDER BY rep, month` still runs January to December even when the first rep
-// has no January: a label a series introduces goes after the one before it in
-// that series. All-numeric labels are sorted by value instead.
+// Label order merges the order each series saw its labels in (see order()).
+// All-numeric labels are sorted by value instead.
 class Grid {
   names: string[] = []
   merged = false
@@ -213,18 +214,33 @@ class Grid {
     if (this.at.has(k)) this.merged = true
     this.at.set(k, (this.at.get(k) ?? 0) + v)
   }
-  // label indexes in display order
+  // label indexes in display order: a stable topological sort. Within a series
+  // each label comes after the one before it (so `ORDER BY rep, month` still
+  // runs January first when the first rep has no January); ties go to the label
+  // seen first in the rows, and on a cycle the first-seen label goes next.
   private order(): number[] {
+    const n = this.labelList.length
     const all = this.labelList.map((_, i) => i)
-    if (all.length > 0 && this.labelList.every((l) => isNumeric(l))) return all.sort((a, b) => Number(this.labelList[a]) - Number(this.labelList[b]) || a - b)
-    const out: number[] = []
+    if (n > 0 && this.labelList.every((l) => isNumeric(l))) return all.sort((a, b) => Number(this.labelList[a]) - Number(this.labelList[b]) || a - b)
+    const after: Set<number>[] = all.map(() => new Set())
+    const indeg = all.map(() => 0)
     for (const list of this.seen) {
-      let anchor = -1
-      for (const l of list) {
-        const at = out.indexOf(l)
-        if (at >= 0) anchor = at
-        else out.splice(++anchor, 0, l)
+      for (let i = 1; i < list.length; i++) {
+        const [from, to] = [list[i - 1], list[i]]
+        if (from !== to && !after[from].has(to)) {
+          after[from].add(to)
+          indeg[to]++
+        }
       }
+    }
+    const done = new Array<boolean>(n).fill(false)
+    const out: number[] = []
+    while (out.length < n) {
+      let next = all.find((i) => !done[i] && indeg[i] === 0)
+      if (next === undefined) next = all.find((i) => !done[i]) as number
+      done[next] = true
+      out.push(next)
+      after[next].forEach((to) => indeg[to]--)
     }
     return out
   }

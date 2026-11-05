@@ -191,6 +191,13 @@ describe('multi-series lineChart: end labels, tooltip, edge cases', () => {
     empty.unmount()
   })
 
+  it('draws grouped bars in label order when a later series introduces a label', () => {
+    const rows = [['Jan', 'Ana', 1], ['Jan', 'Ben', 1], ['Feb', 'Cy', 2], ['Mar', 'Cy', 3], ['Mar', 'Ana', 3]]
+    const w = render({ id: 'c', type: 'barChart', columns: ['month', 'rep', 'revenue'], rows })
+    expect(w.findAll('[data-testid="a2ui-bargroup"] .a2ui-bar__label').map((l) => l.text())).toEqual(['Jan', 'Feb', 'Mar'])
+    w.unmount()
+  })
+
   it('orders labels by merging each series (ORDER BY rep, month)', () => {
     const rows = [['2025-02', 'Ana', 2], ['2025-03', 'Ana', 3], ['2025-01', 'Ben', 1], ['2025-02', 'Ben', 2], ['2025-03', 'Ben', 3]]
     const w = render({ id: 'c', type: 'barChart', columns: ['m', 's', 'v'], rows })
@@ -279,7 +286,7 @@ describe('multi-series barChart (grouped)', () => {
   })
 
   it('draws a negative grouped bar leftward from the shared zero line', () => {
-    const w = render({ id: 'b', type: 'barChart', columns: ['r', 's', 'v'], rows: [['E', 'A', 50], ['E', 'B', -50]] })
+    const w = render({ id: 'b', type: 'barChart', columns: ['r', 'series', 'v'], rows: [['E', 'A', 50], ['E', 'B', -50]] })
     const [a, b] = w.findAll('.a2ui-bar__fill--series').map((f) => f.attributes('style')!)
     const num = (s: string, k: string) => Number(new RegExp(`${k}: ([0-9.]+)%`).exec(s)![1])
     expect(num(a, 'left')).toBeCloseTo(num(b, 'left') + num(b, 'width'), 0)
@@ -325,7 +332,7 @@ describe('notebook cells hand a long or wide result to the chart whole', () => {
   }
 
   it('sends columns + rows for a (label, series, value) result', () => {
-    const rows = [['Jan', 'Ana', 1], ['Jan', 'Ben', 2]]
+    const rows = [['Jan', 'Ana', 1], ['Jan', 'Ben', 2], ['Feb', 'Ana', 3]]
     const c = cell('line', ['month', 'rep', 'revenue'], rows)
     expect(c.type).toBe('lineChart')
     expect(c.rows).toEqual(rows)

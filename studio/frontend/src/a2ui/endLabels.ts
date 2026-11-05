@@ -17,5 +17,8 @@ export function spreadLabels(items: EndLabel[], gap: number, lo: number, hi: num
     const cap = i === out.length - 1 ? hi : out[i + 1].y - gap
     out[i].y = Math.min(out[i].y, cap)
   }
+  // more labels than the range holds at `gap`: spread them evenly instead of
+  // letting the pull-up push the first one out of the plot
+  if (out.length > 1 && out[0].y < lo) out.forEach((l, i) => (l.y = lo + (i * (hi - lo)) / (out.length - 1)))
   return out
 }

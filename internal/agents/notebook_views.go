@@ -109,30 +109,34 @@ func isNumericTypeName(t string) bool {
 // describeLongShape returns the (label, series, value) description of a
 // result, or nil when it is not one. Same rule as isLongTriple() in
 // a2ui/multiseries.ts and longShape() in notebookViews.ts: three columns, a
-// text second and a numeric third; a column named series settles it, else no
-// column may be named label or name and some label must carry two or more
-// series (a one-to-one text column is an attribute, not a series).
+// text second and a numeric third. A second column named series settles it; a
+// second column named label or name keeps the result single; otherwise some
+// label must carry two or more series and some series must appear at two or
+// more labels (a one-to-one text column, or one a single tie breaks, is an
+// attribute, not a series).
 func describeLongShape(cols []string, numeric map[string]bool, rows [][]any) *longViewShape {
 	if len(cols) != 3 || numeric[cols[1]] || !numeric[cols[2]] {
 		return nil
 	}
 	if !strings.EqualFold(cols[1], "series") {
-		for _, c := range cols {
-			if strings.EqualFold(c, "label") || strings.EqualFold(c, "name") {
-				return nil
-			}
+		if strings.EqualFold(cols[1], "label") || strings.EqualFold(cols[1], "name") {
+			return nil
 		}
-		per := map[string]map[string]bool{}
-		multi := false
+		perLabel, perSeries := map[string]map[string]bool{}, map[string]map[string]bool{}
+		multiSeries, multiLabel := false, false
 		for _, r := range rows {
 			l, sr := toDisplayString(cellAt(r, 0)), toDisplayString(cellAt(r, 1))
-			if per[l] == nil {
-				per[l] = map[string]bool{}
+			if perLabel[l] == nil {
+				perLabel[l] = map[string]bool{}
 			}
-			per[l][sr] = true
-			multi = multi || len(per[l]) >= 2
+			if perSeries[sr] == nil {
+				perSeries[sr] = map[string]bool{}
+			}
+			perLabel[l][sr], perSeries[sr][l] = true, true
+			multiSeries = multiSeries || len(perLabel[l]) >= 2
+			multiLabel = multiLabel || len(perSeries[sr]) >= 2
 		}
-		if !multi {
+		if !multiSeries || !multiLabel {
 			return nil
 		}
 	}

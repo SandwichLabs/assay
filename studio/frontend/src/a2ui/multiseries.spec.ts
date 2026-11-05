@@ -56,7 +56,7 @@ describe('toMultiSeries: shape detection', () => {
 
   it('uses declared types over sampled values', () => {
     // "2025" strings are numeric by sampling, but the column is VARCHAR
-    const rows = [['2025', 'Ana', 1], ['2025', 'Ben', 2]]
+    const rows = [['2025', 'Ana', 1], ['2025', 'Ben', 2], ['2026', 'Ana', 3], ['2026', 'Ben', 4]]
     expect(toMultiSeries({ columns: ['y', 's', 'v'], rows, types: ['VARCHAR', 'VARCHAR', 'BIGINT'] }).shape).toBe('long')
   })
 
@@ -73,7 +73,7 @@ describe('toMultiSeries: shape detection', () => {
 describe('toMultiSeries: values', () => {
   it('leaves a missing point as a gap, not a zero', () => {
     const m = toMultiSeries({
-      columns: ['m', 's', 'v'],
+      columns: ['m', 'series', 'v'],
       rows: [['Jan', 'A', 1], ['Feb', 'A', 2], ['Jan', 'B', 5]],
     })
     expect(m.series[1].values).toEqual([5, null])
@@ -81,24 +81,24 @@ describe('toMultiSeries: values', () => {
 
   it('reads nulls, blanks and text values as gaps, and numeric strings as numbers', () => {
     const m = toMultiSeries({
-      columns: ['m', 's', 'v'],
+      columns: ['m', 'series', 'v'],
       rows: [['Jan', 'A', '12.5'], ['Feb', 'A', null], ['Mar', 'A', ''], ['Apr', 'A', 'n/a'], ['May', 'A', true], ['Jan', 'B', 1]],
     })
     expect(m.series[0].values).toEqual([12.5, null, null, null, null])
   })
 
   it('sums a repeated (label, series) pair', () => {
-    const m = toMultiSeries({ columns: ['m', 's', 'v'], rows: [['Jan', 'A', 1], ['Jan', 'A', 2], ['Jan', 'B', 4]] })
+    const m = toMultiSeries({ columns: ['m', 'series', 'v'], rows: [['Jan', 'A', 1], ['Jan', 'A', 2], ['Jan', 'B', 4]] })
     expect(m.series[0].values).toEqual([3])
   })
 
   it('names a null series (blank)', () => {
-    const m = toMultiSeries({ columns: ['m', 's', 'v'], rows: [['Jan', null, 1], ['Jan', 'B', 2]] })
+    const m = toMultiSeries({ columns: ['m', 'series', 'v'], rows: [['Jan', null, 1], ['Jan', 'B', 2]] })
     expect(names(m)).toEqual(['(blank)', 'B'])
   })
 
   it('treats a huge numeric string as a number', () => {
-    const m = toMultiSeries({ columns: ['m', 's', 'v'], rows: [['Jan', 'A', '123456789012345678901'], ['Jan', 'B', 1]] })
+    const m = toMultiSeries({ columns: ['m', 'series', 'v'], rows: [['Jan', 'A', '123456789012345678901'], ['Jan', 'B', 1]] })
     expect(m.series[0].values[0]).toBeGreaterThan(1e20)
   })
 })
@@ -107,7 +107,7 @@ describe('series fold', () => {
   const nine = (extra?: (i: number) => string) => {
     const rows: any[][] = []
     for (let s = 1; s <= 9; s++) for (const m of ['Jan', 'Feb']) rows.push([m, extra ? extra(s) : `S${s}`, s])
-    return toMultiSeries({ columns: ['m', 's', 'v'], rows })
+    return toMultiSeries({ columns: ['m', 'series', 'v'], rows })
   }
 
   it('keeps the five largest in their own order and sums the rest into Other', () => {
@@ -135,7 +135,7 @@ describe('series fold', () => {
     const rows: any[][] = []
     for (let s = 1; s <= 6; s++) rows.push(['Jan', `S${s}`, s])
     rows.push(['Jan', 'Other', 1000])
-    const m = toMultiSeries({ columns: ['m', 's', 'v'], rows })
+    const m = toMultiSeries({ columns: ['m', 'series', 'v'], rows })
     expect(names(m).filter((n) => n === 'Other')).toHaveLength(1)
     expect(names(m)).toEqual(['S2', 'S3', 'S4', 'S5', 'S6', 'Other'])
     expect(m.series[5].values).toEqual([1001])
@@ -143,7 +143,7 @@ describe('series fold', () => {
   })
 
   it('leaves a lone Other alone when nothing needs folding', () => {
-    const m = toMultiSeries({ columns: ['m', 's', 'v'], rows: [['Jan', 'A', 1], ['Jan', 'Other', 2]] })
+    const m = toMultiSeries({ columns: ['m', 'series', 'v'], rows: [['Jan', 'A', 1], ['Jan', 'Other', 2]] })
     expect(names(m)).toEqual(['A', 'Other'])
     expect(m.folded).toEqual([])
   })
@@ -151,7 +151,7 @@ describe('series fold', () => {
   it('ranks by magnitude, so a large negative series is kept', () => {
     const rows: any[][] = []
     for (let s = 1; s <= 7; s++) rows.push(['Jan', `S${s}`, s === 1 ? -50 : s])
-    expect(names(toMultiSeries({ columns: ['m', 's', 'v'], rows }))).toContain('S1')
+    expect(names(toMultiSeries({ columns: ['m', 'series', 'v'], rows }))).toContain('S1')
   })
 })
 
@@ -159,7 +159,7 @@ describe('series fold for lines (drop)', () => {
   const nine = () => {
     const rows: any[][] = []
     for (let s = 1; s <= 9; s++) for (const m of ['Jan', 'Feb']) rows.push([m, `S${s}`, s])
-    return toMultiSeries({ columns: ['m', 's', 'v'], rows }, 'drop')
+    return toMultiSeries({ columns: ['m', 'series', 'v'], rows }, 'drop')
   }
 
   it('keeps the six largest in their own order, invents no Other, and names the rest', () => {
@@ -177,17 +177,17 @@ describe('series fold for lines (drop)', () => {
     const rows: any[][] = []
     for (let s = 1; s <= 6; s++) rows.push(['Jan', `S${s}`, s])
     rows.push(['Jan', 'Other', 1000])
-    const m = toMultiSeries({ columns: ['m', 's', 'v'], rows }, 'drop')
+    const m = toMultiSeries({ columns: ['m', 'series', 'v'], rows }, 'drop')
     expect(names(m)).toEqual(['S2', 'S3', 'S4', 'S5', 'S6', 'Other'])
     expect(m.folded).toEqual(['S1'])
-    const small = toMultiSeries({ columns: ['m', 's', 'v'], rows: [...rows.slice(0, 6), ['Jan', 'Other', 0.5]] }, 'drop')
+    const small = toMultiSeries({ columns: ['m', 'series', 'v'], rows: [...rows.slice(0, 6), ['Jan', 'Other', 0.5]] }, 'drop')
     expect(names(small)).not.toContain('Other')
     expect(small.folded).toEqual(['Other'])
   })
   it('breaks ties in original order and ranks by magnitude', () => {
     const rows: any[][] = [['a', 'S0', -50]]
     for (let s = 1; s <= 7; s++) rows.push(['a', `S${s}`, 5])
-    const m = toMultiSeries({ columns: ['m', 's', 'v'], rows }, 'drop')
+    const m = toMultiSeries({ columns: ['m', 'series', 'v'], rows }, 'drop')
     expect(names(m)).toEqual(['S0', 'S1', 'S2', 'S3', 'S4', 'S5'])
     expect(m.folded).toEqual(['S6', 'S7'])
   })
@@ -225,7 +225,7 @@ describe('fromPoints / isSeriesShape', () => {
     expect(fromPoints([{ label: 'a', value: 1 }]).series[0].values).toEqual([1])
   })
   it('says when a result has to go to the chart whole', () => {
-    expect(isSeriesShape({ columns: ['m', 's', 'v'], rows: [['Jan', 'A', 1], ['Jan', 'B', 2]] })).toBe(true)
+    expect(isSeriesShape({ columns: ['m', 's', 'v'], rows: [['Jan', 'A', 1], ['Jan', 'B', 2], ['Feb', 'A', 3]] })).toBe(true)
     // a one-to-one label/text pairing is an attribute, not a series
     expect(isSeriesShape({ columns: ['m', 's', 'v'], rows: [['Jan', 'A', 1], ['Feb', 'A', 2]] })).toBe(false)
     // ...unless the column says it is the series
@@ -252,23 +252,44 @@ describe('three columns that are not (label, series, value)', () => {
     const m = toMultiSeries({ columns: ['day', 'channel', 'units'], rows: [['a', 'web', 1], ['a', 'store', 2], ['b', 'web', 3]] })
     expect(m.shape).toBe('long')
   })
-  it('a column named label or name keeps the result single', () => {
-    expect(toMultiSeries({ columns: ['label', 'rep', 'v'], rows: [['a', 'x', 1], ['a', 'y', 2]] }).shape).toBe('single')
+  it('a second column named label or name keeps the result single; a first one does not', () => {
+    expect(toMultiSeries({ columns: ['m', 'name', 'v'], rows: [['a', 'x', 1], ['a', 'y', 2], ['b', 'x', 3]] }).shape).toBe('single')
+    expect(toMultiSeries({ columns: ['label', 'rep', 'value'], rows: [['a', 'x', 1], ['a', 'y', 2], ['b', 'x', 3]] }).shape).toBe('long')
+  })
+  it('one tie in a one-to-one text column is still an attribute', () => {
+    const rows = [['d1', 'P1', 5], ['d1', 'P2', 5], ['d2', 'P3', 7], ['d3', 'P4', 8]]
+    expect(toMultiSeries({ columns: ['day', 'top_product', 'sales'], rows }).shape).toBe('single')
   })
 })
 
 describe('label order and merging', () => {
   it('keeps January first when the first series lacks it (ORDER BY rep, month)', () => {
     const rows: any[][] = [['Feb', 'Ana', 2], ['Mar', 'Ana', 3], ['Jan', 'Ben', 1], ['Feb', 'Ben', 2], ['Mar', 'Ben', 3]]
-    expect(toMultiSeries({ columns: ['m', 's', 'v'], rows }).labels).toEqual(['Jan', 'Feb', 'Mar'])
+    expect(toMultiSeries({ columns: ['m', 'series', 'v'], rows }).labels).toEqual(['Jan', 'Feb', 'Mar'])
   })
   it('sorts all-numeric labels by value', () => {
     const rows: any[][] = [[10, 'A', 1], [9, 'A', 2], [10, 'B', 3], [9, 'B', 4]]
     expect(toMultiSeries({ columns: ['n', 's', 'v'], rows }).labels).toEqual(['9', '10'])
   })
   it('says when pairs were summed', () => {
-    expect(toMultiSeries({ columns: ['m', 's', 'v'], rows: [['a', 'A', 1], ['a', 'A', 2], ['a', 'B', 1]] }).merged).toBe(true)
-    expect(toMultiSeries({ columns: ['m', 's', 'v'], rows: [['a', 'A', 1], ['a', 'B', 2]] }).merged).toBe(false)
+    expect(toMultiSeries({ columns: ['m', 'series', 'v'], rows: [['a', 'A', 1], ['a', 'A', 2], ['a', 'B', 1]] }).merged).toBe(true)
+    expect(toMultiSeries({ columns: ['m', 'series', 'v'], rows: [['a', 'A', 1], ['a', 'B', 2]] }).merged).toBe(false)
     expect(toMultiSeries({ columns: ['m', 'series', 'v'], rows: [['a', 'A', 1], ['a', 'A', 2]] }).merged).toBe(true)
+  })
+})
+
+describe('label order: a stable topological merge', () => {
+  const order = (rows: any[][]) => toMultiSeries({ columns: ['m', 'series', 'v'], rows }).labels
+  it('a label first seen by a later series stays where the series put it', () => {
+    expect(order([['Jan', 'Ana', 1], ['Jan', 'Ben', 1], ['Feb', 'Cy', 1], ['Mar', 'Cy', 1], ['Mar', 'Ana', 1]])).toEqual(['Jan', 'Feb', 'Mar'])
+    expect(order([['Jan', 'Ana', 1], ['Jan', 'Ben', 1], ['Feb', 'Ben', 1], ['Mar', 'Ana', 1], ['Apr', 'Cy', 1], ['May', 'Ana', 1]])).toEqual(['Jan', 'Feb', 'Mar', 'Apr', 'May'])
+  })
+  it('keeps first-seen order for a tie', () => {
+    const rows = [['d1', 'P1', 1], ['d1', 'P2', 1], ['d2', 'P3', 1], ['d3', 'P1', 1], ['d4', 'P4', 1], ['d5', 'P2', 1]]
+    expect(order(rows)).toEqual(['d1', 'd2', 'd3', 'd4', 'd5'])
+  })
+  it('falls back to first-seen order on a cycle', () => {
+    // Ana: a before b; Ben: b before a
+    expect(order([['a', 'Ana', 1], ['b', 'Ana', 1], ['b', 'Ben', 1], ['a', 'Ben', 1]])).toEqual(['a', 'b'])
   })
 })

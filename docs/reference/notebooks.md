@@ -296,10 +296,12 @@ always have, or several. A result is read as several series when it is:
 
 - **Long**: `(label, series, value)`, what `GROUP BY label, series` returns. Three
   columns with a text second column and a numeric third, whatever the first holds
-  (a year is fine), where some label carries two or more series. A one-to-one text
-  column is an attribute, not a series: `(day, top_product, sales)` and
-  `(customer_id, name, total)` stay one series, and a column named `label` or
-  `name` always keeps the result single. A column named `series` makes any width
+  (a year is fine), where some label carries two or more series and some series
+  appears at two or more labels. A text column that does not behave like that is an
+  attribute, not a series: `(day, top_product, sales)`, even with one tie, and
+  `(customer_id, name, total)` stay one series, and a *second* column named `label`
+  or `name` always keeps the result single (a first column named `label` is the
+  usual `SELECT month AS label, rep, value` and is fine). A column named `series` makes any width
   long (then `value`/`total` and `label`/`name` columns are used if present, else
   the last numeric column and the first of the rest).
 - **Wide**: a label column, then two or more numeric columns, one series per
