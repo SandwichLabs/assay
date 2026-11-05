@@ -6,6 +6,7 @@
 // art did. The KINETIC chart views (area … heatmap) follow the same pattern
 // and mirror internal/agents' checkSeriesFit / checkTripleFit.
 import { typeFamily } from './formatCell'
+import { isLongTriple } from '../a2ui/multiseries'
 
 export type ViewKind = 'table' | 'bar' | 'line' | 'stat' | 'area' | 'columns' | 'rings' | 'radar' | 'sankey' | 'heatmap'
 
@@ -111,7 +112,7 @@ export function describeShape(columns: string[], rows: any[][], types?: string[]
     ;(isNum(sample[i]) ? numeric : label).push(c)
   }
   const firstIdx = 0
-  const seen = new Set(rows.map((r) => String(r[firstIdx])))
+  const seen = new Set(rows.map((r) => String(r[firstIdx] ?? '')))
   const long = longShape(cols, numeric, rows)
   return {
     cols,
@@ -124,10 +125,11 @@ export function describeShape(columns: string[], rows: any[][], types?: string[]
 }
 
 function longShape(cols: string[], numeric: string[], rows: any[][]): LongShape | undefined {
-  if (cols.length !== 3 || numeric.includes(cols[1]) || !numeric.includes(cols[2])) return undefined
-  const labels = new Set(rows.map((r) => String(r[0] ?? '')))
-  const series = new Set(rows.map((r) => String(r[1] ?? '')))
-  const pairs = new Set(rows.map((r) => JSON.stringify([String(r[0] ?? ''), String(r[1] ?? '')])))
+  if (!isLongTriple(cols, cols.map((c) => numeric.includes(c)), rows)) return undefined
+  const text = (v: unknown) => String(v ?? '')
+  const labels = new Set(rows.map((r) => text(r[0])))
+  const series = new Set(rows.map((r) => text(r[1])))
+  const pairs = new Set(rows.map((r) => JSON.stringify([text(r[0]), text(r[1])])))
   return { labels: labels.size, series: series.size, unique: pairs.size === rows.length }
 }
 

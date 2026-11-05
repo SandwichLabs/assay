@@ -53,14 +53,18 @@ func isNumericValue(v any) bool {
 	}
 }
 
-// describeViewShape judges a shape from the rows themselves (what the
-// renderer will actually meet), not declared column types — matching
+// describeViewShape judges a shape: from the declared column types when it has
+// them (types[i] non-empty), else from the first non-null value, matching
 // describeShape in notebookViews.ts.
-func describeViewShape(cols []string, rows [][]any) viewShape {
+func describeViewShape(cols []string, rows [][]any, types []string) viewShape {
 	numeric := make(map[string]bool, len(cols))
 	for ci, c := range cols {
+		if ci < len(types) && types[ci] != "" {
+			numeric[c] = isNumericTypeName(types[ci])
+			continue
+		}
 		for _, r := range rows {
-			if ci >= len(r) || r[ci] == nil {
+			if cellAt(r, ci) == nil {
 				continue
 			}
 			numeric[c] = isNumericValue(r[ci])
@@ -70,10 +74,7 @@ func describeViewShape(cols []string, rows [][]any) viewShape {
 	seen := make(map[string]bool, len(rows))
 	firstDistinct := len(rows) > 0
 	for _, r := range rows {
-		var key string
-		if len(r) > 0 {
-			key = toDisplayString(r[0])
-		}
+		key := toDisplayString(cellAt(r, 0))
 		if seen[key] {
 			firstDistinct = false
 		}
@@ -82,19 +83,62 @@ func describeViewShape(cols []string, rows [][]any) viewShape {
 	return viewShape{cols: cols, numeric: numeric, rowCount: len(rows), firstDistinct: firstDistinct, long: describeLongShape(cols, numeric, rows)}
 }
 
+// cellAt is r[i], or nil when the row is shorter (a missing cell is a null).
+func cellAt(r []any, i int) any {
+	if i < len(r) {
+		return r[i]
+	}
+	return nil
+}
+
+// isNumericTypeName mirrors typeFamily() in lib/formatCell.ts for the families
+// a chart can plot: integer, decimal and float DuckDB types.
+func isNumericTypeName(t string) bool {
+	t = strings.ToUpper(t)
+	switch {
+	case strings.HasSuffix(t, "]"), strings.HasPrefix(t, "STRUCT"), strings.HasPrefix(t, "MAP"), strings.HasPrefix(t, "UNION"):
+		return false
+	case strings.HasPrefix(t, "DATE"), strings.HasPrefix(t, "TIME"), strings.HasPrefix(t, "INTERVAL"):
+		return false
+	case strings.HasPrefix(t, "DECIMAL"), strings.HasPrefix(t, "NUMERIC"), strings.Contains(t, "INT"):
+		return true
+	}
+	return t == "DOUBLE" || t == "FLOAT" || t == "REAL"
+}
+
 // describeLongShape returns the (label, series, value) description of a
-// result, or nil when it is not one. Same rule as longShape() in
-// notebookViews.ts.
+// result, or nil when it is not one. Same rule as isLongTriple() in
+// a2ui/multiseries.ts and longShape() in notebookViews.ts: three columns, a
+// text second and a numeric third; a column named series settles it, else no
+// column may be named label or name and some label must carry two or more
+// series (a one-to-one text column is an attribute, not a series).
 func describeLongShape(cols []string, numeric map[string]bool, rows [][]any) *longViewShape {
 	if len(cols) != 3 || numeric[cols[1]] || !numeric[cols[2]] {
 		return nil
 	}
+	if !strings.EqualFold(cols[1], "series") {
+		for _, c := range cols {
+			if strings.EqualFold(c, "label") || strings.EqualFold(c, "name") {
+				return nil
+			}
+		}
+		per := map[string]map[string]bool{}
+		multi := false
+		for _, r := range rows {
+			l, sr := toDisplayString(cellAt(r, 0)), toDisplayString(cellAt(r, 1))
+			if per[l] == nil {
+				per[l] = map[string]bool{}
+			}
+			per[l][sr] = true
+			multi = multi || len(per[l]) >= 2
+		}
+		if !multi {
+			return nil
+		}
+	}
 	labels, series, pairs := map[string]bool{}, map[string]bool{}, map[[2]string]bool{}
 	for _, r := range rows {
-		if len(r) < 2 {
-			continue
-		}
-		l, sr := toDisplayString(r[0]), toDisplayString(r[1])
+		l, sr := toDisplayString(cellAt(r, 0)), toDisplayString(cellAt(r, 1))
 		labels[l], series[sr], pairs[[2]string{l, sr}] = true, true, true
 	}
 	return &longViewShape{labels: len(labels), series: len(series), unique: len(pairs) == len(rows)}
@@ -102,7 +146,7 @@ func describeLongShape(cols []string, numeric map[string]bool, rows [][]any) *lo
 
 func toDisplayString(v any) string {
 	if v == nil {
-		return "<nil>"
+		return ""
 	}
 	if s, ok := v.(string); ok {
 		return s

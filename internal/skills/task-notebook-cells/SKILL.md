@@ -59,8 +59,10 @@ picker):
   25 rows (a long series result may have up to 200 rows).
 - **several series** — for "X by Y over time", or "X by Y and Z", return the
   long shape `(label, series, value)` (`SELECT month, rep, sum(revenue) ...
-  GROUP BY 1, 2 ORDER BY 1`): two to six series, at least two labels, one row
-  per label and series. `suggestedView` is `line` when the first column reads
+  GROUP BY 1, 2 ORDER BY 1, 2`, label first): two to six series, at least two labels, one row
+  per label and series, and at least one label with two series (a text column
+  that is one-to-one with the label, or a column named `label` or `name`, is an
+  attribute, not a series). `suggestedView` is `line` when the first column reads
   as a sequence (`month`, `date`, `year` ...) and `bar` otherwise (grouped
   bars, up to 25 labels); never four separate charts or cells for one
   question. A wide result, `(label, n1, n2)` with a numeric column per

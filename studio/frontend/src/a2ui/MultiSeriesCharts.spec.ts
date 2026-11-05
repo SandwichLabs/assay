@@ -76,7 +76,7 @@ describe('multi-series lineChart', () => {
     expect(w.findAll('g.a2ui-linechart__series')).toHaveLength(6)
     const legend = w.find('[data-testid="a2ui-series-legend"]')
     expect(legend.text()).toContain('Other')
-    expect(w.find('[data-testid="a2ui-series-folded"]').text()).toBe('Other is the sum of 4 smaller series')
+    expect(w.find('[data-testid="a2ui-series-folded"]').text()).toBe('Other is the sum of 4 series')
     // the biggest are kept: I (900s) and not A (100s)
     expect(legend.text()).toContain('I')
     expect(w.find('svg').attributes('aria-label')).toContain('6 series')
@@ -134,6 +134,75 @@ describe('multi-series lineChart', () => {
   })
 })
 
+describe('multi-series lineChart: end labels, tooltip, edge cases', () => {
+  it('names each line at its right end, apart from one another, and keeps the legend', () => {
+    const w = render(long(['Ana', 'Ben', 'Cy', 'Di']))
+    const labels = w.findAll('[data-testid="a2ui-endlabel"]')
+    expect(labels.map((l) => l.text()).sort()).toEqual(['Ana', 'Ben', 'Cy', 'Di'])
+    expect(labels.find((l) => l.text() === 'Ben')!.classes()).toContain('a2ui-series-1')
+    const tops = labels.map((l) => Number(/top: ([0-9.]+)%/.exec(l.attributes('style')!)![1]))
+    const sorted = [...tops].sort((a, b) => a - b)
+    for (let i = 1; i < sorted.length; i++) expect(sorted[i] - sorted[i - 1]).toBeGreaterThan(3)
+    expect(w.find('[data-testid="a2ui-series-legend"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('has no end labels for one series, and skips a series with no point at the last label', () => {
+    const one = render({ id: 'c', type: 'lineChart', points: [{ label: 'a', value: 1 }, { label: 'b', value: 2 }] })
+    expect(one.findAll('[data-testid="a2ui-endlabel"]')).toHaveLength(0)
+    one.unmount()
+    const rows = [['a', 'A', 1], ['b', 'A', 2], ['a', 'B', 3]]
+    const w = render({ id: 'c', type: 'lineChart', columns: ['m', 's', 'v'], rows })
+    expect(w.findAll('[data-testid="a2ui-endlabel"]').map((l) => l.text())).toEqual(['A'])
+    w.unmount()
+  })
+
+  it('pins the tooltip to the top of the plot', async () => {
+    const w = render(long(['Ana', 'Ben']))
+    await w.find('.a2ui-plot__body').trigger('focus')
+    expect(w.find('[data-testid="a2ui-linechart-tip"]').attributes('style')).toContain('top: 0%')
+    w.unmount()
+  })
+
+  it('survives a label where every series is empty, and a chart with no values at all', async () => {
+    const rows = [['a', 'A', 1], ['a', 'B', 2], ['b', 'A', null], ['b', 'B', null], ['c', 'A', 3], ['c', 'B', 4]]
+    const w = render({ id: 'c', type: 'lineChart', columns: ['m', 's', 'v'], rows })
+    const plot = w.find('.a2ui-plot__body')
+    await plot.trigger('focus')
+    await plot.trigger('keydown', { key: 'Home' })
+    await plot.trigger('keydown', { key: 'ArrowRight' })
+    expect(w.find('[data-testid="a2ui-linechart-tip"]').text()).toContain('no values')
+    expect(w.html()).not.toContain('Infinity')
+    w.unmount()
+    const empty = render({ id: 'c', type: 'lineChart', series: [{ name: 'A', points: [] }, { name: 'B', points: [] }] })
+    expect(empty.text()).toContain('NO ROWS')
+    expect(empty.html()).not.toContain('Infinity')
+    empty.unmount()
+  })
+
+  it('orders labels by merging each series (ORDER BY rep, month)', () => {
+    const rows = [['2025-02', 'Ana', 2], ['2025-03', 'Ana', 3], ['2025-01', 'Ben', 1], ['2025-02', 'Ben', 2], ['2025-03', 'Ben', 3]]
+    const w = render({ id: 'c', type: 'barChart', columns: ['m', 's', 'v'], rows })
+    expect(w.findAll('[data-testid="a2ui-bargroup"] .a2ui-bar__label').map((l) => l.text())).toEqual(['2025-01', '2025-02', '2025-03'])
+    w.unmount()
+  })
+})
+
+describe('results that only look like several series', () => {
+  it('(id, name, total) is one set of bars labelled by name', () => {
+    const w = render({ id: 'b', type: 'barChart', columns: ['customer_id', 'name', 'total'], rows: [[1, 'Ada', 5], [2, 'Bo', 7], [3, 'Cy', 2]] })
+    expect(w.findAll('[data-testid="a2ui-bargroup"]')).toHaveLength(0)
+    expect(w.findAll('.a2ui-bar__label').map((l) => l.text())).toEqual(['Ada', 'Bo', 'Cy'])
+    w.unmount()
+  })
+  it('(day, top_product, sales) is one line', () => {
+    const w = render({ id: 'c', type: 'lineChart', columns: ['day', 'top_product', 'sales'], rows: [['2025-01-01', 'A', 5], ['2025-01-02', 'B', 7], ['2025-01-03', 'A', 6]] })
+    expect(w.findAll('g.a2ui-linechart__series')).toHaveLength(0)
+    expect(w.findAll('polyline.a2ui-linechart__line')).toHaveLength(1)
+    w.unmount()
+  })
+})
+
 describe('multi-series barChart (grouped)', () => {
   const bars = (reps: string[]): A2UIComponentT => ({
     id: 'b', type: 'barChart', columns: ['region', 'rep', 'revenue'],
@@ -160,6 +229,17 @@ describe('multi-series barChart (grouped)', () => {
     expect(widths[1]).toBe(widths[2])
     expect(Number(widths[0])).toBeLessThan(Number(widths[1]))
     expect(Number(widths[3])).toBeLessThan(Number(widths[0]))
+    w.unmount()
+  })
+
+  it('turns drill off, with a note, when repeated rows were summed into a bar', () => {
+    const rt = {
+      result: () => ({ loading: false, error: '', fetched: true, truncated: false, data: { columns: ['m', 'series', 'v'], types: [], rows: [['a', 'A', 1], ['a', 'A', 2], ['b', 'A', 3]] } }),
+      params: { param: () => undefined, display: () => '', error: () => '', isDefault: () => true, set: () => undefined, reset: () => undefined },
+    }
+    const w = mount(A2UIPage, { props: { page: { title: 't', components: [{ id: 'b', type: 'barChart', query: 'q', drill: { param: 'p', column: 'm' } }] } }, global: { provide: { [ARTIFACT_RUNTIME as symbol]: rt } } })
+    expect(w.find('[role="button"]').exists()).toBe(false)
+    expect(w.find('[data-testid="a2ui-drill-off"]').text()).toContain('summed')
     w.unmount()
   })
 
@@ -215,10 +295,11 @@ describe('inside a data artifact view', () => {
     w.unmount()
   })
 
-  it('a barChart bound to a query draws grouped bars, and its drill is off', () => {
+  it('a barChart bound to a query draws grouped bars, and its drill is off with a visible note', () => {
     const w = view({ id: 'b', type: 'barChart', query: 'q', drill: { param: 'rep', column: 'rep' } })
     expect(w.findAll('[data-testid="a2ui-bargroup"]')).toHaveLength(2)
     expect(w.find('[role="button"]').exists()).toBe(false)
+    expect(w.find('[data-testid="a2ui-drill-off"]').text()).toContain('Drill-down is off')
     w.unmount()
   })
 })

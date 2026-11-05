@@ -287,8 +287,8 @@
   white-space: nowrap;
   box-shadow: 0 1px 4px color-mix(in srgb, var(--sh-ink) 18%, transparent);
 }
-.a2ui-page .a2ui-linechart__tip--right { transform: translate(10px, -50%); }
-.a2ui-page .a2ui-linechart__tip--left { transform: translate(calc(-100% - 10px), -50%); }
+.a2ui-page .a2ui-linechart__tip--right { transform: translate(10px, 0); }
+.a2ui-page .a2ui-linechart__tip--left { transform: translate(calc(-100% - 10px), 0); }
 .a2ui-page .a2ui-linechart__tip-label { color: var(--sh-graphite); }
 .a2ui-page .a2ui-linechart__tip-value { font-weight: 700; font-variant-numeric: tabular-nums; }
 /* Several series: each series group takes its colour from the chart role its
@@ -297,6 +297,22 @@
 .a2ui-page .a2ui-linechart__series .a2ui-linechart__line { stroke: var(--a2ui-series); }
 .a2ui-page .a2ui-linechart__series .a2ui-linechart__dot { fill: var(--a2ui-series); }
 .a2ui-page .a2ui-linechart__series .a2ui-linechart__focus { fill: var(--a2ui-series); }
+/* The name of a series at the right end of its line (several series only). */
+.a2ui-page .a2ui-linechart__endlabel {
+  position: absolute;
+  z-index: 1;
+  transform: translate(8px, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--sh-font-mono);
+  font-size: 11px;
+  color: var(--sh-ink);
+  pointer-events: none;
+}
 .a2ui-page .a2ui-linechart__tip-row { display: flex; align-items: center; gap: 5px; }
 .a2ui-page .a2ui-linechart__tip-name { color: var(--sh-graphite); flex: 1; }
 .a2ui-page .a2ui-kchart__note { color: var(--sh-graphite); font-style: italic; }

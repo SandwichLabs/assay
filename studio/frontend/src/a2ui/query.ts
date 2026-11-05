@@ -76,11 +76,26 @@ export function toPoints(columns: string[], rows: any[][]): Point[] {
   const labelIdx = firstIndexOf(keys, ['label', 'name'])
   const valueIdx = firstIndexOf(keys, ['value', 'total'])
   const li = labelIdx >= 0 ? labelIdx : 0
-  const vi = valueIdx >= 0 ? valueIdx : (keys.length > 1 ? 1 : 0)
+  const vi = valueIdx >= 0 ? valueIdx : firstValueColumn(rows, li, keys.length)
   return rows.map((r) => ({
     label: String(r[li] ?? ''),
     value: Number(r[vi] ?? 0) || 0,
   }))
+}
+
+// firstValueColumn: the second column, unless it holds text (an attribute of
+// the label, as in `SELECT day, top_product, sales`) and a later column holds
+// numbers; then that one.
+function firstValueColumn(rows: any[][], label: number, n: number): number {
+  const fallback = n > 1 ? 1 : 0
+  const sample = (i: number) => rows.find((r) => r[i] !== null && r[i] !== undefined)?.[i]
+  const numeric = (i: number) => {
+    const v = sample(i)
+    return typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)))
+  }
+  if (numeric(fallback)) return fallback
+  for (let i = 0; i < n; i++) if (i !== label && numeric(i)) return i
+  return fallback
 }
 
 function firstIndexOf(keys: string[], names: string[]): number {

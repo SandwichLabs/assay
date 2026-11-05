@@ -13,7 +13,7 @@ defineProps<{ names: string[]; folded: string[] }>()
       <span class="a2ui-kchart__swatch"></span>{{ name }}
     </span>
     <span v-if="folded.length" class="a2ui-kchart__note" data-testid="a2ui-series-folded" :title="folded.join(', ')">
-      Other is the sum of {{ folded.length }} smaller series
+      Other is the sum of {{ folded.length }} series
     </span>
   </div>
 </template>

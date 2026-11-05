@@ -42,6 +42,24 @@ func TestValidate_MultiSeriesLineAndBar(t *testing.T) {
 	bad(`{"id":"c","type":"lineChart","series":[{"name":"`+strings.Repeat("n", 81)+`","points":[]}]}`, "longer than 80")
 }
 
+func TestValidate_OneDataSource(t *testing.T) {
+	check := func(c string) error {
+		_, err := Validate(`{"title":"x","components":[` + c + `]}`)
+		return err
+	}
+	err := check(`{"id":"c","type":"lineChart","points":[{"label":"a","value":1}],"series":[]}`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "use one data source, got points and series")
+	err = check(`{"id":"c","type":"barChart","columns":["a","b"],"rows":[["x",1]],"sql":"SELECT 1"}`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rows and sql")
+	// a bound chart that also carries old inline points still passes
+	require.NoError(t, check(`{"id":"c","type":"lineChart","points":[],"sql":"SELECT 1"}`))
+	err = check(`{"id":"c","type":"lineChart","series":[{"name":"A","points":[]},{"name":"A ","points":[]}]}`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "used by an earlier series")
+}
+
 func TestValidate_InlineSeriesCaps(t *testing.T) {
 	series := func(n int) string {
 		parts := make([]string, n)

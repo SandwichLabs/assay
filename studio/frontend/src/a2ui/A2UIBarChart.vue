@@ -47,7 +47,15 @@ const valueCh = computed(() => Math.max(4, ...values.value.map((v) => formatNumb
 
 // Drill (data artifact view only): a bar is one result row; click, or Enter
 // or Space on a focused bar, sets the drill parameter from that row's column.
-const drill = useDrill(() => props.component, () => (isBound(props.component) && data.value && !multi.value ? data.value : null))
+// A grouped bar, or a result whose repeated rows were summed, is not one result
+// row per bar: drill is off, and a visible note says so.
+const drillOff = computed(() => multi.value || ms.value.merged)
+const drill = useDrill(() => props.component, () => (isBound(props.component) && data.value && !drillOff.value ? data.value : null))
+const drillNote = computed(() =>
+  drill.column.value && drillOff.value
+    ? `Drill-down is off: ${multi.value ? 'a grouped bar is' : 'bars of summed rows are'} not one result row.`
+    : '',
+)
 const roving = useRoving(() => labels.value.length)
 
 // The bar for series si at label i spans zero to the value; at least 1% wide so a tiny value is visible.
@@ -71,6 +79,7 @@ const groupText = (i: number) => `${labels.value[i]}: ${ms.value.series.map((s, 
     <div v-else-if="labels.length === 0 || ms.series.length === 0" class="a2ui-empty">NO ROWS</div>
     <template v-else>
       <div v-if="drill.problem.value" class="a2ui-error" role="alert">{{ drill.problem.value }}</div>
+      <div v-if="drillNote" class="a2ui-kchart__note" role="note" data-testid="a2ui-drill-off">{{ drillNote }}</div>
       <template v-if="multi">
         <div v-for="(label, i) in labels" :key="i" class="a2ui-bargroup" role="group" :aria-label="groupText(i)" :title="groupText(i)" data-testid="a2ui-bargroup">
           <span class="a2ui-bar__label">{{ label }}</span>

@@ -15,6 +15,7 @@ import (
 type longShapeCase struct {
 	Name    string   `json:"name"`
 	Columns []string `json:"columns"`
+	Types   []string `json:"types"`
 	Rows    [][]any  `json:"rows"`
 	Want    string   `json:"want"`
 }
@@ -27,7 +28,7 @@ func TestBestViewFor_LongShapeParity(t *testing.T) {
 	require.NotEmpty(t, cases)
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
-			assert.Equal(t, c.Want, bestViewFor(describeViewShape(c.Columns, c.Rows)))
+			assert.Equal(t, c.Want, bestViewFor(describeViewShape(c.Columns, c.Rows, c.Types)))
 		})
 	}
 }
@@ -35,7 +36,7 @@ func TestBestViewFor_LongShapeParity(t *testing.T) {
 // A long result is still a result the bar and line views fit, and the grouped
 // bar and multi-line charts are reached by pinning the view, whatever it picked.
 func TestCheckViewFit_LongShape(t *testing.T) {
-	shape := describeViewShape([]string{"month", "rep", "revenue"}, [][]any{{"Jan", "Ana", 1}, {"Jan", "Ben", 2}, {"Feb", "Ana", 3}})
+	shape := describeViewShape([]string{"month", "rep", "revenue"}, [][]any{{"Jan", "Ana", 1}, {"Jan", "Ben", 2}, {"Feb", "Ana", 3}}, nil)
 	require.NotNil(t, shape.long)
 	assert.Equal(t, 2, shape.long.labels)
 	assert.Equal(t, 2, shape.long.series)
@@ -43,5 +44,5 @@ func TestCheckViewFit_LongShape(t *testing.T) {
 	for _, v := range []string{"bar", "line", "table"} {
 		assert.True(t, checkViewFit(v, shape).OK, v)
 	}
-	assert.Nil(t, describeViewShape([]string{"a", "b"}, [][]any{{"x", 1}}).long)
+	assert.Nil(t, describeViewShape([]string{"a", "b"}, [][]any{{"x", 1}}, nil).long)
 }

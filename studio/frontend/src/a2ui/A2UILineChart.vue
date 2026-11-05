@@ -9,6 +9,10 @@
 // has a gap there, never a zero. Colours come from the theme's chart roles by
 // series index, six at most, the rest summed into "Other".
 //
+// With several series each line is also named at its right end (a2ui/endLabels.ts,
+// pushed apart so they do not overlap), so the lines are told apart by more than
+// colour. The legend stays.
+//
 // Axes (a2ui/scale.ts, a2ui/xaxis.ts): round gridlines (1/2/5 x 10^n, usually four or five), a
 // zero baseline for non-negative data unless the component says `zero: false`,
 // and a real time axis when every label is a date or timestamp: points sit by
@@ -29,6 +33,7 @@ import { useMotion } from './useMotion'
 import { valueScale, frac as scaleFrac, formatTick } from './scale'
 import { buildXAxis } from './xaxis'
 import { seriesClass } from './series'
+import { spreadLabels } from './endLabels'
 import { useChartCursor } from './useChartCursor'
 import A2UIPlotFrame from './A2UIPlotFrame.vue'
 import A2UISeriesLegend from './A2UISeriesLegend.vue'
@@ -42,8 +47,11 @@ const n = computed(() => labels.value.length)
 
 const W = 640
 const H = 200
-const PAD = { top: 10, right: 12, bottom: 10, left: 12 }
-const innerW = W - PAD.left - PAD.right
+// several series leave room on the right for their end labels
+const END_PAD = 104
+const PAD = { top: 10, bottom: 10, left: 12 }
+const padRight = computed(() => (multi.value ? END_PAD : 12))
+const innerW = computed(() => W - PAD.left - padRight.value)
 const innerH = H - PAD.top - PAD.bottom
 
 const values = computed(() => ms.value.series.flatMap((s) => s.values.filter((v): v is number => v !== null)))
@@ -61,7 +69,7 @@ const plotWidthPx = ref(0)
 const xa = computed(() => buildXAxis(labels.value, plotWidthPx.value, W))
 
 function x(i: number): number {
-  return PAD.left + xa.value.frac[i] * innerW
+  return PAD.left + xa.value.frac[i] * innerW.value
 }
 function y(v: number): number {
   return PAD.top + innerH - scaleFrac(scale.value, v) * innerH
@@ -89,12 +97,12 @@ const poly = (si: number, run: number[]) => run.map((i) => `${x(i)},${py(si, i)}
 const dotsOf = (si: number) => labels.value.map((_, i) => i).filter((i) => ms.value.series[si].values[i] !== null)
 
 const yTicks = computed(() => scale.value.ticks.map((t) => ({ pct: (y(t) / H) * 100, label: fmtTick(t) })))
-const xTicks = computed(() => xa.value.ticks.map((t) => ({ frac: (PAD.left + t.frac * innerW) / W, label: t.label })))
+const xTicks = computed(() => xa.value.ticks.map((t) => ({ frac: (PAD.left + t.frac * innerW.value) / W, label: t.label })))
 const axw = computed(() => Math.max(2, ...scale.value.ticks.map((t) => fmtTick(t).length)) + 1)
 
 // Cursor: positions run left to right (xa.order); `activeIdx` maps back to the data.
 const orderedFracs = computed(() => xa.value.order.map((i) => xa.value.frac[i]))
-const cursor = useChartCursor(() => orderedFracs.value, { W, padL: PAD.left, innerW })
+const cursor = useChartCursor(() => orderedFracs.value, { W, padL: PAD.left, get innerW() { return innerW.value } })
 const activeIdx = computed(() => (cursor.active.value === null ? null : (xa.value.order[cursor.active.value] ?? null)))
 // every series that has a point at the cursor's label
 const readout = computed(() => {
@@ -107,17 +115,27 @@ const activeText = computed(() => {
   if (i === null) return ''
   return `${labels.value[i]}: ${readout.value.map((r) => (multi.value ? `${r.name} ${r.value}` : r.value)).join(', ')}`
 })
+// pinned to the top of the plot, beside the cursor line, so it never sits on the points
 const tipStyle = computed<{ left?: string; top?: string }>(() => {
   const i = activeIdx.value
-  if (i === null) return {}
-  const top = Math.min(...readout.value.map((r) => py(r.si, i)))
-  return { left: (x(i) / W) * 100 + '%', top: (top / H) * 100 + '%' }
+  return i === null ? {} : { left: (x(i) / W) * 100 + '%', top: '0%' }
 })
+// each series' name at its right end, where it has a point at the last label
+const endLabels = computed(() => {
+  if (!multi.value || n.value === 0) return []
+  const last = xa.value.order[xa.value.order.length - 1]
+  const items = ms.value.series.flatMap((s, si) => (s.values[last] === null ? [] : [{ si, y: py(si, last) }]))
+  const gap = (13 * W) / Math.max(plotWidthPx.value, 240)
+  return spreadLabels(items, gap, PAD.top, H - PAD.bottom).map((l) => ({ si: l.si, name: ms.value.series[l.si].name, top: (l.y / H) * 100 }))
+})
+const endLeft = computed(() => (x(xa.value.order[xa.value.order.length - 1]) / W) * 100)
+const endWidth = ((END_PAD - 22) / W) * 100
 const tipSide = computed(() => (activeIdx.value !== null && xa.value.frac[activeIdx.value] > 0.6 ? 'left' : 'right'))
 
 const showDots = computed(() => n.value <= 60)
 const ariaLabel = computed(() => {
   const v = values.value
+  if (v.length === 0) return 'Line chart with no values'
   const span = xa.value.time && xa.value.ticks.length ? `, ${labels.value[xa.value.order[0]]} to ${labels.value[xa.value.order[xa.value.order.length - 1]]}` : ''
   const what = multi.value ? `${ms.value.series.length} series (${ms.value.series.map((s) => s.name).join(', ')}) over ${n.value} labels` : `${v.length} points`
   return `Line chart of ${what}${span}, ranging ${formatNumber(Math.min(...v))} to ${formatNumber(Math.max(...v))}`
@@ -129,7 +147,7 @@ const ariaLabel = computed(() => {
     <div v-if="component.label" class="a2ui-component__title">{{ component.label }}</div>
     <div v-if="isBound(component) && loading" class="a2ui-loading">RUNNING QUERY…</div>
     <div v-else-if="isBound(component) && error" class="a2ui-error">QUERY ERROR: {{ error }}</div>
-    <div v-else-if="n === 0 || ms.series.length === 0" class="a2ui-empty">NO ROWS</div>
+    <div v-else-if="n === 0 || ms.series.length === 0 || values.length === 0" class="a2ui-empty">NO ROWS</div>
     <template v-else>
       <A2UIPlotFrame
         data-testid="a2ui-linechart-plot" :y-ticks="yTicks" :x-ticks="xTicks" :axw="axw"
@@ -139,7 +157,7 @@ const ariaLabel = computed(() => {
       >
         <svg :viewBox="`0 0 ${W} ${H}`" :class="['a2ui-linechart__svg', multi ? '' : colorClass(component.color)]" role="img" :aria-label="ariaLabel">
           <line
-            v-for="(t, i) in scale.ticks" :key="'g' + i" :x1="PAD.left" :x2="W - PAD.right" :y1="y(t)" :y2="y(t)"
+            v-for="(t, i) in scale.ticks" :key="'g' + i" :x1="PAD.left" :x2="W - padRight" :y1="y(t)" :y2="y(t)"
             class="a2ui-linechart__grid" :class="{ 'a2ui-linechart__grid--zero': t === 0 && scale.min < 0 }"
           />
           <line v-if="activeIdx !== null" :x1="x(activeIdx)" :x2="x(activeIdx)" :y1="PAD.top" :y2="H - PAD.bottom" class="a2ui-linechart__cursor" />
@@ -155,6 +173,10 @@ const ariaLabel = computed(() => {
             <circle v-if="activeIdx !== null && s.values[activeIdx] !== null" :cx="x(activeIdx)" :cy="py(si, activeIdx)" r="5.5" class="a2ui-linechart__focus" />
           </g>
         </svg>
+        <span
+          v-for="l in endLabels" :key="'end' + l.si" class="a2ui-linechart__endlabel" :class="seriesClass(l.si)" :title="l.name"
+          :style="{ left: endLeft + '%', top: l.top + '%', maxWidth: endWidth + '%' }" data-testid="a2ui-endlabel" aria-hidden="true"
+        ><span class="a2ui-kchart__swatch"></span>{{ l.name }}</span>
         <A2UISeriesTip v-if="activeIdx !== null" :label="labels[activeIdx]" :rows="readout" :multi="multi" :side="tipSide" :pos="tipStyle" />
         <span class="a2ui-sr" aria-live="polite">{{ activeText }}</span>
       </A2UIPlotFrame>

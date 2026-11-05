@@ -28,6 +28,9 @@ export interface MultiSeries {
   series: SeriesLine[]
   // names of the series summed into "Other" (empty when nothing folded)
   folded: string[]
+  // a (label, series) pair or a label was seen twice and summed, so a bar or
+  // point is no longer one result row (drill-down is off)
+  merged: boolean
 }
 
 export interface ResultTable {
@@ -36,7 +39,7 @@ export interface ResultTable {
   types?: string[]
 }
 
-const EMPTY: MultiSeries = { shape: 'single', labels: [], series: [], folded: [] }
+const EMPTY: MultiSeries = { shape: 'single', labels: [], series: [], folded: [], merged: false }
 
 // cell reads a result cell as a number, or null for a null, a blank, a boolean
 // or text. A HUGEINT/DECIMAL past JS's safe range crosses the wire as a numeric
@@ -73,6 +76,30 @@ function indexOfName(cols: string[], ...names: string[]): number {
   return -1
 }
 
+const text = (v: unknown): string => String(v ?? '')
+
+// isLongTriple: is this three-column result (label, series, value)? The second
+// column must be text and the third numeric. A column named `series` settles it.
+// Otherwise a column named label or name makes the result a plain (label,
+// value) chart with an attribute beside it (`SELECT id, name, total`), and some
+// label has to carry two or more series: a one-to-one label to text column
+// (`day, top_product, sales`) is an attribute, not a series. Shared with
+// notebookViews.ts so the cell's suggested view agrees (and internal/agents).
+export function isLongTriple(cols: string[], numeric: boolean[], rows: any[][]): boolean {
+  if (cols.length !== 3 || numeric[1] || !numeric[2]) return false
+  if (cols[1].toLowerCase() === 'series') return true
+  if (indexOfName(cols, 'label', 'name') >= 0) return false
+  const per = new Map<string, Set<string>>()
+  for (const r of rows) {
+    const l = text(r[0])
+    let set = per.get(l)
+    if (!set) per.set(l, (set = new Set()))
+    set.add(text(r[1]))
+    if (set.size >= 2) return true
+  }
+  return false
+}
+
 type Roles =
   | { kind: 'long'; label: number; series: number; value: number }
   | { kind: 'wide'; label: number; values: number[] }
@@ -100,14 +127,14 @@ function namedLong(cols: string[], numeric: boolean[]): Roles | null {
 // roles decides what each column means:
 //  1. a column named `series` (namedLong)
 //  2. exactly three columns, a text second and a numeric third, are
-//     (label, series, value), whatever the first holds (a year is numeric)
+//     (label, series, value) (isLongTriple), whatever the first holds
 //  3. a column named value or total keeps the one-series reading it always had
 //  4. a label then two or more numeric columns is wide
 //  5. anything else is one series (label, value), as it always was
-function roles(cols: string[], numeric: boolean[]): Roles {
+function roles(cols: string[], numeric: boolean[], rows: any[][]): Roles {
   const named = namedLong(cols, numeric)
   if (named) return named
-  if (cols.length === 3 && !numeric[1] && numeric[2]) return { kind: 'long', label: 0, series: 1, value: 2 }
+  if (isLongTriple(cols, numeric, rows)) return { kind: 'long', label: 0, series: 1, value: 2 }
   if (indexOfName(cols, 'value', 'total') >= 0) return { kind: 'single' }
   const firstText = numeric.findIndex((n) => !n)
   const label = firstText < 0 ? 0 : firstText
@@ -120,52 +147,87 @@ function roles(cols: string[], numeric: boolean[]): Roles {
 // and value columns, not as label + second column.)
 export function isSeriesShape(t: ResultTable): boolean {
   const cols = columnNames(t)
-  return roles(cols, numericColumns(t, cols.length)).kind !== 'single'
+  return roles(cols, numericColumns(t, cols.length), t.rows).kind !== 'single'
 }
 
-function singlePoints(t: ResultTable, cols: string[]): MultiSeries {
+function singlePoints(t: ResultTable, cols: string[], numeric: boolean[]): MultiSeries {
   const labelIdx = indexOfName(cols, 'label', 'name')
   const valueIdx = indexOfName(cols, 'value', 'total')
   const li = labelIdx >= 0 ? labelIdx : 0
-  const vi = valueIdx >= 0 ? valueIdx : cols.length > 1 ? 1 : 0
+  // the second column, unless it is text and a later column is numeric
+  const second = cols.length > 1 ? 1 : 0
+  const later = numeric.findIndex((n, i) => n && i !== li)
+  const vi = valueIdx >= 0 ? valueIdx : numeric[second] || later < 0 ? second : later
   return {
     shape: 'single',
     labels: t.rows.map((r) => String(r[li] ?? '')),
     series: [{ name: cols[vi] ?? 'value', values: t.rows.map((r) => cell(r[vi]) ?? 0) }],
     folded: [],
+    merged: false,
   }
 }
 
-// Grid collects (label, series) -> value, labels and series in first-seen
-// order. A repeated pair is summed: it is the same measure listed twice, as a
-// result with no GROUP BY returns it.
+// Grid collects (label, series) -> value, series in first-seen order. A
+// repeated pair is summed: it is the same measure listed twice, as a result with
+// no GROUP BY returns it (and then `merged` says a point is no longer one row).
+//
+// Label order merges the order each series saw its labels in, so
+// `ORDER BY rep, month` still runs January to December even when the first rep
+// has no January: a label a series introduces goes after the one before it in
+// that series. All-numeric labels are sorted by value instead.
 class Grid {
-  labels: string[] = []
   names: string[] = []
+  merged = false
+  private labelList: string[] = []
   private li = new Map<string, number>()
   private si = new Map<string, number>()
   private at = new Map<string, number>()
+  private seen: number[][] = []
 
   label(l: string): number {
     let i = this.li.get(l)
-    if (i === undefined) this.li.set(l, (i = this.labels.push(l) - 1))
+    if (i === undefined) this.li.set(l, (i = this.labelList.push(l) - 1))
     return i
   }
   name(s: string): number {
     let i = this.si.get(s)
-    if (i === undefined) this.si.set(s, (i = this.names.push(s) - 1))
+    if (i === undefined) {
+      this.si.set(s, (i = this.names.push(s) - 1))
+      this.seen[i] = []
+    }
     return i
   }
   add(l: number, s: number, v: number | null) {
+    if (!this.seen[s].includes(l)) this.seen[s].push(l)
     if (v === null) return
     const k = `${l}:${s}`
+    if (this.at.has(k)) this.merged = true
     this.at.set(k, (this.at.get(k) ?? 0) + v)
   }
+  // label indexes in display order
+  private order(): number[] {
+    const all = this.labelList.map((_, i) => i)
+    if (all.length > 0 && this.labelList.every((l) => isNumeric(l))) return all.sort((a, b) => Number(this.labelList[a]) - Number(this.labelList[b]) || a - b)
+    const out: number[] = []
+    for (const list of this.seen) {
+      let anchor = -1
+      for (const l of list) {
+        const at = out.indexOf(l)
+        if (at >= 0) anchor = at
+        else out.splice(++anchor, 0, l)
+      }
+    }
+    return out
+  }
+  get labelCount(): number {
+    return this.labelList.length
+  }
+  get labels(): string[] {
+    return this.order().map((l) => this.labelList[l])
+  }
   lines(): SeriesLine[] {
-    return this.names.map((name, s) => ({
-      name,
-      values: this.labels.map((_, l) => this.at.get(`${l}:${s}`) ?? null),
-    }))
+    const ord = this.order()
+    return this.names.map((name, s) => ({ name, values: ord.map((l) => this.at.get(`${l}:${s}`) ?? null) }))
   }
 }
 
@@ -194,15 +256,16 @@ export function foldSeries(series: SeriesLine[]): { series: SeriesLine[]; folded
 
 function finish(shape: MultiSeries['shape'], g: Grid): MultiSeries {
   const f = foldSeries(g.lines())
-  return { shape, labels: g.labels, series: f.series, folded: f.folded }
+  return { shape, labels: g.labels, series: f.series, folded: f.folded, merged: g.merged }
 }
 
 // toMultiSeries shapes a result (or inline columns + rows) into labels and series.
 export function toMultiSeries(t: ResultTable): MultiSeries {
   const cols = columnNames(t)
   if (t.rows.length === 0 || cols.length === 0) return EMPTY
-  const r = roles(cols, numericColumns(t, cols.length))
-  if (r.kind === 'single') return singlePoints(t, cols)
+  const numeric = numericColumns(t, cols.length)
+  const r = roles(cols, numeric, t.rows)
+  if (r.kind === 'single') return singlePoints(t, cols, numeric)
   const g = new Grid()
   if (r.kind === 'long') {
     for (const row of t.rows) {
@@ -213,7 +276,9 @@ export function toMultiSeries(t: ResultTable): MultiSeries {
   }
   const idx = r.values.map((c) => g.name(cols[c]))
   for (const row of t.rows) {
+    const before = g.labelCount
     const l = g.label(String(row[r.label] ?? ''))
+    if (g.labelCount === before) g.merged = true
     r.values.forEach((c, k) => g.add(l, idx[k], cell(row[c])))
   }
   return finish('wide', g)
@@ -242,5 +307,6 @@ export function fromPoints(points: { label: string; value: number }[]): MultiSer
     labels: points.map((p) => String(p.label ?? '')),
     series: [{ name: 'value', values: points.map((p) => cell(p.value) ?? 0) }],
     folded: [],
+    merged: false,
   }
 }

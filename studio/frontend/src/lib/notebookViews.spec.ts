@@ -137,10 +137,10 @@ describe('viewFit — KINETIC chart views (mirrors internal/agents)', () => {
 // for a (label, series, value) result.
 describe('bestView — (label, series, value) parity with internal/agents', () => {
   const file = resolve(__dirname, '../../../../internal/agents/testdata/long_shape_views.json')
-  const cases: { name: string; columns: string[]; rows: any[][]; want: string }[] = JSON.parse(readFileSync(file, 'utf8'))
+  const cases: { name: string; columns: string[]; types?: string[]; rows: any[][]; want: string }[] = JSON.parse(readFileSync(file, 'utf8'))
   it('has the shared cases', () => expect(cases.length).toBeGreaterThan(10))
   for (const c of cases) {
-    it(c.name, () => expect(bestView(describeShape(c.columns, c.rows))).toBe(c.want))
+    it(c.name, () => expect(bestView(describeShape(c.columns, c.rows, c.types))).toBe(c.want))
   }
 
   it('describes a long shape, and only that', () => {

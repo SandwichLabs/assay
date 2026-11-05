@@ -296,9 +296,12 @@ always have, or several. A result is read as several series when it is:
 
 - **Long**: `(label, series, value)`, what `GROUP BY label, series` returns. Three
   columns with a text second column and a numeric third, whatever the first holds
-  (a year is fine), or any width with a column named `series` (then `value`/`total`
-  and `label`/`name` columns are used if present, else the last numeric column and
-  the first of the rest).
+  (a year is fine), where some label carries two or more series. A one-to-one text
+  column is an attribute, not a series: `(day, top_product, sales)` and
+  `(customer_id, name, total)` stay one series, and a column named `label` or
+  `name` always keeps the result single. A column named `series` makes any width
+  long (then `value`/`total` and `label`/`name` columns are used if present, else
+  the last numeric column and the first of the rest).
 - **Wide**: a label column, then two or more numeric columns, one series per
   column, named by the column. A column named `value` or `total` keeps the
   one-series reading it has always had. Wide series share one value scale, so
@@ -312,7 +315,13 @@ and LINE views pick this up from a query result without any component.
 - **Colours and legend.** Series are coloured by position from the theme's
   `chart.1` to `chart.6` roles (`--slaw-chart-N`), never by the page; `color` is
   ignored for several series. A legend names them. Series order is first-seen
-  order, so `ORDER BY` decides who gets which colour.
+  order, so `ORDER BY` decides who gets which colour. Labels run in the order the
+  series saw them, merged: `ORDER BY rep, month` still runs January to December
+  even if the first rep has no January (all-numeric labels sort by value), but
+  `ORDER BY` the label first is the simplest way to be sure.
+- **Line names.** Each line is also named at its right end, pushed apart so the
+  names do not overlap, so the lines are not told apart by colour alone; the legend
+  stays.
 - **Shared axes.** One value scale for every series (the zero rule above applies
   to all of them together), and one x axis: the union of the series' labels. A date
   or timestamp label set is a time axis, so a series that starts later or skips
@@ -330,8 +339,9 @@ and LINE views pick this up from a query result without any component.
 - **Grouped bars.** A `barChart` with several series draws one group per label, one
   bar per series, on one scale; each bar shows its value, and a group's hover text
   and accessible name list all of them. A grouped bar is not one result row, so
-  `drill` is off for it.
-- **Suggested view.** A `(label, series, value)` result with two to six series, at
+  `drill` is off for it (a note says so where a `drill` was declared), and so it is
+  for any bar made of summed repeated rows.
+- **Suggested view.** A `(label, series, value)` result (as above) with two to six series, at
   least two labels, no repeated pair and at most 200 rows is suggested as LINE when
   the label column's name reads as a sequence (`date`, `month`, `year` ...) and as
   BARS otherwise (up to 25 labels), else TABLE. The Go side (`bestViewFor`) and the

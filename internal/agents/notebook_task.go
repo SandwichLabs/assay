@@ -69,9 +69,11 @@ func (h *Handler) handlePreviewQuery(ctx context.Context, req *Request) *Respons
 	}
 
 	colNames := make([]string, len(rs.Columns))
+	colTypes := make([]string, len(rs.Columns))
 	columns := make([]map[string]any, len(rs.Columns))
 	for i, c := range rs.Columns {
 		colNames[i] = c.Name
+		colTypes[i] = c.Type
 		columns[i] = map[string]any{"name": c.Name, "type": c.Type}
 	}
 
@@ -83,7 +85,7 @@ func (h *Handler) handlePreviewQuery(ctx context.Context, req *Request) *Respons
 	// judge — the capped set is judged, and rowCount/truncated say so
 	// honestly rather than implying a view verdict computed on data that was
 	// never actually fetched.
-	shape := describeViewShape(colNames, rs.Rows)
+	shape := describeViewShape(colNames, rs.Rows, colTypes)
 	suggestedView := bestViewFor(shape)
 	viewFit := map[string]any{}
 	for _, v := range notebooks.Views {

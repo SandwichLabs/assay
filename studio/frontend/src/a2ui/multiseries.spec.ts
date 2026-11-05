@@ -82,7 +82,7 @@ describe('toMultiSeries: values', () => {
   it('reads nulls, blanks and text values as gaps, and numeric strings as numbers', () => {
     const m = toMultiSeries({
       columns: ['m', 's', 'v'],
-      rows: [['Jan', 'A', '12.5'], ['Feb', 'A', null], ['Mar', 'A', ''], ['Apr', 'A', 'n/a'], ['May', 'A', true]],
+      rows: [['Jan', 'A', '12.5'], ['Feb', 'A', null], ['Mar', 'A', ''], ['Apr', 'A', 'n/a'], ['May', 'A', true], ['Jan', 'B', 1]],
     })
     expect(m.series[0].values).toEqual([12.5, null, null, null, null])
   })
@@ -182,9 +182,49 @@ describe('fromPoints / isSeriesShape', () => {
   })
   it('says when a result has to go to the chart whole', () => {
     expect(isSeriesShape({ columns: ['m', 's', 'v'], rows: [['Jan', 'A', 1], ['Jan', 'B', 2]] })).toBe(true)
-    // one series left by a filter is still read by its series and value columns
-    expect(isSeriesShape({ columns: ['m', 's', 'v'], rows: [['Jan', 'A', 1], ['Feb', 'A', 2]] })).toBe(true)
+    // a one-to-one label/text pairing is an attribute, not a series
+    expect(isSeriesShape({ columns: ['m', 's', 'v'], rows: [['Jan', 'A', 1], ['Feb', 'A', 2]] })).toBe(false)
+    // ...unless the column says it is the series
+    expect(isSeriesShape({ columns: ['m', 'series', 'v'], rows: [['Jan', 'A', 1], ['Feb', 'A', 2]] })).toBe(true)
     expect(isSeriesShape({ columns: ['m', 'a', 'b'], rows: [['Jan', 1, 2]] })).toBe(true)
     expect(isSeriesShape({ columns: ['m', 'v'], rows: [['Jan', 1]] })).toBe(false)
+  })
+})
+
+describe('three columns that are not (label, series, value)', () => {
+  it('(id, name, total) is one series labelled by name', () => {
+    const m = toMultiSeries({ columns: ['customer_id', 'name', 'total'], rows: [[1, 'Ada', 5], [2, 'Bo', 7], [3, 'Cy', 2]] })
+    expect(m.shape).toBe('single')
+    expect(m.labels).toEqual(['Ada', 'Bo', 'Cy'])
+    expect(m.series[0]).toEqual({ name: 'total', values: [5, 7, 2] })
+  })
+  it('(day, top_product, sales) is one series by day, charted by the numeric column', () => {
+    const m = toMultiSeries({ columns: ['day', 'top_product', 'sales'], rows: [['2025-01-01', 'A', 5], ['2025-01-02', 'B', 7]] })
+    expect(m.shape).toBe('single')
+    expect(m.labels).toEqual(['2025-01-01', '2025-01-02'])
+    expect(m.series[0].values).toEqual([5, 7])
+  })
+  it('a label that carries two series is long, even when other labels carry one', () => {
+    const m = toMultiSeries({ columns: ['day', 'channel', 'units'], rows: [['a', 'web', 1], ['a', 'store', 2], ['b', 'web', 3]] })
+    expect(m.shape).toBe('long')
+  })
+  it('a column named label or name keeps the result single', () => {
+    expect(toMultiSeries({ columns: ['label', 'rep', 'v'], rows: [['a', 'x', 1], ['a', 'y', 2]] }).shape).toBe('single')
+  })
+})
+
+describe('label order and merging', () => {
+  it('keeps January first when the first series lacks it (ORDER BY rep, month)', () => {
+    const rows: any[][] = [['Feb', 'Ana', 2], ['Mar', 'Ana', 3], ['Jan', 'Ben', 1], ['Feb', 'Ben', 2], ['Mar', 'Ben', 3]]
+    expect(toMultiSeries({ columns: ['m', 's', 'v'], rows }).labels).toEqual(['Jan', 'Feb', 'Mar'])
+  })
+  it('sorts all-numeric labels by value', () => {
+    const rows: any[][] = [[10, 'A', 1], [9, 'A', 2], [10, 'B', 3], [9, 'B', 4]]
+    expect(toMultiSeries({ columns: ['n', 's', 'v'], rows }).labels).toEqual(['9', '10'])
+  })
+  it('says when pairs were summed', () => {
+    expect(toMultiSeries({ columns: ['m', 's', 'v'], rows: [['a', 'A', 1], ['a', 'A', 2], ['a', 'B', 1]] }).merged).toBe(true)
+    expect(toMultiSeries({ columns: ['m', 's', 'v'], rows: [['a', 'A', 1], ['a', 'B', 2]] }).merged).toBe(false)
+    expect(toMultiSeries({ columns: ['m', 'series', 'v'], rows: [['a', 'A', 1], ['a', 'A', 2]] }).merged).toBe(true)
   })
 })
