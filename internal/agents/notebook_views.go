@@ -22,6 +22,18 @@ type viewShape struct {
 	numeric       map[string]bool
 	rowCount      int
 	firstDistinct bool
+	// long is set for a (label, series, value) result; see longViewShape.
+	long *longViewShape
+}
+
+// longViewShape describes a (label, series, value) result: exactly three
+// columns, a non-numeric second and a numeric third, what a GROUP BY label,
+// series returns. Mirrors LongShape in notebookViews.ts.
+type longViewShape struct {
+	labels int
+	series int
+	// unique is true when no (label, series) pair repeats.
+	unique bool
 }
 
 // isNumericValue judges a value from a Go-side result set (preview_query,
@@ -41,14 +53,18 @@ func isNumericValue(v any) bool {
 	}
 }
 
-// describeViewShape judges a shape from the rows themselves (what the
-// renderer will actually meet), not declared column types — matching
+// describeViewShape judges a shape: from the declared column types when it has
+// them (types[i] non-empty), else from the first non-null value, matching
 // describeShape in notebookViews.ts.
-func describeViewShape(cols []string, rows [][]any) viewShape {
+func describeViewShape(cols []string, rows [][]any, types []string) viewShape {
 	numeric := make(map[string]bool, len(cols))
 	for ci, c := range cols {
+		if ci < len(types) && types[ci] != "" {
+			numeric[c] = isNumericTypeName(types[ci])
+			continue
+		}
 		for _, r := range rows {
-			if ci >= len(r) || r[ci] == nil {
+			if cellAt(r, ci) == nil {
 				continue
 			}
 			numeric[c] = isNumericValue(r[ci])
@@ -58,21 +74,89 @@ func describeViewShape(cols []string, rows [][]any) viewShape {
 	seen := make(map[string]bool, len(rows))
 	firstDistinct := len(rows) > 0
 	for _, r := range rows {
-		var key string
-		if len(r) > 0 {
-			key = toDisplayString(r[0])
-		}
+		key := toDisplayString(cellAt(r, 0))
 		if seen[key] {
 			firstDistinct = false
 		}
 		seen[key] = true
 	}
-	return viewShape{cols: cols, numeric: numeric, rowCount: len(rows), firstDistinct: firstDistinct}
+	return viewShape{cols: cols, numeric: numeric, rowCount: len(rows), firstDistinct: firstDistinct, long: describeLongShape(cols, numeric, rows)}
+}
+
+// cellAt is r[i], or nil when the row is shorter (a missing cell is a null).
+func cellAt(r []any, i int) any {
+	if i < len(r) {
+		return r[i]
+	}
+	return nil
+}
+
+// isNumericTypeName mirrors typeFamily() in lib/formatCell.ts for the families
+// a chart can plot: integer, decimal and float DuckDB types.
+func isNumericTypeName(t string) bool {
+	t = strings.ToUpper(t)
+	switch {
+	case strings.HasSuffix(t, "]"), strings.HasPrefix(t, "STRUCT"), strings.HasPrefix(t, "MAP"), strings.HasPrefix(t, "UNION"):
+		return false
+	case strings.HasPrefix(t, "DATE"), strings.HasPrefix(t, "TIME"), strings.HasPrefix(t, "INTERVAL"):
+		return false
+	case strings.HasPrefix(t, "DECIMAL"), strings.HasPrefix(t, "NUMERIC"), strings.Contains(t, "INT"):
+		return true
+	}
+	return t == "DOUBLE" || t == "FLOAT" || t == "REAL"
+}
+
+// describeLongShape returns the (label, series, value) description of a
+// result, or nil when it is not one. Same rule as isLongTriple() in
+// a2ui/multiseries.ts and longShape() in notebookViews.ts: three columns, a
+// text second and a numeric third. A second column named series settles it; a
+// second column named label or name keeps the result single; otherwise some
+// label must carry two or more series and some series must appear at two or
+// more labels (a one-to-one text column, or one a single tie breaks, is an
+// attribute, not a series). One label with two or more series, none repeated,
+// is long too.
+func describeLongShape(cols []string, numeric map[string]bool, rows [][]any) *longViewShape {
+	if len(cols) != 3 || numeric[cols[1]] || !numeric[cols[2]] {
+		return nil
+	}
+	if !strings.EqualFold(cols[1], "series") {
+		if strings.EqualFold(cols[1], "label") || strings.EqualFold(cols[1], "name") {
+			return nil
+		}
+		perLabel, perSeries := map[string]map[string]bool{}, map[string]map[string]bool{}
+		multiSeries, multiLabel := false, false
+		for _, r := range rows {
+			l, sr := toDisplayString(cellAt(r, 0)), toDisplayString(cellAt(r, 1))
+			if perLabel[l] == nil {
+				perLabel[l] = map[string]bool{}
+			}
+			if perSeries[sr] == nil {
+				perSeries[sr] = map[string]bool{}
+			}
+			perLabel[l][sr], perSeries[sr][l] = true, true
+			multiSeries = multiSeries || len(perLabel[l]) >= 2
+			multiLabel = multiLabel || len(perSeries[sr]) >= 2
+		}
+		if len(perLabel) == 1 {
+			// one label (`WHERE month = $month`): long when every row is a distinct series
+			if len(perSeries) < 2 || len(perSeries) != len(rows) {
+				return nil
+			}
+		} else if !multiSeries || !multiLabel {
+			return nil
+		}
+	}
+	labels, series, pairs := map[string]bool{}, map[string]bool{}, map[[2]string]bool{}
+	for _, r := range rows {
+		l, sr := toDisplayString(cellAt(r, 0)), toDisplayString(cellAt(r, 1))
+		labels[l], series[sr], pairs[[2]string{l, sr}] = true, true, true
+	}
+	return &longViewShape{labels: len(labels), series: len(series), unique: len(pairs) == len(rows)}
 }
 
 func toDisplayString(v any) string {
 	if v == nil {
-		return "<nil>"
+		return ""
 	}
 	if s, ok := v.(string); ok {
 		return s
@@ -168,6 +252,14 @@ func looksOrderedName(name string) bool {
 
 const chartableRows = 25
 
+// A (label, series, value) result is charted by bestViewFor only up to this
+// many series and rows (the chart itself folds series past six into "Other").
+// Mirrors MAX_LONG_SERIES and MAX_LONG_ROWS in notebookViews.ts.
+const (
+	maxLongSeries = 6
+	maxLongRows   = 200
+)
+
 // bestViewFor is the conservative "which view suits this shape" pick — same
 // rules as bestView() in notebookViews.ts. Prefers table whenever a chart
 // would be a guess.
@@ -178,6 +270,18 @@ func bestViewFor(shape viewShape) string {
 				return "stat"
 			}
 		}
+	}
+	// (label, series, value): a line when the label reads as a sequence, else
+	// grouped bars. Two to six series, at least two labels, no repeated pair.
+	if l := shape.long; l != nil && l.unique && l.series >= 2 && l.series <= maxLongSeries &&
+		l.labels >= 2 && shape.rowCount <= maxLongRows {
+		if looksOrderedName(shape.cols[0]) {
+			return "line"
+		}
+		if l.labels <= chartableRows {
+			return "bar"
+		}
+		return "table"
 	}
 	if len(shape.cols) == 2 && shape.numeric[shape.cols[1]] && shape.rowCount > 1 &&
 		shape.rowCount <= chartableRows && shape.firstDistinct {

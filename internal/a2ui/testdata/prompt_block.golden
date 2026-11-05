@@ -18,8 +18,8 @@ Types and their fields (optional unless marked required):
   statRow      —
   stat         label(required), color, connection, detail, sql, value
   table        columns(string[]), connection, label, rows(array of cell arrays), sql
-  barChart     bars([{label, value}]), color, connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), sql
-  lineChart    color, connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), points([{label, value}]), sql, zero
+  barChart     bars([{label, value}]), color, columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
+  lineChart    color, columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), points([{label, value}]), rows(array of cell arrays), series([{name, points}]), sql, zero
   areaChart    columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql, zero
   columnChart  columns(string[]), connection, label, mode(stacked|grouped), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sorted, sql
   ringChart    columns(string[]), connection, label, max(number > 0), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
@@ -34,17 +34,16 @@ Data binding: stat, table, barChart, lineChart, areaChart, ringChart, columnChar
 a "sql" field. "sql" bindings are READ-ONLY queries over this workspace's
 connections — no INSERT/UPDATE/DELETE/DDL/multiple statements in ANY sandbox mode
 (the query re-runs on every render, so a write would fire each time); files only
-by a literal absolute path inside data/, as for run_query. Prefer inline data in present_data: you
-already have the values and the reply is a one-off, so there is nothing for a
-live query to buy you.
+by a literal absolute path inside data/, as for run_query. Prefer inline data in
+present_data: you have the values and the reply is a one-off, so a live query buys nothing.
 
-A data-bound component may also set "connection" (a connection name, as accepted by
-introspect_schema) to run its "sql" with that connection as the default for
-unqualified table names; omit it for the workspace default.
+A data-bound component may set "connection" (a connection name, as in introspect_schema)
+as the default catalog for its "sql"'s unqualified table names; omit it for the workspace default.
 
 SQL result shape: barChart and lineChart want a label column then a numeric
-column (SELECT school, AVG(score) ...). stat wants a single number in the first
-column of the first row. table renders whatever columns come back.
+column (SELECT school, AVG(score) ...); several series: (label, series, value) or a
+numeric column each, 6 drawn (bars sum the rest into Other). stat wants a single number
+in the first column of the first row. table renders whatever columns come back.
 The other charts take inline "columns" + "rows" in exactly the shape their
 sql returns:
   areaChart, columnChart, radarChart: a label column, then one numeric column per
@@ -59,7 +58,5 @@ Every chart (barChart, lineChart, areaChart, ringChart, columnChart, radarChart,
 easing one of "spring", "expo", "cinema", "steps", "custom", "none" ("custom" uses stiffness/damping/mass),
 speed 0.25-4, stagger true|false. Omit motion for the default spring.
 
-Do not add a heading component that just repeats the page's own "title" — the
-title already renders above the components, so a duplicate heading is redundant
-and, in the narrow panel this renders in, competes with it for space.
+Do not add a heading that repeats the page's "title"; it already renders above.
 </a2ui>

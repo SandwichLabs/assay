@@ -427,7 +427,7 @@ func TestBestViewFor_Parity(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			shape := describeViewShape(c.cols, c.rows)
+			shape := describeViewShape(c.cols, c.rows, nil)
 			assert.Equal(t, c.want, bestViewFor(shape))
 		})
 	}
@@ -444,15 +444,15 @@ func manyRows(n int) [][]any {
 }
 
 func TestCheckViewFit_Parity(t *testing.T) {
-	textOnly := describeViewShape([]string{"name"}, [][]any{{"Ada"}, {"Bo"}})
+	textOnly := describeViewShape([]string{"name"}, [][]any{{"Ada"}, {"Bo"}}, nil)
 	assert.False(t, checkViewFit("bar", textOnly).OK)
 	assert.True(t, checkViewFit("table", textOnly).OK)
 
-	oneCol := describeViewShape([]string{"n"}, [][]any{{1}})
+	oneCol := describeViewShape([]string{"n"}, [][]any{{1}}, nil)
 	assert.True(t, checkViewFit("stat", oneCol).OK)
 	assert.False(t, checkViewFit("bar", oneCol).OK, "bar needs at least two columns")
 
-	empty := describeViewShape([]string{}, nil)
+	empty := describeViewShape([]string{}, nil, nil)
 	assert.False(t, checkViewFit("table", empty).OK)
 }
 
@@ -468,7 +468,7 @@ func TestBestViewFor_JSONNumberDecimal(t *testing.T) {
 		{"West", json.Number("2000.00")},
 		{"North", json.Number("999.99")},
 	}
-	shape := describeViewShape(cols, rows)
+	shape := describeViewShape(cols, rows, nil)
 	assert.True(t, shape.numeric["revenue"], "a json.Number column must be judged numeric")
 	assert.Equal(t, "bar", bestViewFor(shape))
 	assert.True(t, checkViewFit("bar", shape).OK)
@@ -478,23 +478,23 @@ func TestBestViewFor_JSONNumberDecimal(t *testing.T) {
 // radar's axis minimum and the rings' maximum); sankey and heatmap want three
 // columns with a numeric third.
 func TestCheckViewFit_KineticViews(t *testing.T) {
-	series := describeViewShape([]string{"region", "a", "b"}, [][]any{{"x", 1, 2}, {"y", 3, 4}})
+	series := describeViewShape([]string{"region", "a", "b"}, [][]any{{"x", 1, 2}, {"y", 3, 4}}, nil)
 	for _, v := range []string{"area", "columns", "rings"} {
 		assert.True(t, checkViewFit(v, series).OK, v)
 	}
 	assert.False(t, checkViewFit("radar", series).OK, "radar needs three axes")
 
-	textOnly := describeViewShape([]string{"name"}, [][]any{{"Ada"}})
+	textOnly := describeViewShape([]string{"name"}, [][]any{{"Ada"}}, nil)
 	assert.False(t, checkViewFit("area", textOnly).OK)
 
-	manyRows := describeViewShape([]string{"k", "v"}, seq(7))
+	manyRows := describeViewShape([]string{"k", "v"}, seq(7), nil)
 	assert.False(t, checkViewFit("rings", manyRows).OK)
 	assert.True(t, checkViewFit("radar", manyRows).OK)
 
-	flows := describeViewShape([]string{"src", "dst", "w"}, [][]any{{"a", "b", 3}})
+	flows := describeViewShape([]string{"src", "dst", "w"}, [][]any{{"a", "b", 3}}, nil)
 	assert.True(t, checkViewFit("sankey", flows).OK)
 	assert.True(t, checkViewFit("heatmap", flows).OK)
-	textWeight := describeViewShape([]string{"src", "dst", "note"}, [][]any{{"a", "b", "c"}})
+	textWeight := describeViewShape([]string{"src", "dst", "note"}, [][]any{{"a", "b", "c"}}, nil)
 	assert.False(t, checkViewFit("sankey", textWeight).OK, "third column must be numeric")
 	assert.False(t, checkViewFit("heatmap", manyRows).OK, "needs three columns")
 

@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describeShape, viewFit, bestView } from './notebookViews'
 
 describe('describeShape', () => {
@@ -127,5 +129,34 @@ describe('viewFit — KINETIC chart views (mirrors internal/agents)', () => {
   })
   it('bestView never guesses a KINETIC chart', () => {
     expect(bestView(describeShape(['src', 'dst', 'w'], [['a', 'b', 3]]))).toBe('table')
+  })
+})
+
+// internal/agents/testdata/long_shape_views.json is shared with the Go port
+// (internal/agents/notebook_views_long_test.go): both must pick the same view
+// for a (label, series, value) result.
+describe('bestView — (label, series, value) parity with internal/agents', () => {
+  const file = resolve(__dirname, '../../../../internal/agents/testdata/long_shape_views.json')
+  const cases: { name: string; columns: string[]; types?: string[]; rows: any[][]; want: string }[] = JSON.parse(readFileSync(file, 'utf8'))
+  it('has the shared cases', () => expect(cases.length).toBeGreaterThan(10))
+  for (const c of cases) {
+    it(c.name, () => expect(bestView(describeShape(c.columns, c.rows, c.types))).toBe(c.want))
+  }
+
+  it('describes a long shape, and only that', () => {
+    const s = describeShape(['month', 'rep', 'revenue'], [['Jan', 'Ana', 1], ['Jan', 'Ben', 2], ['Feb', 'Ana', 3]])
+    expect(s.long).toEqual({ labels: 2, series: 2, unique: true })
+    expect(describeShape(['a', 'b'], [['x', 1]]).long).toBeUndefined()
+    expect(describeShape(['a', 'b', 'c'], [['x', 1, 2]]).long).toBeUndefined()
+  })
+
+  it('one label with distinct series is long, a repeated pair is not', () => {
+    expect(describeShape(['m', 'rep', 'v'], [['Jan', 'A', 1], ['Jan', 'B', 2]]).long).toEqual({ labels: 1, series: 2, unique: true })
+    expect(describeShape(['m', 'rep', 'v'], [['Jan', 'A', 1], ['Jan', 'A', 2], ['Jan', 'B', 3]]).long).toBeUndefined()
+  })
+
+  it('every view that charts a long result fits it', () => {
+    const s = describeShape(['month', 'rep', 'revenue'], [['Jan', 'Ana', 1], ['Jan', 'Ben', 2]])
+    for (const v of ['bar', 'line', 'table'] as const) expect(viewFit(v, s).ok).toBe(true)
   })
 })

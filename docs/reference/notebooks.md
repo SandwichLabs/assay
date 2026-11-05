@@ -216,8 +216,8 @@ a validation error, not a silently-ignored one.
 | `stat` | `label` | `value`, `sql`, `connection`, `detail`, `color` |
 | `statRow` | — | — (a row container for `stat` children) |
 | `table` | — | `columns`, `rows`, `sql`, `connection`, `label` |
-| `barChart` | — | `bars`, `sql`, `connection`, `label`, `color`, `motion` |
-| `lineChart` | — | `points`, `sql`, `connection`, `label`, `color`, `zero`, `motion` |
+| `barChart` | — | `bars`, `columns`, `rows`, `sql`, `connection`, `label`, `color`, `motion` |
+| `lineChart` | — | `points`, `series`, `columns`, `rows`, `sql`, `connection`, `label`, `color`, `zero`, `motion` |
 | `areaChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `zero`, `motion` |
 | `columnChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `mode`, `sorted`, `motion` |
 | `ringChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `max`, `motion` |
@@ -285,9 +285,75 @@ with the shared number formatter.
   (`14:00`, `14:00:05`), days (`Apr 3`), weeks (Mondays), months (`Apr '25`), quarters
   (`Q2 '25`) or years (`2025`). Any other label is a category, spaced evenly.
 - **Reading values.** Hover a `lineChart` or `areaChart`, or focus it and use
-  Left, Right, Home and End, to read a point's label and value (a tooltip, plus
-  a live region for screen readers). Bars show their value beside them and
-  columns above them.
+  Left, Right, Home and End, to read the label and every series' value there (a
+  tooltip, plus a live region for screen readers). Bars show their value beside
+  them and columns above them.
+
+### Several series on a line or bar chart
+
+`lineChart` and `barChart` draw one series from `(label, value)`, as they
+always have, or several. A result is read as several series when it is:
+
+- **Long**: `(label, series, value)`, what `GROUP BY label, series` returns. Three
+  columns with a text second column and a numeric third, whatever the first holds
+  (a year is fine), where some label carries two or more series and some series
+  appears at two or more labels. A text column that does not behave like that is an
+  attribute, not a series: `(day, top_product, sales)`, even with one tie, and
+  `(customer_id, name, total)` stay one series, and a *second* column named `label`
+  or `name` always keeps the result single (a first column named `label` is the
+  usual `SELECT month AS label, rep, value` and is fine). A result filtered to one
+  label (`WHERE month = $month`) is long when every row is a different series. To
+  force the long reading whatever the data, name the second column `series`. A column named `series` makes any width
+  long (then `value`/`total` and `label`/`name` columns are used if present, else
+  the last numeric column and the first of the rest).
+- **Wide**: a label column, then two or more numeric columns, one series per
+  column, named by the column. A column named `value` or `total` keeps the
+  one-series reading it has always had. Wide series share one value scale, so
+  only put measures in the same unit side by side.
+
+A `lineChart` also takes inline `series: [{name, points: [{label, value}]}]` (at
+most 12 series of 500 points; names unique, at most 80 characters). `columns` +
+`rows` carry the same two shapes inline, as on `areaChart`. A notebook query cell's BARS
+and LINE views pick this up from a query result without any component.
+
+- **Colours and legend.** Series are coloured by position from the theme's
+  `chart.1` to `chart.6` roles (`--slaw-chart-N`), never by the page; `color` is
+  ignored for several series. A legend names them. Series order is first-seen
+  order, so `ORDER BY` decides who gets which colour. Labels run in the order the
+  series saw them, merged: `ORDER BY rep, month` still runs January to December
+  even if the first rep has no January (all-numeric labels sort by value), but
+  `ORDER BY` the label first is the simplest way to be sure.
+- **Line names.** Each line is also named at its right end, pushed apart so the
+  names do not overlap, so the lines are not told apart by colour alone; the legend
+  stays.
+- **Shared axes.** One value scale for every series (the zero rule above applies
+  to all of them together), and one x axis: the union of the series' labels. A date
+  or timestamp label set is a time axis, so a series that starts later or skips
+  months sits where its dates say.
+- **Gaps are not zeros.** A series with no row (or a null value) at a label has no
+  point there: a line breaks, a grouped bar is absent, and the tooltip leaves the
+  series out. A repeated `(label, series)` pair is summed.
+- **More than six series.** A `barChart` keeps the five with the largest total
+  magnitude (ties in original order), in their original order, and sums every other
+  series, including one already named `Other`, per label into a sixth, `Other`; the
+  legend says how many it holds. A `lineChart` draws the six largest and nothing
+  else: it never invents an `Other` line (a sum of unrelated lines is a line
+  nobody asked for, and is wrong for rates, averages and prices). The legend adds
+  "+N more not shown; filter in SQL", the hidden names are in its hover text and
+  the chart's accessible name, and a real series called `Other` is ranked like any
+  other. To control which lines appear, filter or rank in SQL (`WHERE rep IN ...`).
+- **Grouped bars.** A `barChart` with several series draws one group per label, one
+  bar per series, on one scale; each bar shows its value, and a group's hover text
+  and accessible name list all of them. A grouped bar is not one result row, so
+  `drill` is off for it (a note says so where a `drill` was declared), and so it is
+  for any bar made of summed repeated rows.
+- **Suggested view.** A `(label, series, value)` result (as above) with two to six series, at
+  least two labels, no repeated pair and at most 200 rows is suggested as LINE when
+  the label column's name reads as a sequence (`date`, `month`, `year` ...) and as
+  BARS otherwise (up to 25 labels), else TABLE. The Go side (`bestViewFor`) and the
+  TypeScript side (`bestView`) are tested against one fixture,
+  `internal/agents/testdata/long_shape_views.json`. A wide result is never
+  suggested, only drawn when the view is chosen.
 
 ### KINETIC motion charts
 

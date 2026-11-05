@@ -26,8 +26,8 @@ var minChartColumns = map[string]int{
 
 // chartShape is what the positional columns of a chart mean, for the message.
 var chartShape = map[string]string{
-	"stat": "the number in the first column", "barChart": "a label column, then a numeric column",
-	"lineChart": "a label column, then a numeric column", "areaChart": "a label column, then a numeric column per series",
+	"stat": "the number in the first column", "barChart": "a label column, then a numeric column (or label, series, value)",
+	"lineChart": "a label column, then a numeric column (or label, series, value)", "areaChart": "a label column, then a numeric column per series",
 	"columnChart": "a label column, then a numeric column per series", "radarChart": "a label column, then a numeric column per series",
 	"ringChart": "a label column, then a value column", "streamChart": "a value (optionally after a label column)",
 	"heatmap": "a row label, a column label, then a value", "sankeyChart": "source, target, then a weight",

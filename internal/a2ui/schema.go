@@ -76,6 +76,7 @@ const (
 	kindEnum
 	kindArray
 	kindPoint
+	kindSeriesList
 	kindRows
 	kindMotion
 	kindRange
@@ -107,6 +108,7 @@ var (
 	layoutSpec     = fieldSpec{kind: kindEnum, values: []any{"row", "column", "grid"}}
 	strArraySpec   = fieldSpec{kind: kindArray, of: &strSpec}
 	pointArraySpec = fieldSpec{kind: kindArray, of: &fieldSpec{kind: kindPoint}}
+	seriesListSpec = fieldSpec{kind: kindSeriesList}
 	rowsSpec       = fieldSpec{kind: kindRows}
 	motionSpec     = fieldSpec{kind: kindMotion}
 	maxSpec        = fieldSpec{kind: kindRange, min: 1e-9, max: math.MaxFloat64}
@@ -154,8 +156,8 @@ var Components = map[string]componentSpec{
 	"stat":        {req: map[string]fieldSpec{"label": strSpec}, opt: map[string]fieldSpec{"value": strOrNumSpec, "sql": strSpec, "connection": connSpec, "detail": strSpec, "color": colorSpec}},
 	"statRow":     {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{}},
 	"table":       {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "connection": connSpec, "label": strSpec}},
-	"barChart":    {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"bars": pointArraySpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec, "motion": motionSpec}},
-	"lineChart":   {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"points": pointArraySpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec, "zero": boolSpec, "motion": motionSpec}},
+	"barChart":    {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"bars": pointArraySpec, "columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec, "motion": motionSpec}},
+	"lineChart":   {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"points": pointArraySpec, "series": seriesListSpec, "columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec, "zero": boolSpec, "motion": motionSpec}},
 	"list":        {req: map[string]fieldSpec{"items": strArraySpec}, opt: map[string]fieldSpec{"label": strSpec, "color": colorSpec}},
 	"code":        {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"language": strSpec}},
 	"callout":     {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"icon": strSpec, "color": colorSpec}},
@@ -302,6 +304,8 @@ func checkValue(spec fieldSpec, value any, path string, errs *[]string) {
 		if !isFiniteNumber(obj["value"]) {
 			*errs = append(*errs, fmt.Sprintf("%s.value: expected a finite number, got %s", path, typeName(obj["value"])))
 		}
+	case kindSeriesList:
+		checkSeriesList(value, path, errs)
 	case kindMotion:
 		checkMotion(value, path, errs)
 	case kindRange:
@@ -487,6 +491,9 @@ func validateComponent(comp any, index int, vc *ViewContext, errs *[]string) (id
 		}
 	}
 	checkUnknownFields(obj, spec, typeVal, path, vc, errs)
+	if typeVal == "lineChart" || typeVal == "barChart" {
+		checkOneDataSource(obj, path, errs)
+	}
 	if vc != nil && typeVal == "pivot" {
 		checkPivotColumns(obj, path, errs)
 	}

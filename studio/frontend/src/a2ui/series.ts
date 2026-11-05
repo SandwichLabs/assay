@@ -30,7 +30,7 @@ export function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
-function isNumeric(v: unknown): boolean {
+export function isNumeric(v: unknown): boolean {
   if (typeof v === 'number') return Number.isFinite(v)
   // A HUGEINT/DECIMAL past JS's safe range crosses the wire as a numeric string.
   return typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))

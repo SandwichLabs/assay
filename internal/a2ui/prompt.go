@@ -67,6 +67,8 @@ func hintInner(spec fieldSpec) string {
 			return "[{label, value}]"
 		}
 		return "string[]"
+	case kindSeriesList:
+		return "[{name, points}]"
 	case kindRows:
 		return "array of cell arrays"
 	case kindMotion:
@@ -155,15 +157,14 @@ func PromptBlock() string {
 	b.WriteString("a \"sql\" field. \"sql\" bindings are READ-ONLY queries over this workspace's\n")
 	b.WriteString("connections — no INSERT/UPDATE/DELETE/DDL/multiple statements in ANY sandbox mode\n")
 	b.WriteString("(the query re-runs on every render, so a write would fire each time); files only\n")
-	b.WriteString("by a literal absolute path inside data/, as for run_query. Prefer inline data in present_data: you\n")
-	b.WriteString("already have the values and the reply is a one-off, so there is nothing for a\n")
-	b.WriteString("live query to buy you.\n\n")
-	b.WriteString("A data-bound component may also set \"connection\" (a connection name, as accepted by\n")
-	b.WriteString("introspect_schema) to run its \"sql\" with that connection as the default for\n")
-	b.WriteString("unqualified table names; omit it for the workspace default.\n\n")
+	b.WriteString("by a literal absolute path inside data/, as for run_query. Prefer inline data in\n")
+	b.WriteString("present_data: you have the values and the reply is a one-off, so a live query buys nothing.\n\n")
+	b.WriteString("A data-bound component may set \"connection\" (a connection name, as in introspect_schema)\n")
+	b.WriteString("as the default catalog for its \"sql\"'s unqualified table names; omit it for the workspace default.\n\n")
 	b.WriteString("SQL result shape: barChart and lineChart want a label column then a numeric\n")
-	b.WriteString("column (SELECT school, AVG(score) ...). stat wants a single number in the first\n")
-	b.WriteString("column of the first row. table renders whatever columns come back.\n")
+	b.WriteString("column (SELECT school, AVG(score) ...); several series: (label, series, value) or a\n")
+	b.WriteString("numeric column each, 6 drawn (bars sum the rest into Other). stat wants a single number\n")
+	b.WriteString("in the first column of the first row. table renders whatever columns come back.\n")
 	b.WriteString("The other charts take inline \"columns\" + \"rows\" in exactly the shape their\n")
 	b.WriteString("sql returns:\n")
 	b.WriteString("  areaChart, columnChart, radarChart: a label column, then one numeric column per\n")
@@ -176,9 +177,7 @@ func PromptBlock() string {
 	b.WriteString("Every chart (" + strings.Join(Charts, ", ") + ") animates in; \"motion\" tunes it:\n")
 	b.WriteString("easing one of " + quotedList(Easings) + " (\"custom\" uses stiffness/damping/mass),\n")
 	b.WriteString("speed 0.25-4, stagger true|false. Omit motion for the default spring.\n\n")
-	b.WriteString("Do not add a heading component that just repeats the page's own \"title\" — the\n")
-	b.WriteString("title already renders above the components, so a duplicate heading is redundant\n")
-	b.WriteString("and, in the narrow panel this renders in, competes with it for space.\n")
+	b.WriteString("Do not add a heading that repeats the page's \"title\"; it already renders above.\n")
 	b.WriteString("</a2ui>")
 	return b.String()
 }
