@@ -301,7 +301,9 @@ always have, or several. A result is read as several series when it is:
   attribute, not a series: `(day, top_product, sales)`, even with one tie, and
   `(customer_id, name, total)` stay one series, and a *second* column named `label`
   or `name` always keeps the result single (a first column named `label` is the
-  usual `SELECT month AS label, rep, value` and is fine). A column named `series` makes any width
+  usual `SELECT month AS label, rep, value` and is fine). A result filtered to one
+  label (`WHERE month = $month`) is long when every row is a different series. To
+  force the long reading whatever the data, name the second column `series`. A column named `series` makes any width
   long (then `value`/`total` and `label`/`name` columns are used if present, else
   the last numeric column and the first of the rest).
 - **Wide**: a label column, then two or more numeric columns, one series per

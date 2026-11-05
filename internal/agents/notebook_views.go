@@ -113,7 +113,8 @@ func isNumericTypeName(t string) bool {
 // second column named label or name keeps the result single; otherwise some
 // label must carry two or more series and some series must appear at two or
 // more labels (a one-to-one text column, or one a single tie breaks, is an
-// attribute, not a series).
+// attribute, not a series). One label with two or more series, none repeated,
+// is long too.
 func describeLongShape(cols []string, numeric map[string]bool, rows [][]any) *longViewShape {
 	if len(cols) != 3 || numeric[cols[1]] || !numeric[cols[2]] {
 		return nil
@@ -136,7 +137,12 @@ func describeLongShape(cols []string, numeric map[string]bool, rows [][]any) *lo
 			multiSeries = multiSeries || len(perLabel[l]) >= 2
 			multiLabel = multiLabel || len(perSeries[sr]) >= 2
 		}
-		if !multiSeries || !multiLabel {
+		if len(perLabel) == 1 {
+			// one label (`WHERE month = $month`): long when every row is a distinct series
+			if len(perSeries) < 2 || len(perSeries) != len(rows) {
+				return nil
+			}
+		} else if !multiSeries || !multiLabel {
 			return nil
 		}
 	}

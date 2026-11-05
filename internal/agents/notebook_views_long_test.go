@@ -45,4 +45,13 @@ func TestCheckViewFit_LongShape(t *testing.T) {
 		assert.True(t, checkViewFit(v, shape).OK, v)
 	}
 	assert.Nil(t, describeViewShape([]string{"a", "b"}, [][]any{{"x", 1}}, nil).long)
+
+	// one label (WHERE month = $month): long when every row is a distinct series
+	cols := []string{"month", "rep", "revenue"}
+	one := describeViewShape(cols, [][]any{{"Jan", "A", 1}, {"Jan", "B", 2}}, nil)
+	require.NotNil(t, one.long)
+	assert.Equal(t, 1, one.long.labels)
+	assert.Equal(t, 2, one.long.series)
+	assert.Nil(t, describeViewShape(cols, [][]any{{"Jan", "A", 1}, {"Jan", "A", 2}, {"Jan", "B", 3}}, nil).long)
+	assert.Nil(t, describeViewShape(cols, [][]any{{"Jan", "A", 1}}, nil).long)
 }

@@ -93,7 +93,9 @@ const text = (v: unknown): string => String(v ?? '')
 // total`), and the data has to look like series: some label carries two or more
 // of them and some series appears at two or more labels. A one-to-one text
 // column (`day, top_product, sales`), or one a single tie breaks, is an
-// attribute. Shared with notebookViews.ts so the cell's suggested view agrees
+// attribute. One label with two or more series, none repeated, is long as well
+// (`WHERE month = $month`): the series would otherwise be lost and the chart
+// would flip between grouped and anonymous as the parameter changes. Shared with notebookViews.ts so the cell's suggested view agrees
 // (and mirrored in internal/agents).
 export function isLongTriple(cols: string[], numeric: boolean[], rows: any[][]): boolean {
   if (cols.length !== 3 || numeric[1] || !numeric[2]) return false
@@ -107,6 +109,7 @@ export function isLongTriple(cols: string[], numeric: boolean[], rows: any[][]):
     perLabel.set(l, (perLabel.get(l) ?? new Set()).add(sr))
     perSeries.set(sr, (perSeries.get(sr) ?? new Set()).add(l))
   }
+  if (perLabel.size === 1) return perSeries.size >= 2 && perSeries.size === rows.length
   const some = (m: Map<string, Set<string>>) => [...m.values()].some((set) => set.size >= 2)
   return some(perLabel) && some(perSeries)
 }
@@ -185,6 +188,41 @@ function singlePoints(t: ResultTable, cols: string[], numeric: boolean[]): Multi
 //
 // Label order merges the order each series saw its labels in (see order()).
 // All-numeric labels are sorted by value instead.
+// MinHeap of small non-negative integers.
+class MinHeap {
+  private a: number[] = []
+  push(v: number) {
+    const a = this.a
+    a.push(v)
+    for (let i = a.length - 1; i > 0; ) {
+      const p = (i - 1) >> 1
+      if (a[p] <= a[i]) break
+      ;[a[p], a[i]] = [a[i], a[p]]
+      i = p
+    }
+  }
+  pop(): number | undefined {
+    const a = this.a
+    if (a.length === 0) return undefined
+    const top = a[0]
+    const last = a.pop() as number
+    if (a.length > 0) {
+      a[0] = last
+      for (let i = 0; ; ) {
+        const l = 2 * i + 1
+        const r = l + 1
+        let m = i
+        if (l < a.length && a[l] < a[m]) m = l
+        if (r < a.length && a[r] < a[m]) m = r
+        if (m === i) break
+        ;[a[m], a[i]] = [a[i], a[m]]
+        i = m
+      }
+    }
+    return top
+  }
+}
+
 class Grid {
   names: string[] = []
   merged = false
@@ -193,10 +231,15 @@ class Grid {
   private si = new Map<string, number>()
   private at = new Map<string, number>()
   private seen: number[][] = []
+  private seenSet: Set<number>[] = []
+  private ordered: number[] | null = null
 
   label(l: string): number {
     let i = this.li.get(l)
-    if (i === undefined) this.li.set(l, (i = this.labelList.push(l) - 1))
+    if (i === undefined) {
+      this.li.set(l, (i = this.labelList.push(l) - 1))
+      this.ordered = null
+    }
     return i
   }
   name(s: string): number {
@@ -204,26 +247,34 @@ class Grid {
     if (i === undefined) {
       this.si.set(s, (i = this.names.push(s) - 1))
       this.seen[i] = []
+      this.seenSet[i] = new Set()
     }
     return i
   }
   add(l: number, s: number, v: number | null) {
-    if (!this.seen[s].includes(l)) this.seen[s].push(l)
+    if (!this.seenSet[s].has(l)) {
+      this.seenSet[s].add(l)
+      this.seen[s].push(l)
+      this.ordered = null
+    }
     if (v === null) return
     const k = `${l}:${s}`
     if (this.at.has(k)) this.merged = true
     this.at.set(k, (this.at.get(k) ?? 0) + v)
   }
-  // label indexes in display order: a stable topological sort. Within a series
-  // each label comes after the one before it (so `ORDER BY rep, month` still
-  // runs January first when the first rep has no January); ties go to the label
-  // seen first in the rows, and on a cycle the first-seen label goes next.
+  // label indexes in display order: a stable topological sort (Kahn's, ready
+  // labels taken in first-seen order from a min-heap). Within a series each label
+  // comes after the one before it (so `ORDER BY rep, month` still runs January
+  // first when the first rep has no January); on a cycle the first-seen label
+  // not yet placed goes next. Computed once per change.
   private order(): number[] {
+    if (this.ordered) return this.ordered
     const n = this.labelList.length
-    const all = this.labelList.map((_, i) => i)
-    if (n > 0 && this.labelList.every((l) => isNumeric(l))) return all.sort((a, b) => Number(this.labelList[a]) - Number(this.labelList[b]) || a - b)
-    const after: Set<number>[] = all.map(() => new Set())
-    const indeg = all.map(() => 0)
+    if (n > 0 && this.labelList.every((l) => isNumeric(l))) {
+      return (this.ordered = this.labelList.map((_, i) => i).sort((a, b) => Number(this.labelList[a]) - Number(this.labelList[b]) || a - b))
+    }
+    const after: Set<number>[] = Array.from({ length: n }, () => new Set())
+    const indeg = new Array<number>(n).fill(0)
     for (const list of this.seen) {
       for (let i = 1; i < list.length; i++) {
         const [from, to] = [list[i - 1], list[i]]
@@ -233,16 +284,28 @@ class Grid {
         }
       }
     }
+    const heap = new MinHeap()
+    for (let i = 0; i < n; i++) if (indeg[i] === 0) heap.push(i)
     const done = new Array<boolean>(n).fill(false)
     const out: number[] = []
-    while (out.length < n) {
-      let next = all.find((i) => !done[i] && indeg[i] === 0)
-      if (next === undefined) next = all.find((i) => !done[i]) as number
-      done[next] = true
-      out.push(next)
-      after[next].forEach((to) => indeg[to]--)
+    let cursor = 0
+    const place = (i: number) => {
+      done[i] = true
+      out.push(i)
+      after[i].forEach((to) => {
+        if (--indeg[to] === 0 && !done[to]) heap.push(to)
+      })
     }
-    return out
+    while (out.length < n) {
+      let next = heap.pop()
+      while (next !== undefined && done[next]) next = heap.pop()
+      if (next === undefined) {
+        while (done[cursor]) cursor++
+        next = cursor
+      }
+      place(next)
+    }
+    return (this.ordered = out)
   }
   get labelCount(): number {
     return this.labelList.length

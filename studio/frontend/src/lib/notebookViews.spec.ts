@@ -150,6 +150,11 @@ describe('bestView — (label, series, value) parity with internal/agents', () =
     expect(describeShape(['a', 'b', 'c'], [['x', 1, 2]]).long).toBeUndefined()
   })
 
+  it('one label with distinct series is long, a repeated pair is not', () => {
+    expect(describeShape(['m', 'rep', 'v'], [['Jan', 'A', 1], ['Jan', 'B', 2]]).long).toEqual({ labels: 1, series: 2, unique: true })
+    expect(describeShape(['m', 'rep', 'v'], [['Jan', 'A', 1], ['Jan', 'A', 2], ['Jan', 'B', 3]]).long).toBeUndefined()
+  })
+
   it('every view that charts a long result fits it', () => {
     const s = describeShape(['month', 'rep', 'revenue'], [['Jan', 'Ana', 1], ['Jan', 'Ben', 2]])
     for (const v of ['bar', 'line', 'table'] as const) expect(viewFit(v, s).ok).toBe(true)

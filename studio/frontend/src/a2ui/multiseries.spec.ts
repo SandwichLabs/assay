@@ -278,6 +278,32 @@ describe('label order and merging', () => {
   })
 })
 
+describe('one label', () => {
+  it('a result filtered to one label with several series stays long, series kept', () => {
+    const t = { columns: ['month', 'rep', 'revenue'], rows: [['Jan', 'Ana', 1], ['Jan', 'Ben', 2], ['Jan', 'Cy', 3]] }
+    expect(isSeriesShape(t)).toBe(true)
+    const m = toMultiSeries(t)
+    expect(m.shape).toBe('long')
+    expect(m.labels).toEqual(['Jan'])
+    expect(names(m)).toEqual(['Ana', 'Ben', 'Cy'])
+  })
+  it('one label with a repeated series, or one series, is not long', () => {
+    expect(isSeriesShape({ columns: ['month', 'rep', 'revenue'], rows: [['Jan', 'Ana', 1], ['Jan', 'Ana', 2], ['Jan', 'Ben', 3]] })).toBe(false)
+    expect(isSeriesShape({ columns: ['month', 'rep', 'revenue'], rows: [['Jan', 'Ana', 1]] })).toBe(false)
+  })
+})
+
+describe('label order: scale', () => {
+  it('orders 20k labels across 2 series (completes; no timing assertion)', () => {
+    const rows: any[][] = []
+    for (let i = 0; i < 20000; i++) rows.push([`L${i}`, 'A', i], [`L${i}`, 'B', i])
+    const m = toMultiSeries({ columns: ['m', 'series', 'v'], rows })
+    expect(m.labels).toHaveLength(20000)
+    expect(m.labels[0]).toBe('L0')
+    expect(m.labels[19999]).toBe('L19999')
+  })
+})
+
 describe('label order: a stable topological merge', () => {
   const order = (rows: any[][]) => toMultiSeries({ columns: ['m', 'series', 'v'], rows }).labels
   it('a label first seen by a later series stays where the series put it', () => {
