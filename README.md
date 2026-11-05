@@ -50,7 +50,7 @@ claude mcp add --scope user slaw-sales-demo -- "$(command -v slaw)" mcp serve --
 slaw studio --gui                                        # open the desktop app on this workspace
 ```
 
-Studio holds a workspace's database while it is open, and its MCP server is off until you press **Start** in Settings, Workspace, Claude and other tools. If you want Claude Code and Studio at the same time, press Start (writes then show approval cards in Studio); otherwise quit Studio before Claude Code connects.
+Studio holds a workspace's database while it is open, and its MCP server is off until you press **Start** once in Settings, Workspace, Claude and other tools; Studio remembers that for this workspace on this computer and turns it on each time it opens the workspace. If you want Claude Code and Studio at the same time, press Start (writes then show approval cards in Studio); otherwise quit Studio before Claude Code connects.
 
 No accounts or API keys needed. The full walkthrough, with notebooks and MCP, is the [Quickstart](docs/quickstart.md).
 

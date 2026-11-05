@@ -242,7 +242,7 @@ func (a *App) closeWorkspaceLocked(reason string) {
 	root := a.ws.Root()
 	// Credentials held in memory (ask each time, session-only) end with the session.
 	a.secrets.ForgetSession()
-	a.mcpStartErr = ""
+	a.mcpStartErr, a.mcpSaveErr, a.mcpOn = "", "", false
 	if a.wmcp != nil {
 		_ = a.wmcp.Stop()
 		a.wmcp, a.mcpTool = nil, nil

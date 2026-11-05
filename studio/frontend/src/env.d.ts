@@ -539,7 +539,7 @@ interface DotEnvStatus {
   satisfies: DotEnvSatisfies[]
 }
 
-interface MCPStatus { running: boolean; url: string; canStart: boolean; reason: string; startError: string; remembered: boolean }
+interface MCPStatus { running: boolean; url: string; canStart: boolean; reason: string; startError: string; remembered: boolean; saveError: string }
 
 interface CatalogTable { name: string; qualified: string; kind: 'table' | 'view' }
 interface CatalogGroup {

@@ -23,8 +23,12 @@ type MCPStatus struct {
 	// (it was left on); empty otherwise.
 	StartError string `json:"startError"`
 	// Remembered is whether the server is on for this workspace on this machine
-	// (it starts again when the workspace opens).
+	// (it starts again when the workspace opens), even in a read-only window
+	// that cannot serve it now.
 	Remembered bool `json:"remembered"`
+	// SaveError is why the on/off choice could not be remembered; empty when it
+	// was saved.
+	SaveError string `json:"saveError"`
 }
 
 // StartMCP serves this workspace's agent tools over MCP on a loopback port and
@@ -77,8 +81,12 @@ func (a *App) startMCPLocked() error {
 // person left it on here. A failure never blocks the open; it is logged and
 // shown in the MCP status, and the remembered choice stays on.
 func (a *App) restoreMCPLocked() {
-	a.mcpStartErr = ""
-	if a.ws == nil || a.readOnly || a.hold == nil || !a.recents.MCPOn(a.ws.Root()) {
+	a.mcpStartErr, a.mcpSaveErr, a.mcpOn = "", "", false
+	if a.ws == nil {
+		return
+	}
+	a.mcpOn = a.recents.MCPOn(a.ws.Root(), a.ws.ID())
+	if !a.mcpOn || a.readOnly || a.hold == nil {
 		return
 	}
 	start := a.startMCPLocked
@@ -91,14 +99,20 @@ func (a *App) restoreMCPLocked() {
 	}
 }
 
-// rememberMCPLocked records the on/off choice for the open workspace.
+// rememberMCPLocked records the on/off choice for the open workspace. When it
+// cannot be saved (no config dir), the status says so instead of claiming it is
+// remembered.
 func (a *App) rememberMCPLocked(on bool) {
 	if a.ws == nil {
 		return
 	}
-	if err := a.recents.SetMCPOn(a.ws.Root(), on); err != nil {
+	a.mcpOn, a.mcpSaveErr = false, ""
+	if err := a.recents.SetMCPOn(a.ws.Root(), a.ws.ID(), on); err != nil {
+		a.mcpSaveErr = err.Error()
 		a.logger.Warn("failed to remember the MCP choice", "error", err)
+		return
 	}
+	a.mcpOn = on
 }
 
 // StopMCP turns Studio's MCP server off, clears the endpoint from hub.lock and
@@ -135,9 +149,7 @@ func (a *App) mcpStatusLocked() *MCPStatus {
 		st.Reason = "This window opened the workspace read-only. Take over the workspace to serve MCP."
 	}
 	st.StartError = a.mcpStartErr
-	if a.ws != nil {
-		st.Remembered = a.recents.MCPOn(a.ws.Root())
-	}
+	st.Remembered, st.SaveError = a.mcpOn, a.mcpSaveErr
 	if a.wmcp != nil {
 		st.Running, st.URL = true, a.wmcp.URL()
 	}

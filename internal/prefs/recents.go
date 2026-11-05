@@ -153,6 +153,9 @@ func (r *Recents) Remove(path string) (*Recent, error) {
 		}
 		kept = append(kept, e)
 	}
+	if removed != nil {
+		dropMCP(&p, path) // a forgotten workspace must not start serving again
+	}
 	if err := r.saveLocked(p, kept); err != nil {
 		return nil, fmt.Errorf("failed to update the list: %w", err)
 	}
@@ -195,6 +198,7 @@ func (r *Recents) Relocate(oldPath, newRoot string) error {
 			recs[i].Path = newRoot
 		}
 	}
+	moveMCP(&p, oldPath, newRoot)
 	return r.saveLocked(p, recs)
 }
 

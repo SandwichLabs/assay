@@ -134,7 +134,24 @@ describe('SettingsView', () => {
   it('MCP says why a remembered server did not restart', async () => {
     makeApp({ startError: 'failed to start the MCP server: port busy' })
     const { w } = await mountAt()
-    expect(w.find('[data-testid="mcp-start-error"]').text()).toContain('port busy')
+    const el = w.find('[data-testid="mcp-start-error"]')
+    expect(el.text()).toContain('port busy')
+    expect(el.findAll('p').length).toBe(2)
+  })
+
+  it('MCP shows the remembered line, the read-only note and a save failure', async () => {
+    makeApp({ remembered: true })
+    const a = await mountAt()
+    expect(a.w.find('[data-testid="mcp-remembered"]').text()).toContain('Remembered')
+
+    makeApp({ remembered: true, canStart: false, reason: 'read-only' })
+    const b = await mountAt()
+    expect(b.w.find('[data-testid="mcp-remembered"]').text()).toContain('this window is read-only')
+
+    makeApp({ saveError: 'no config dir' })
+    const c = await mountAt()
+    expect(c.w.find('[data-testid="mcp-save-error"]').text()).toContain('no config dir')
+    expect(c.w.find('[data-testid="mcp-remembered"]').exists()).toBe(false)
   })
 
   it('MCP cannot start while read-only, and says why', async () => {
