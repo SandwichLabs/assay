@@ -146,7 +146,8 @@ describe('A2UIPage — static (inline data) rendering', () => {
     // guarantees that hold regardless of measured width.
     const yLabels = wrapper.findAll('.a2ui-linechart__axis-y')
     const xLabels = wrapper.findAll('.a2ui-linechart__axis-x')
-    expect(yLabels).toHaveLength(2)
+    expect(yLabels.length).toBeGreaterThanOrEqual(3) // round gridline values, not just min and max
+    expect(yLabels.length).toBeLessThanOrEqual(6)
     expect(xLabels.length).toBeLessThan(40) // thinned, not every point labeled
     expect(xLabels[0].text()).toBe('p0')
     expect(xLabels[xLabels.length - 1].text()).toBe('p39')
@@ -172,12 +173,13 @@ describe('A2UIPage — static (inline data) rendering', () => {
     const wrapper = mount(A2UIPage, { props: { page: page([{ id: 'l', type: 'lineChart', points }]) } })
     const xLabels = wrapper.findAll('.a2ui-linechart__axis-x')
     expect(xLabels.length).toBe(6) // 6 points, well under the 8-label thinning cap
-    expect(xLabels[0].text()).toBe('2026-01')
+    // Month labels are dates: they sit on a time axis with ticks like Jan '26.
+    expect(xLabels[0].text()).toBe("Jan '26")
     expect(xLabels[0].attributes('style')).toContain('transform: translateX(0')
-    expect(xLabels[xLabels.length - 1].text()).toBe('2026-06')
+    expect(xLabels[xLabels.length - 1].text()).toBe("Jun '26")
     expect(xLabels[xLabels.length - 1].attributes('style')).toContain('translateX(-100%')
     // A middle label still centers on its point.
-    const middle = xLabels.find((l) => l.text() === '2026-03')!
+    const middle = xLabels.find((l) => l.text() === "Mar '26")!
     expect(middle.attributes('style')).toContain('translateX(-50%')
   })
 

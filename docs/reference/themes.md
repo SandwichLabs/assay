@@ -143,7 +143,8 @@ Charts:
 ### Contrast
 
 The built-ins are tested to WCAG AA (4.5:1) on their core text/background
-pairs and 3:1 on borders and focus rings. Keep the same bar for a custom
+pairs and 3:1 on borders and focus rings, and every `chart.1` … `chart.6` is
+tested at 3:1 against `bg` and `surface` (a chart mark is a non-text graphic). Keep the same bar for a custom
 theme: `fg` on `bg`/`surface`/`bg.alt`, `fg.muted` on `bg`, `accent.fg` on
 `accent`, `chrome.fg` on `chrome.bg`, `code.fg` on `code.bg`, every
 `syntax.*` on `editor.bg`, and `error`/`success` on `bg`.

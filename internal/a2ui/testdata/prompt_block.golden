@@ -19,8 +19,8 @@ Types and their fields (optional unless marked required):
   stat         label(required), color, connection, detail, sql, value
   table        columns(string[]), connection, label, rows(array of cell arrays), sql
   barChart     bars([{label, value}]), color, connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), sql
-  lineChart    color, connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), points([{label, value}]), sql
-  areaChart    columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
+  lineChart    color, connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), points([{label, value}]), sql, zero
+  areaChart    columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql, zero
   columnChart  columns(string[]), connection, label, mode(stacked|grouped), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sorted, sql
   ringChart    columns(string[]), connection, label, max(number > 0), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
   radarChart   columns(string[]), connection, label, max(number > 0), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql

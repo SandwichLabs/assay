@@ -355,6 +355,22 @@ func TestValidate_KineticChartOptionsChecked(t *testing.T) {
 	}
 }
 
+func TestValidate_ZeroBaselineOption(t *testing.T) {
+	for _, typ := range []string{"lineChart", "areaChart"} {
+		_, err := Validate(`{"title":"x","components":[{"id":"c","type":"` + typ + `","zero":false,"sql":"SELECT 1"}]}`)
+		require.NoError(t, err, typ)
+		_, err = Validate(`{"title":"x","components":[{"id":"c","type":"` + typ + `","zero":"no"}]}`)
+		require.Error(t, err, typ)
+		assert.Contains(t, err.Error(), "components[0].zero", typ)
+	}
+	// Bars and columns are always zero-baselined: the option is not theirs.
+	for _, typ := range []string{"barChart", "columnChart", "ringChart", "streamChart", "stat"} {
+		_, err := Validate(`{"title":"x","components":[{"id":"c","type":"` + typ + `","zero":false}]}`)
+		require.Error(t, err, typ)
+		assert.Contains(t, err.Error(), `"`+typ+`" has no such field`, typ)
+	}
+}
+
 func TestValidate_MotionOnEveryChart(t *testing.T) {
 	for _, typ := range Charts {
 		_, err := Validate(`{"title":"x","components":[{"id":"c","type":"` + typ + `","motion":{"easing":"custom","speed":1.5,"stagger":false,"stiffness":190,"damping":12,"mass":1}}]}`)

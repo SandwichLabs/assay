@@ -14,6 +14,7 @@ import { seriesClass, toSeries } from './series'
 import { formatNumber } from '../lib/formatCell'
 import { useDrill } from './useDrill'
 import { useRoving } from './useRoving'
+import { valueScale, frac as scaleFrac, formatTick } from './scale'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, table } = useChartData(() => props.component)
@@ -37,14 +38,24 @@ const roving = useRoving(() => cols.value.length)
 const k = computed(() => data.value.series.length)
 const { values, replay, enabled } = useMotion(() => cols.value.flatMap((c) => c.segs), () => props.component.motion)
 
-// Stacked columns scale to the tallest total; grouped bars to the tallest segment.
+// Columns are zero-baselined (a column's height is its magnitude). Stacked
+// columns scale to the tallest total, grouped bars to the tallest segment, and
+// the axis tops out at the next round gridline above that.
 const scale = computed(() => {
   const m = grouped.value ? Math.max(0, ...cols.value.flatMap((c) => c.segs)) : Math.max(0, ...cols.value.map((c) => c.total))
-  return m || 1
+  return valueScale([0, m])
 })
+const fmtTick = (v: number) => formatTick(v, scale.value.step)
+const axw = computed(() => Math.max(2, ...scale.value.ticks.map((t) => fmtTick(t).length)) + 1)
 function h(ci: number, si: number): number {
   const v = values.value[ci * k.value + si] ?? 0
-  return Math.max(0, Math.min((v / scale.value) * 100, 104))
+  return Math.max(0, Math.min(scaleFrac(scale.value, v) * 100, 100))
+}
+// Where the column's total label sits: just above its own stack (stacked), or
+// above its tallest bar (grouped).
+function topPct(ci: number): number {
+  const hs = cols.value[ci].segs.map((_, si) => h(ci, si))
+  return grouped.value ? Math.max(0, ...hs) : Math.min(100, hs.reduce((a, b) => a + b, 0))
 }
 const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 'stacked'}, ${cols.value.length} columns of ${data.value.series.map((s) => s.name).join(', ')}`)
 </script>
@@ -56,6 +67,18 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
     @replay="replay"
   >
     <div v-if="drill.problem.value" class="a2ui-error" role="alert">{{ drill.problem.value }}</div>
+    <div class="a2ui-colplot" :class="{ 'a2ui-colplot--drill': drill.enabled.value }" :style="{ '--a2ui-axw': axw + 'ch' }">
+    <div class="a2ui-colplot__yaxis" aria-hidden="true">
+      <div class="a2ui-colplot__ypad a2ui-colplot__ypad--top"></div>
+      <div class="a2ui-colplot__yplot">
+        <div v-for="(t, i) in scale.ticks" :key="i" class="a2ui-linechart__axis-y" :style="{ bottom: scaleFrac(scale, t) * 100 + '%', transform: 'translateY(50%)' }">{{ fmtTick(t) }}</div>
+      </div>
+      <div class="a2ui-colplot__ypad a2ui-colplot__ypad--bottom"></div>
+    </div>
+    <div class="a2ui-colplot__main">
+    <div class="a2ui-colplot__grid" aria-hidden="true">
+      <div v-for="(t, i) in scale.ticks" :key="i" class="a2ui-colplot__line" :style="{ bottom: scaleFrac(scale, t) * 100 + '%' }"></div>
+    </div>
     <div
       class="a2ui-columns" :role="drill.enabled.value ? 'group' : 'img'" :aria-label="ariaLabel"
       @keydown="drill.enabled.value && roving.onKeydown($event)" @focusin="roving.onFocusin"
@@ -67,17 +90,22 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
         @click="drill.drill(c.src)"
         @keydown="drill.enabled.value && drill.onKey($event, c.src)"
       >
-        <span class="a2ui-columns__total">{{ formatNumber(c.total) }}</span>
-        <div class="a2ui-columns__track" :class="grouped ? 'a2ui-columns__track--grouped' : 'a2ui-columns__track--stacked'">
-          <div
-            v-for="(seg, si) in c.segs" :key="si"
-            class="a2ui-columns__seg" :class="seriesClass(si)"
-            :style="{ height: h(ci, si) + '%' }"
-            :title="`${c.label} · ${data.series[si]?.name}: ${formatNumber(seg)}`"
-          ></div>
+        <div class="a2ui-columns__headroom" aria-hidden="true"></div>
+        <div class="a2ui-columns__track">
+          <div class="a2ui-columns__inner" :class="grouped ? 'a2ui-columns__track--grouped' : 'a2ui-columns__track--stacked'">
+            <span class="a2ui-columns__total" :style="{ bottom: `calc(${topPct(ci)}% + 2px)` }">{{ formatNumber(c.total) }}</span>
+            <div
+              v-for="(seg, si) in c.segs" :key="si"
+              class="a2ui-columns__seg" :class="seriesClass(si)"
+              :style="{ height: h(ci, si) + '%' }"
+              :title="`${c.label} · ${data.series[si]?.name}: ${formatNumber(seg)}`"
+            ></div>
+          </div>
         </div>
         <span class="a2ui-columns__label" :title="c.label">{{ c.label }}</span>
       </div>
+    </div>
+    </div>
     </div>
     <div v-if="isBound(component) && loading" class="a2ui-loading" role="status">RUNNING QUERY…</div>
     <div v-if="drill.error.value" class="a2ui-error" role="alert" data-testid="a2ui-drill-error">{{ drill.error.value }}</div>

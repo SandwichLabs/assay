@@ -49,6 +49,11 @@ describe('built-in themes', () => {
       aa(c['success'], c[bg], 3)
       aa(c['error'], c[bg], 3)
     }
+    // Chart marks (lines, bars, slices) are non-text graphics: 3:1 against the
+    // surfaces a chart sits on (notebook paper and cards).
+    for (const role of ['chart.1', 'chart.2', 'chart.3', 'chart.4', 'chart.5', 'chart.6'] as const) {
+      for (const bg of ['bg', 'surface'] as const) aa(c[role], c[bg], 3)
+    }
     // Borders are structural; 3:1 is the non-text minimum.
     aa(c['border'], c['bg'], 3)
     aa(c['focus'], c['bg'], 3)
