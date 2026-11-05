@@ -32,6 +32,8 @@ export interface ParsedAnnotations {
   skipped: number
   // sql rows whose kind or color was not in the closed set (drawn solid / muted)
   unknown: number
+  // rows whose at or label was cut to MAX_TEXT characters (or had a line break turned into a space)
+  clipped: number
 }
 
 // cell reads one value as trimmed text, or '' when it is empty, null or not text.
@@ -42,13 +44,27 @@ function cell(v: unknown): string {
   return ''
 }
 
+const MAX_TEXT = 80
+
+// oneLine: line breaks become spaces and the text is cut to MAX_TEXT characters,
+// as the validator's limit for inline rows (a query result is not validated).
+function oneLine(s: string): { text: string; changed: boolean } {
+  const flat = s.replace(/[\r\n\0]+/g, ' ').trim()
+  const chars = [...flat]
+  const text = chars.length > MAX_TEXT ? chars.slice(0, MAX_TEXT - 1).join('') + '…' : flat
+  return { text, changed: text !== s }
+}
+
 function build(at: unknown, label: unknown, kind: unknown, color: unknown, out: ParsedAnnotations): void {
-  const a = cell(at)
-  const l = cell(label)
+  const a0 = oneLine(cell(at))
+  const l0 = oneLine(cell(label))
+  const a = a0.text
+  const l = l0.text
   if (!a || !l) {
     out.skipped++
     return
   }
+  if (a0.changed || l0.changed) out.clipped++
   const k = cell(kind)
   const c = cell(color)
   if ((k && !KINDS.includes(k)) || (c && !COLORS.includes(c))) out.unknown++
@@ -68,7 +84,7 @@ function capped(p: ParsedAnnotations): ParsedAnnotations {
   return p
 }
 
-const empty = (): ParsedAnnotations => ({ items: [], over: 0, skipped: 0, unknown: 0 })
+const empty = (): ParsedAnnotations => ({ items: [], over: 0, skipped: 0, unknown: 0, clipped: 0 })
 
 // fromRows reads the inline `rows: [{at, label, kind?, color?}]`.
 export function fromRows(rows: unknown): ParsedAnnotations {
@@ -223,12 +239,18 @@ export function layoutMarkers(markers: PlacedMarker[], widthPx: number): Layout 
     const a = Math.max(0, Math.min(x, width - w))
     return { m, x, a, b: a + w, text, lane: null }
   })
-  const placed: Box[] = []
+  // Which labels get a row: earlier rows win (so ORDER BY decides who is kept),
+  // then those are laid out right to left, which packs them best.
+  let keep: Box[] = []
+  for (const box of [...boxes].sort((p, q) => p.m.key - q.m.key)) {
+    if (packRightToLeft([...keep, box])) keep.push(box)
+  }
+  const placed = packRightToLeft(keep) ? keep : (keep = [])
   let hidden = 0
-  for (const box of [...boxes].sort((p, q) => q.x - p.x || q.m.key - p.m.key)) {
-    box.lane = firstFreeLane(box, placed)
-    if (box.lane === null) hidden++
-    else placed.push(box)
+  for (const box of boxes) {
+    if (placed.includes(box)) continue
+    box.lane = null
+    hidden++
   }
   const lanes = placed.reduce((mx, b) => Math.max(mx, (b.lane as number) + 1), 0)
   return {
@@ -236,6 +258,18 @@ export function layoutMarkers(markers: PlacedMarker[], widthPx: number): Layout 
     lanes,
     hidden,
   }
+}
+
+// packRightToLeft gives every box a row, right to left (which packs best), or
+// reports that they do not all fit in MAX_LANES rows.
+function packRightToLeft(set: Box[]): boolean {
+  const placed: Box[] = []
+  for (const box of [...set].sort((p, q) => q.x - p.x || q.m.key - p.m.key)) {
+    box.lane = firstFreeLane(box, placed)
+    if (box.lane === null) return false
+    placed.push(box)
+  }
+  return true
 }
 
 // firstFreeLane: the lowest row where box's label overlaps no placed label, its rule
@@ -272,6 +306,8 @@ export interface NoteInput {
   over: number
   skipped: number
   unknown: number
+  // rows whose at or label was cut to MAX_TEXT characters (or had a line break turned into a space)
+  clipped: number
   outside: number
   hidden: number
   error?: string
@@ -285,8 +321,9 @@ export function noteText(n: NoteInput): string {
   if (n.outside) parts.push(`${plural(n.outside, 'marker is', 'markers are')} outside this chart's range and not shown`)
   if (n.over) parts.push(`${plural(n.over, 'marker', 'markers')} past the limit of ${MAX_ANNOTATIONS} not shown`)
   if (n.skipped) parts.push(`${plural(n.skipped, 'row', 'rows')} without a usable at and label skipped`)
+  if (n.clipped) parts.push(`${plural(n.clipped, 'marker has', 'markers have')} a date or label cut to 80 characters or to one line`)
   if (n.unknown) parts.push(`${plural(n.unknown, 'marker has', 'markers have')} a kind or color other than solid, dashed, yellow, black, error, muted (drawn solid and muted)`)
-  if (n.hidden) parts.push(`${plural(n.hidden, 'label is', 'labels are')} hidden to avoid overlap; hover its rule to read it`)
+  if (n.hidden) parts.push(`${plural(n.hidden, 'label is', 'labels are')} hidden to avoid overlap; hover a rule to read it`)
   return parts.join('. ')
 }
 

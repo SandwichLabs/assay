@@ -29,9 +29,11 @@ Use them for "mark each release / price change / incident / live-ops event" and
   dashed); do not invent kinds. "color" is the usual closed set; the default is muted.
   Leave the colours alone unless the user asked for emphasis.
 - At most %d markers per chart. More inline is refused; more from sql are dropped, and the chart
-  says so. A marker outside the chart's x range is not drawn, and the chart says how many.
-  Close dates are stacked into rows above the plot; a crowded chart hides some labels (the
-  rules and tooltips stay), so keep to the events that matter.
+  says so, keeping the first 50 in query order. A marker outside the chart's x range is not
+  drawn (on a line or area chart that includes a date after the last point), and the chart
+  says how many. Close dates are stacked into rows above the plot; a crowded chart hides
+  some labels (the rules and tooltips stay), keeping the earlier rows' labels, so keep to the
+  events that matter and ORDER BY importance when there are many.
 - They combine with several series: one line per series and one set of markers across all of them.
 `, "`lineChart`, `areaChart` and `columnChart`", maxAnnotationText, maxAnnotations)
 }

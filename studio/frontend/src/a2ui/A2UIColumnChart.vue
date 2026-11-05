@@ -4,7 +4,7 @@
 // ("mode"), optionally sorted by total ("sorted"). Every segment rises with
 // the motion preset, staggered column by column. Heights are computed
 // percentages bound through a numeric :style, never a model string.
-import { computed } from 'vue'
+import { computed, nextTick, watch } from 'vue'
 import type { A2UIComponentT } from './types'
 import { isBound } from './query'
 import A2UIChartFrame from './A2UIChartFrame.vue'
@@ -16,8 +16,8 @@ import { useDrill } from './useDrill'
 import { useRoving } from './useRoving'
 import { valueScale, frac as scaleFrac, formatTick } from './scale'
 import A2UIAnnotations from './A2UIAnnotations.vue'
-import { placeOnColumns } from './annotations'
-import { useAnnotations, useElementWidth } from './useAnnotations'
+import { placeOnColumns, type Annotation } from './annotations'
+import { useAnnotations, useColumnGeometry } from './useAnnotations'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, table } = useChartData(() => props.component)
@@ -63,8 +63,16 @@ function topPct(ci: number): number {
 // Event markers (annotations): on the column centre of the label they name, or, for dated
 // columns in order, of the column they fall in. The overlay covers the plot area (the same
 // pinned pieces the gridlines use); from the top so the label rows clear the tallest column's value.
-const { el: mainEl, width: plotWidthPx } = useElementWidth()
-const annot = useAnnotations(() => props.component, (items) => placeOnColumns(items, cols.value.map((c) => c.label), !props.component.sorted), () => plotWidthPx.value)
+// The columns scroll sideways when there are many, so markers sit at the measured centre of
+// their column inside the scrolling content (and scroll with it), not at a fraction of what shows.
+const { el: colsEl, geom, measure } = useColumnGeometry()
+const place = (items: Annotation[]) => {
+  const p = placeOnColumns(items, cols.value.map((c) => c.label), !props.component.sorted)
+  const g = geom.value
+  return g.width > 0 && g.centers.length === cols.value.length ? { ...p, markers: p.markers.map((m) => ({ ...m, frac: g.centers[m.bucket] / g.width })) } : p
+}
+const annot = useAnnotations(() => props.component, place, () => geom.value.width)
+watch(() => cols.value.map((c) => c.label).join('\0'), () => void nextTick(measure))
 const annotInset = { top: '0px', bottom: 'calc(24px + var(--a2ui-col-inset))', left: '0px', right: '0px' }
 const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 'stacked'}, ${cols.value.length} columns of ${data.value.series.map((s) => s.name).join(', ')}${annot.ariaText.value}`)
 </script>
@@ -85,13 +93,13 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
       </div>
       <div class="a2ui-colplot__ypad a2ui-colplot__ypad--bottom"></div>
     </div>
-    <div ref="mainEl" class="a2ui-colplot__main">
+    <div class="a2ui-colplot__main">
     <div class="a2ui-colplot__grid" aria-hidden="true">
       <div v-for="(t, i) in scale.ticks" :key="i" class="a2ui-colplot__line" :style="{ bottom: scaleFrac(scale, t) * 100 + '%' }"></div>
     </div>
     <div
-      class="a2ui-columns" :role="drill.enabled.value ? 'group' : 'img'" :aria-label="ariaLabel"
-      @keydown="drill.enabled.value && roving.onKeydown($event)" @focusin="roving.onFocusin"
+      ref="colsEl" class="a2ui-columns" :role="drill.enabled.value ? 'group' : 'img'" :aria-label="ariaLabel"
+      @keydown="drill.enabled.value && roving.onKeydown($event)" @focusin="roving.onFocusin" @scroll.passive="measure"
     >
       <div
         v-for="(c, ci) in cols" :key="c.label + ci" class="a2ui-columns__col"
@@ -115,7 +123,7 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
         <span class="a2ui-columns__label" :title="c.label">{{ c.label }}</span>
       </div>
     </div>
-    <A2UIAnnotations v-if="annot.markers.value.length" :markers="annot.markers.value" :inset="annotInset" />
+    <A2UIAnnotations v-if="annot.markers.value.length" :markers="annot.markers.value" :inset="annotInset" :scroll="geom" />
     </div>
     </div>
     </div>

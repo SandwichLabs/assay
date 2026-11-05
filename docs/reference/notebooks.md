@@ -386,20 +386,26 @@ nothing there). One source, like any data-bound field:
   solid and muted, and the note says how many. Inside a data artifact view the source
   is `query` (a manifest query name, same columns) and `sql` is refused, as on every
   other field ([`artifacts.md`](artifacts.md)); the query needs at least two columns.
-- **Limit.** At most 50 markers. More inline is a validation error (the cell is
-  refused with the count, not dropped); more rows from `sql` are dropped at run time and
-  the chart says how many.
+- **Limit.** At most 50 markers. More inline is a validation error: an agent write
+  (`create_dashboard`, `write_artifact`) is refused with the count. A hand-edited or
+  bundled notebook that carries one (or any other invalid `annotations`) loses the
+  whole `a2ui` cell on load, as with any invalid page. More rows from `sql` are dropped
+  at run time (the first 50 in query order are kept) and the chart says how many. A
+  query's `at` or `label` is cut to 80 characters and one line (a result is not
+  validated), and the chart notes how many were.
 - **Placement.** On a time axis a marker sits at its exact time, so a Wednesday event
   on a weekly series sits between two points, and the exact value is in its tooltip.
   On a category axis `at` must match a label and the rule sits on that label. A
   `columnChart` puts the rule on the column centre; when its columns are dates in order
   (and not `sorted`), a date sits on the column it falls in, up to one column past the
   last. A marker outside the chart's x range, or one whose `at` is not on this axis,
-  is not drawn, and the chart notes how many.
+  is not drawn, and the chart notes how many. On a `lineChart` or `areaChart` that
+  includes a date after the last point (or before the first): the axis ends at the data.
 - **Labels.** Each label sits in a row above the plot at its rule. Close dates are
   stacked into up to four rows so labels never overlap and no rule runs through
   another's label; if even that is not enough, the extra labels are left off (their rules
-  and tooltips stay) and the note says how many. Long labels are shortened with an
+  and tooltips stay) and the note says how many. Earlier rows win: the labels kept are
+  the first ones in source order, so `ORDER BY` puts the important events first. Long labels are shortened with an
   ellipsis; the full text is in the tooltip.
 - **Reading them.** Hover a rule or its label for the full label and the exact `at`. A
   `lineChart`'s tooltip (and an `areaChart`'s readout) also lists the markers at the

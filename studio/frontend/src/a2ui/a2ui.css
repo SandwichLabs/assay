@@ -329,6 +329,9 @@
    its rule, reaching up from the plot top to its label row. The colour is the
    closed a2ui--<token> accent; the label text stays ink. */
 .a2ui-page .a2ui-annots { position: absolute; z-index: 1; pointer-events: none; }
+.a2ui-page .a2ui-annots__inner { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+/* a scrolling plot: the layer is clipped to what shows (and moved by the scroll offset) */
+.a2ui-page .a2ui-annots--scroll { overflow: hidden; }
 .a2ui-page .a2ui-annot {
   position: absolute;
   bottom: 0;

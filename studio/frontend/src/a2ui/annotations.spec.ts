@@ -201,16 +201,45 @@ describe('layoutMarkers', () => {
   })
 })
 
+describe('sql text is cut like inline text', () => {
+  it('cuts at and label to 80 characters and one line, and counts the rows', () => {
+    const p = fromResult({ columns: ['at', 'label'], rows: [['2025-05-01', 'line one\nline two'], ['2025-05-02', 'x'.repeat(200)], ['2025-05-03', 'fine']] })
+    expect(p.items[0].label).toBe('line one line two')
+    expect([...p.items[1].label]).toHaveLength(80)
+    expect(p.items[1].label.endsWith('…')).toBe(true)
+    expect(p.items[2].label).toBe('fine')
+    expect(p.clipped).toBe(2)
+  })
+})
+
+describe('crowding keeps earlier rows', () => {
+  const at = (frac: number, label: string, key: number): PlacedMarker => ({ key, ann: ann('x', label), frac, bucket: 0 })
+  it('hides the later rows, wherever they sit, not always the leftmost', () => {
+    // eight markers 1% apart: only four rows fit; the first four in source order keep labels
+    const order = [5, 0, 7, 2, 4, 1, 6, 3]
+    const l = layoutMarkers(order.map((pos, key) => at(0.4 + pos * 0.01, `event number ${key}`, key)), 600)
+    const shown = l.markers.filter((m) => m.lane !== null).map((m) => m.key).sort()
+    expect(shown).toEqual([0, 1, 2, 3])
+    expect(l.hidden).toBe(4)
+  })
+  it('still keeps every shown label clear of the others', () => {
+    const l = layoutMarkers([0.5, 0.505, 0.51, 0.515, 0.52, 0.3].map((f, k) => at(f, `event ${k}`, k)), 600)
+    const shown = l.markers.filter((m) => m.lane !== null)
+    for (const m of shown) for (const o of shown) if (m !== o) expect(!(m.lane === o.lane && Math.abs(m.frac - o.frac) < 0.02 && m.frac * 600 + m.shift < o.frac * 600 + o.shift + o.width && o.frac * 600 + o.shift < m.frac * 600 + m.shift + m.width)).toBe(true)
+  })
+})
+
 describe('text', () => {
   it('notes only what happened', () => {
-    expect(noteText({ over: 0, skipped: 0, unknown: 0, outside: 0, hidden: 0 })).toBe('')
-    const t = noteText({ over: 3, skipped: 1, unknown: 2, outside: 2, hidden: 1, error: 'boom' })
+    expect(noteText({ over: 0, skipped: 0, unknown: 0, clipped: 0, outside: 0, hidden: 0 })).toBe('')
+    const t = noteText({ over: 3, skipped: 1, unknown: 2, clipped: 4, outside: 2, hidden: 1, error: 'boom' })
     expect(t).toContain('query error: boom')
     expect(t).toContain("2 markers are outside this chart's range and not shown")
     expect(t).toContain('3 markers past the limit of 50 not shown')
     expect(t).toContain('1 row without a usable at and label skipped')
     expect(t).toContain('2 markers have a kind or color other than')
-    expect(t).toContain('1 label is hidden to avoid overlap')
+    expect(t).toContain('1 label is hidden to avoid overlap; hover a rule')
+    expect(t).toContain('4 markers have a date or label cut')
   })
   it('lists markers left to right for the text alternative', () => {
     const m = (frac: number, a: Annotation): PlacedMarker => ({ key: 0, ann: a, frac, bucket: 0 })

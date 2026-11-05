@@ -7,7 +7,7 @@
 //
 // `place` is the chart's own rule for where a marker sits on its x axis;
 // `widthPx` is the plot's width in px (for the label layout).
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { A2UIComponentT } from './types'
 import { useLiveQuery } from './useLiveQuery'
 import {
@@ -15,7 +15,7 @@ import {
   type Annotation, type ParsedAnnotations, type Placement,
 } from './annotations'
 
-const NONE: ParsedAnnotations = { items: [], over: 0, skipped: 0, unknown: 0 }
+const NONE: ParsedAnnotations = { items: [], over: 0, skipped: 0, unknown: 0, clipped: 0 }
 
 export function useAnnotations(
   component: () => A2UIComponentT,
@@ -39,6 +39,7 @@ export function useAnnotations(
       over: parsed.value.over,
       skipped: parsed.value.skipped,
       unknown: parsed.value.unknown,
+      clipped: parsed.value.clipped,
       outside: placement.value.outside,
       hidden: layout.value.hidden,
       error: live.error.value,
@@ -58,19 +59,48 @@ export function useAnnotations(
   }
 }
 
-// useElementWidth: the live width in px of the element bound to `el`.
-export function useElementWidth() {
+export interface ColumnGeometry {
+  // x of each column's centre, px from the left of the scrollable content
+  centers: number[]
+  // the scrollable content's width, how far it is scrolled and how much shows
+  width: number
+  left: number
+  view: number
+}
+
+// columnGeometry reads where the columns of a scrolling `.a2ui-columns` grid
+// really are (they are at least 20px wide and scroll sideways when there are
+// many), so a marker follows its column rather than a fraction of the visible width.
+function columnGeometry(el: Pick<HTMLElement, 'scrollWidth' | 'scrollLeft' | 'clientWidth' | 'querySelectorAll'>): ColumnGeometry {
+  const cols = Array.from(el.querySelectorAll<HTMLElement>(':scope > .a2ui-columns__col'))
+  return {
+    centers: cols.map((c) => c.offsetLeft + c.offsetWidth / 2),
+    width: el.scrollWidth,
+    left: el.scrollLeft,
+    view: el.clientWidth,
+  }
+}
+
+// useColumnGeometry: the geometry of the element bound to `el`, kept current on
+// scroll (call `measure`), resize and, through `measure`, when the columns change.
+export function useColumnGeometry() {
   const el = ref<HTMLElement | null>(null)
-  const width = ref(0)
+  const geom = ref<ColumnGeometry>({ centers: [], width: 0, left: 0, view: 0 })
   let ro: ResizeObserver | undefined
-  const measure = () => (width.value = el.value?.clientWidth || 0)
-  onMounted(() => {
+  const measure = () => {
+    if (el.value) geom.value = columnGeometry(el.value)
+  }
+  // the element can appear after mount (a sql-bound chart renders it once its rows arrive)
+  watch(el, (e) => {
+    ro?.disconnect()
+    ro = undefined
+    if (!e) return
     measure()
-    if (typeof ResizeObserver !== 'undefined' && el.value) {
+    if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(measure)
-      ro.observe(el.value)
+      ro.observe(e)
     }
-  })
+  }, { flush: 'post' })
   onBeforeUnmount(() => ro?.disconnect())
-  return { el, width }
+  return { el, geom, measure }
 }

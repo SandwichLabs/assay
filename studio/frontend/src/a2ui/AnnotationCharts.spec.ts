@@ -1,6 +1,6 @@
 // Event markers (#320) on lineChart, areaChart and columnChart: what the
 // renderers draw from `annotations`. Placement and layout are in annotations.spec.ts.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import A2UIPage from './A2UIPage.vue'
 import { ARTIFACT_RUNTIME } from './artifactRuntime'
@@ -235,6 +235,48 @@ describe('inside a data artifact view', () => {
     expect(run).not.toHaveBeenCalled()
     expect(markers(w)).toHaveLength(0)
     expect(w.find('[data-testid="a2ui-annotation-note"]').text()).toContain('only use its own named queries')
+    w.unmount()
+  })
+})
+
+// jsdom has no layout: give the columns the geometry a narrow, scrolling plot has
+// (24px columns, 4px gaps, 100px showing) so markers must follow their columns.
+describe('columnChart that scrolls sideways', () => {
+  const proto = HTMLElement.prototype as any
+  const saved: Record<string, PropertyDescriptor | undefined> = {}
+  const stub = (name: string, get: (this: HTMLElement) => number) => {
+    saved[name] = Object.getOwnPropertyDescriptor(proto, name)
+    Object.defineProperty(proto, name, { configurable: true, get })
+  }
+  beforeEach(() => {
+    stub('offsetLeft', function (this: HTMLElement) { return this.classList.contains('a2ui-columns__col') ? Array.from(this.parentElement!.children).indexOf(this) * 28 : 0 })
+    stub('offsetWidth', function (this: HTMLElement) { return this.classList.contains('a2ui-columns__col') ? 24 : 0 })
+    stub('scrollWidth', function (this: HTMLElement) { return this.classList.contains('a2ui-columns') ? this.children.length * 28 - 4 : 0 })
+    stub('clientWidth', function (this: HTMLElement) { return this.classList.contains('a2ui-columns') ? 100 : 0 })
+  })
+  afterEach(() => {
+    for (const [k, d] of Object.entries(saved)) {
+      if (d) Object.defineProperty(proto, k, d)
+      else delete proto[k]
+    }
+  })
+
+  const weeks52 = Array.from({ length: 52 }, (_, i) => [new Date(Date.UTC(2025, 0, 6 + 7 * i)).toISOString().slice(0, 10), i + 1])
+
+  it('puts a marker at its column, not at a fraction of what shows, and moves it with the scroll', async () => {
+    const w = render({ id: 'c', type: 'columnChart', columns: ['week', 'v'], rows: weeks52, annotations: { rows: [{ at: weeks52[25][0] as string, label: 'Week 26' }] } })
+    await flushPromises()
+    const m = markers(w)[0]
+    // centre of column 25 in 52*28-4 = 1452px of content
+    expect(m.element.getAttribute('style')).toContain(`left: ${((25 * 28 + 12) / 1452) * 100}`)
+    const inner = w.find('.a2ui-annots__inner')
+    expect(inner.attributes('style')).toContain('width: 1452px')
+    expect(inner.attributes('style')).toContain('left: 0px')
+    const cols = w.find('.a2ui-columns').element as HTMLElement
+    cols.scrollLeft = 640
+    await w.find('.a2ui-columns').trigger('scroll')
+    expect(w.find('.a2ui-annots__inner').attributes('style')).toContain('left: -640px')
+    expect(w.find('[data-testid="a2ui-annotations"]').classes()).toContain('a2ui-annots--scroll')
     w.unmount()
   })
 })
