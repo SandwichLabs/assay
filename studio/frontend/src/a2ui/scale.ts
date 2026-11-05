@@ -32,10 +32,11 @@ export function tickDigits(step: number): number {
   return Math.min(8, Math.max(2, decimalsFor(step)))
 }
 
-// formatTick labels a gridline value with the shared number formatter. Steps
-// below a millionth would print as 0.000000000001, so those use exponent form.
+// formatTick labels a gridline value with the shared number formatter. A value
+// below a millionth on such a fine step would print as 0.000000000001, so it
+// uses exponent form; 1.00000005 on the same step stays a plain number.
 export function formatTick(v: number, step: number): string {
-  if (step > 0 && step < 1e-6 && v !== 0 && Number.isFinite(v)) return v.toExponential()
+  if (step > 0 && step < 1e-6 && v !== 0 && Math.abs(v) < 1e-6 && Number.isFinite(v)) return v.toExponential()
   return formatNumber(v, tickDigits(step))
 }
 

@@ -62,6 +62,8 @@ describe('niceTicks', () => {
     expect(formatTick(2e-12, tiny.step)).toBe('2e-12')
     expect(formatTick(0, tiny.step)).toBe('0')
     expect(formatTick(1500, 500)).toBe('1,500')
+    expect(formatTick(1, 5e-8)).toBe('1')
+    expect(formatTick(1.00000005, 5e-8)).toBe('1.00000005')
   })
   it('does not emit repeated ticks for a range lost in rounding', () => {
     const s = niceTicks(1, 1 + 1e-12)
