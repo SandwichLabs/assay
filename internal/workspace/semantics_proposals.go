@@ -52,3 +52,10 @@ func AcceptProposal(ctx context.Context, ws Workspace, id, shownRev string, over
 func RejectProposal(ctx context.Context, ws Workspace, id string) error {
 	return proposals.Reject(ctx, ws.Proposals(), id)
 }
+
+// AcceptProposals accepts the pinned proposals in order through
+// proposals.AcceptMany, never overwriting, and stops at the first refusal. The
+// pins carry the ShownRev of what the person reviewed.
+func AcceptProposals(ctx context.Context, ws Workspace, pins []proposals.Pin) *proposals.ManyResult {
+	return proposals.AcceptMany(ctx, ws.Proposals(), ws.Semantics(), pins, proposals.WithQueries(ws.Queries()))
+}

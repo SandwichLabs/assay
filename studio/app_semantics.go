@@ -27,6 +27,7 @@ import (
 type (
 	Proposal         = proposals.Proposal
 	ProposalPreview  = proposals.Preview
+	ProposalPin      = proposals.Pin
 	DefinitionList   = workspace.DefinitionList
 	DefinitionDetail = workspace.DefinitionDetail
 )
@@ -110,6 +111,38 @@ func (a *App) AcceptProposal(id, shownRev string, overwrite bool) error {
 	}
 	a.emitEvent("data:changed")
 	return nil
+}
+
+// BulkAcceptResult is what AcceptProposals did: the proposals written, in order,
+// and, when it stopped early, the one that stopped it and the reason. The
+// reason is a result field, not an error, so the frontend gets both halves.
+type BulkAcceptResult struct {
+	Accepted []proposals.Accepted `json:"accepted"`
+	FailedID string               `json:"failed_id,omitempty"`
+	Error    string               `json:"error,omitempty"`
+}
+
+// AcceptProposals accepts the proposals the person was shown, in order. Each
+// pin carries the shown_rev GetProposal returned for it; the run never
+// overwrites, and stops at the first one refused (a stale or changed file, a
+// version that changed again since it was shown), leaving the rest open. What
+// was accepted before it stays accepted.
+func (a *App) AcceptProposals(pins []ProposalPin) (*BulkAcceptResult, error) {
+	defer a.recheckGrants() // registered first, so it runs after the lock is released
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := a.requireWorkspace(); err != nil {
+		return nil, err
+	}
+	res := workspace.AcceptProposals(a.ctxOrBackground(), a.ws, pins)
+	if len(res.Accepted) > 0 {
+		a.emitEvent("data:changed")
+	}
+	out := &BulkAcceptResult{Accepted: res.Accepted, FailedID: res.FailedID}
+	if res.Err != nil {
+		out.Error = res.Err.Error()
+	}
+	return out, nil
 }
 
 // RejectProposal marks the proposal rejected; semantics/ is not changed.

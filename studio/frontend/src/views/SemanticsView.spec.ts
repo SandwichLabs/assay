@@ -289,6 +289,36 @@ describe('SemanticsView proposals inbox', () => {
     expect(router.currentRoute.value.query).toMatchObject({ kind: 'proposal', name: '' })
   })
 
+  it('Accept all lists the proposals, then sends the shown revs in one call and reports a stop', async () => {
+    const second: Proposal = { ...PROPOSAL, id: '20261029T153013Z-glossary-churn-1111', kind: 'glossary', name: 'Churn' }
+    const app = makeApp({
+      ListProposals: vi.fn(async () => [second, PROPOSAL]),
+      GetProposal: vi.fn(async (id: string) => preview({ proposal: id === second.id ? second : PROPOSAL, shown_rev: 'pin-' + id })),
+      AcceptProposals: vi.fn(async () => ({
+        accepted: [{ id: PROPOSAL.id, kind: 'metric', name: 'orders', target: 'semantics/metrics/orders.yaml' }],
+        failed_id: second.id, error: 'semantics/glossary.md or its proposal changed again since you looked',
+      })),
+    })
+    const w = await mountAt('?kind=proposal')
+    await w.get('[data-testid="proposal-accept-all"]').trigger('click')
+    await flushPromises()
+    const dialog = w.get('[role="dialog"]').text()
+    expect(dialog).toContain('metric orders')
+    expect(dialog).toContain('glossary Churn')
+    expect(app.AcceptProposals).not.toHaveBeenCalled()
+
+    await w.findAll('[role="dialog"] button').find((b) => b.text() === 'Accept 2')!.trigger('click')
+    await flushPromises()
+    expect(app.AcceptProposals).toHaveBeenCalledWith([
+      { id: PROPOSAL.id, shown_rev: 'pin-' + PROPOSAL.id },
+      { id: second.id, shown_rev: 'pin-' + second.id },
+    ])
+    const note = w.get('[data-testid="proposal-bulk-summary"]').text()
+    expect(note).toContain('Accepted 1: metric orders')
+    expect(note).toContain('Stopped at glossary Churn')
+    expect(note).toContain('changed again since you looked')
+  })
+
   it('an empty inbox says what to do', async () => {
     makeApp({ ListProposals: vi.fn(async () => []), ListDefinitions: vi.fn(async () => ({ ...structuredClone(LIST), open_proposals: 0 })) })
     const w = await mountAt('?kind=proposal')
