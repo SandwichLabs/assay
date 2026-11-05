@@ -12,7 +12,7 @@ export interface PlotGeom {
 }
 
 // nearest: index into ascending `fracs` closest to f.
-export function nearest(fracs: number[], f: number): number {
+function nearest(fracs: number[], f: number): number {
   let best = 0
   for (let i = 1; i < fracs.length; i++) {
     if (Math.abs(fracs[i] - f) < Math.abs(fracs[best] - f)) best = i

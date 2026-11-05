@@ -28,7 +28,7 @@ function decimalsFor(step: number): number {
 
 // tickDigits: fraction digits a tick label needs for this step (0.005 -> 3),
 // for formatNumber's second argument.
-export function tickDigits(step: number): number {
+function tickDigits(step: number): number {
   return Math.min(8, Math.max(2, decimalsFor(step)))
 }
 
