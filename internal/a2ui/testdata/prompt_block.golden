@@ -42,7 +42,7 @@ as the default catalog for its "sql"'s unqualified table names; omit it for the 
 
 SQL result shape: barChart and lineChart want a label column then a numeric
 column (SELECT school, AVG(score) ...); several series: (label, series, value) or a
-numeric column each, 6 drawn, the rest sum into Other. stat wants a single number
+numeric column each, 6 drawn (bars sum the rest into Other). stat wants a single number
 in the first column of the first row. table renders whatever columns come back.
 The other charts take inline "columns" + "rows" in exactly the shape their
 sql returns:

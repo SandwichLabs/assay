@@ -329,13 +329,15 @@ and LINE views pick this up from a query result without any component.
 - **Gaps are not zeros.** A series with no row (or a null value) at a label has no
   point there: a line breaks, a grouped bar is absent, and the tooltip leaves the
   series out. A repeated `(label, series)` pair is summed.
-- **More than six series fold into "Other".** The five with the largest total
-  magnitude keep their own colour (in their original order) and every other series,
-  including one already named `Other`, is summed per label into a sixth, `Other`.
-  The legend says how many were folded. This holds for lines as well as bars:
-  summing is right for additive measures (revenue, counts) and wrong for rates,
-  averages and prices, where it is better to filter to the series that matter (or
-  fold them in SQL) before charting.
+- **More than six series.** A `barChart` keeps the five with the largest total
+  magnitude (ties in original order), in their original order, and sums every other
+  series, including one already named `Other`, per label into a sixth, `Other`; the
+  legend says how many it holds. A `lineChart` draws the six largest and nothing
+  else: it never invents an `Other` line (a sum of unrelated lines is a line
+  nobody asked for, and is wrong for rates, averages and prices). The legend adds
+  "+N more not shown; filter in SQL", the hidden names are in its hover text and
+  the chart's accessible name, and a real series called `Other` is ranked like any
+  other. To control which lines appear, filter or rank in SQL (`WHERE rep IN ...`).
 - **Grouped bars.** A `barChart` with several series draws one group per label, one
   bar per series, on one scale; each bar shows its value, and a group's hover text
   and accessible name list all of them. A grouped bar is not one result row, so

@@ -70,8 +70,9 @@ picker):
   suggested, and its columns share one scale, so only use it for measures in
   one unit. Series are coloured by position, never by you. A series with no
   row at a label is a gap, not a zero, which is right: do not pad the query
-  with zeros. More than six series are summed into one "Other", which is wrong
-  for rates, averages and prices: filter to the series that matter in SQL
+  with zeros. Past six series a line chart draws only the six largest and
+  says "+N more not shown", and a bar chart sums the rest into one "Other"
+  (wrong for rates, averages and prices): filter to the series that matter in SQL
   (`WHERE rep IN (top 5)`) or return a share. `ORDER BY` decides the series
   order and so the colours.
 - **stat** — needs exactly one row and one number. Two rows, or a result

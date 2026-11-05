@@ -97,7 +97,8 @@ field is a colour or style.
   shows the first column of the first row; charts use the label column then
   numeric columns, as for `create_dashboard`. A `lineChart` or `barChart`
   query that returns `(label, series, value)` (or a label and one numeric
-  column per series) draws several series: up to six, the rest summed into
+  column per series) draws several series: up to six; past that a line draws
+  the six largest and says how many are not shown, a bar sums the rest into
   "Other". A grouped `barChart` cannot `drill`.
 - **Controls** name a parameter and re-run only the queries that use it:
   `select` (`param`: an enum or boolean), `dateRange` (`start`, `end`: two

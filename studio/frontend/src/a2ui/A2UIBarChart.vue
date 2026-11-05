@@ -117,7 +117,7 @@ const groupText = (i: number) => `${labels.value[i]}: ${ms.value.series.map((s, 
         </div>
         <span class="a2ui-baraxis__value" :style="{ minWidth: valueCh + 'ch' }"></span>
       </div>
-      <A2UISeriesLegend :names="ms.series.map((s) => s.name)" :folded="ms.folded" />
+      <A2UISeriesLegend :names="ms.series.map((s) => s.name)" :folded="ms.folded" :mode="ms.foldMode" />
       <div v-if="isBound(component) && loading" class="a2ui-loading" role="status">RUNNING QUERY…</div>
       <div v-if="drill.error.value" class="a2ui-error" role="alert" data-testid="a2ui-drill-error">{{ drill.error.value }}</div>
     </template>

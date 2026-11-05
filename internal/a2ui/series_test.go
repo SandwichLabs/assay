@@ -87,5 +87,5 @@ func TestPromptBlock_DocumentsSeries(t *testing.T) {
 	p := PromptBlock()
 	assert.Contains(t, p, "series([{name, points}])")
 	assert.Contains(t, p, "(label, series, value)")
-	assert.Contains(t, p, "sum into Other")
+	assert.Contains(t, p, "bars sum the rest into Other")
 }

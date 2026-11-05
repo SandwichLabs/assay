@@ -155,6 +155,50 @@ describe('series fold', () => {
   })
 })
 
+describe('series fold for lines (drop)', () => {
+  const nine = () => {
+    const rows: any[][] = []
+    for (let s = 1; s <= 9; s++) for (const m of ['Jan', 'Feb']) rows.push([m, `S${s}`, s])
+    return toMultiSeries({ columns: ['m', 's', 'v'], rows }, 'drop')
+  }
+
+  it('keeps the six largest in their own order, invents no Other, and names the rest', () => {
+    const m = nine()
+    expect(names(m)).toEqual(['S4', 'S5', 'S6', 'S7', 'S8', 'S9'])
+    expect(m.folded).toEqual(['S1', 'S2', 'S3'])
+    expect(m.foldMode).toBe('drop')
+  })
+  it('does not fold six, and names nothing', () => {
+    const m = toMultiSeries({ columns: ['m', 'a', 'b', 'c', 'd', 'e', 'f'], rows: [['x', 1, 2, 3, 4, 5, 6]] }, 'drop')
+    expect(m.series).toHaveLength(6)
+    expect(m.folded).toEqual([])
+  })
+  it('ranks a real series named Other like any other', () => {
+    const rows: any[][] = []
+    for (let s = 1; s <= 6; s++) rows.push(['Jan', `S${s}`, s])
+    rows.push(['Jan', 'Other', 1000])
+    const m = toMultiSeries({ columns: ['m', 's', 'v'], rows }, 'drop')
+    expect(names(m)).toEqual(['S2', 'S3', 'S4', 'S5', 'S6', 'Other'])
+    expect(m.folded).toEqual(['S1'])
+    const small = toMultiSeries({ columns: ['m', 's', 'v'], rows: [...rows.slice(0, 6), ['Jan', 'Other', 0.5]] }, 'drop')
+    expect(names(small)).not.toContain('Other')
+    expect(small.folded).toEqual(['Other'])
+  })
+  it('breaks ties in original order and ranks by magnitude', () => {
+    const rows: any[][] = [['a', 'S0', -50]]
+    for (let s = 1; s <= 7; s++) rows.push(['a', `S${s}`, 5])
+    const m = toMultiSeries({ columns: ['m', 's', 'v'], rows }, 'drop')
+    expect(names(m)).toEqual(['S0', 'S1', 'S2', 'S3', 'S4', 'S5'])
+    expect(m.folded).toEqual(['S6', 'S7'])
+  })
+  it('folds inline series the same way', () => {
+    const list = Array.from({ length: 8 }, (_, i) => ({ name: `S${i}`, points: [{ label: 'x', value: i + 1 }] }))
+    const m = fromInlineSeries(list, 'drop')
+    expect(m.series).toHaveLength(6)
+    expect(m.folded).toEqual(['S0', 'S1'])
+  })
+})
+
 describe('inline series', () => {
   it('unions labels in first-seen order and leaves gaps', () => {
     const m = fromInlineSeries([

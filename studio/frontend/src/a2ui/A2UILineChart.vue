@@ -7,7 +7,7 @@
 // (label, n1, n2, ...) result, or inline `series`. They share one value scale
 // and one x axis (the union of the labels); a series with no point at a label
 // has a gap there, never a zero. Colours come from the theme's chart roles by
-// series index, six at most, the rest summed into "Other".
+// series index, six at most (the six largest; a note names the ones not shown).
 //
 // With several series each line is also named at its right end (a2ui/endLabels.ts,
 // pushed apart so they do not overlap), so the lines are told apart by more than
@@ -137,7 +137,7 @@ const ariaLabel = computed(() => {
   const v = values.value
   if (v.length === 0) return 'Line chart with no values'
   const span = xa.value.time && xa.value.ticks.length ? `, ${labels.value[xa.value.order[0]]} to ${labels.value[xa.value.order[xa.value.order.length - 1]]}` : ''
-  const what = multi.value ? `${ms.value.series.length} series (${ms.value.series.map((s) => s.name).join(', ')}) over ${n.value} labels` : `${v.length} points`
+  const what = multi.value ? `${ms.value.series.length} series (${ms.value.series.map((s) => s.name).join(', ')}) over ${n.value} labels${ms.value.foldMode === 'drop' && ms.value.folded.length ? `, ${ms.value.folded.length} more not shown (${ms.value.folded.join(', ')})` : ''}` : `${v.length} points`
   return `Line chart of ${what}${span}, ranging ${formatNumber(Math.min(...v))} to ${formatNumber(Math.max(...v))}`
 })
 </script>
@@ -180,7 +180,7 @@ const ariaLabel = computed(() => {
         <A2UISeriesTip v-if="activeIdx !== null" :label="labels[activeIdx]" :rows="readout" :multi="multi" :side="tipSide" :pos="tipStyle" />
         <span class="a2ui-sr" aria-live="polite">{{ activeText }}</span>
       </A2UIPlotFrame>
-      <A2UISeriesLegend :names="ms.series.map((s) => s.name)" :folded="ms.folded" />
+      <A2UISeriesLegend :names="ms.series.map((s) => s.name)" :folded="ms.folded" :mode="ms.foldMode" />
     </template>
   </div>
 </template>

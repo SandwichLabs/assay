@@ -163,7 +163,7 @@ func PromptBlock() string {
 	b.WriteString("as the default catalog for its \"sql\"'s unqualified table names; omit it for the workspace default.\n\n")
 	b.WriteString("SQL result shape: barChart and lineChart want a label column then a numeric\n")
 	b.WriteString("column (SELECT school, AVG(score) ...); several series: (label, series, value) or a\n")
-	b.WriteString("numeric column each, 6 drawn, the rest sum into Other. stat wants a single number\n")
+	b.WriteString("numeric column each, 6 drawn (bars sum the rest into Other). stat wants a single number\n")
 	b.WriteString("in the first column of the first row. table renders whatever columns come back.\n")
 	b.WriteString("The other charts take inline \"columns\" + \"rows\" in exactly the shape their\n")
 	b.WriteString("sql returns:\n")

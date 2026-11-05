@@ -12,8 +12,14 @@
 import { typeFamily } from '../lib/formatCell'
 import { isNumeric } from './series'
 
-// At most this many series are drawn. More fold into one "Other".
+// At most this many series are drawn. Past that, bars sum the smaller ones into
+// one "Other"; lines draw the six largest and say how many are not shown (a sum
+// of unrelated lines is not a line anyone asked for).
 const MAX_SERIES = 6
+
+// FoldMode: what happens to series past MAX_SERIES.
+export type FoldMode = 'sum' | 'drop'
+
 const OTHER = 'Other'
 
 export interface SeriesLine {
@@ -26,8 +32,10 @@ export interface MultiSeries {
   shape: 'single' | 'long' | 'wide' | 'inline'
   labels: string[]
   series: SeriesLine[]
-  // names of the series summed into "Other" (empty when nothing folded)
+  // names of the series summed into "Other" (mode 'sum') or not drawn (mode
+  // 'drop'); empty when nothing folded
   folded: string[]
+  foldMode: FoldMode
   // a (label, series) pair or a label was seen twice and summed, so a bar or
   // point is no longer one result row (drill-down is off)
   merged: boolean
@@ -39,7 +47,7 @@ export interface ResultTable {
   types?: string[]
 }
 
-const EMPTY: MultiSeries = { shape: 'single', labels: [], series: [], folded: [], merged: false }
+const EMPTY: MultiSeries = { shape: 'single', labels: [], series: [], folded: [], foldMode: 'sum', merged: false }
 
 // cell reads a result cell as a number, or null for a null, a blank, a boolean
 // or text. A HUGEINT/DECIMAL past JS's safe range crosses the wire as a numeric
@@ -163,6 +171,7 @@ function singlePoints(t: ResultTable, cols: string[], numeric: boolean[]): Multi
     labels: t.rows.map((r) => String(r[li] ?? '')),
     series: [{ name: cols[vi] ?? 'value', values: t.rows.map((r) => cell(r[vi]) ?? 0) }],
     folded: [],
+    foldMode: 'sum',
     merged: false,
   }
 }
@@ -231,13 +240,28 @@ class Grid {
   }
 }
 
-// foldSeries keeps the five largest series (by total magnitude, in their own
-// order) and sums the rest, and any series already named "Other", into one
-// "Other" per label (a gap only where every folded series has one). Up to six
-// series are returned as they are, even one named "Other".
-export function foldSeries(series: SeriesLine[]): { series: SeriesLine[]; folded: string[] } {
+// foldSeries limits a chart to MAX_SERIES series; up to six are returned as they are.
+//
+// 'drop' (lines) keeps the six with the largest total magnitude, ties in their
+// original order, drawn in their original order; the rest are named in `folded`
+// and not drawn. A series called "Other" is an ordinary series there.
+//
+// 'sum' (bars) keeps the five largest and sums the rest, and any series already
+// named "Other", into one "Other" per label (a gap only where every folded
+// series has one).
+export function foldSeries(series: SeriesLine[], mode: FoldMode = 'sum'): { series: SeriesLine[]; folded: string[] } {
   if (series.length <= MAX_SERIES) return { series, folded: [] }
   const total = (s: SeriesLine) => s.values.reduce<number>((a, v) => a + Math.abs(v ?? 0), 0)
+  if (mode === 'drop') {
+    const top = new Set(
+      series
+        .map((s, i) => ({ i, t: total(s) }))
+        .sort((a, b) => b.t - a.t || a.i - b.i)
+        .slice(0, MAX_SERIES)
+        .map((r) => r.i),
+    )
+    return { series: series.filter((_, i) => top.has(i)), folded: series.filter((_, i) => !top.has(i)).map((s) => s.name) }
+  }
   const ranked = series
     .map((s, i) => ({ i, t: total(s), other: s.name.trim().toLowerCase() === OTHER.toLowerCase() }))
     .filter((r) => !r.other)
@@ -254,13 +278,13 @@ export function foldSeries(series: SeriesLine[]): { series: SeriesLine[]; folded
   return { series: [...series.filter((_, i) => keep.has(i)), other], folded: rest.map((s) => s.name) }
 }
 
-function finish(shape: MultiSeries['shape'], g: Grid): MultiSeries {
-  const f = foldSeries(g.lines())
-  return { shape, labels: g.labels, series: f.series, folded: f.folded, merged: g.merged }
+function finish(shape: MultiSeries['shape'], g: Grid, mode: FoldMode): MultiSeries {
+  const f = foldSeries(g.lines(), mode)
+  return { shape, labels: g.labels, series: f.series, folded: f.folded, foldMode: mode, merged: g.merged }
 }
 
 // toMultiSeries shapes a result (or inline columns + rows) into labels and series.
-export function toMultiSeries(t: ResultTable): MultiSeries {
+export function toMultiSeries(t: ResultTable, mode: FoldMode = 'sum'): MultiSeries {
   const cols = columnNames(t)
   if (t.rows.length === 0 || cols.length === 0) return EMPTY
   const numeric = numericColumns(t, cols.length)
@@ -272,7 +296,7 @@ export function toMultiSeries(t: ResultTable): MultiSeries {
       const name = String(row[r.series] ?? '')
       g.add(g.label(String(row[r.label] ?? '')), g.name(name === '' ? '(blank)' : name), cell(row[r.value]))
     }
-    return finish('long', g)
+    return finish('long', g, mode)
   }
   const idx = r.values.map((c) => g.name(cols[c]))
   for (const row of t.rows) {
@@ -281,7 +305,7 @@ export function toMultiSeries(t: ResultTable): MultiSeries {
     if (g.labelCount === before) g.merged = true
     r.values.forEach((c, k) => g.add(l, idx[k], cell(row[c])))
   }
-  return finish('wide', g)
+  return finish('wide', g, mode)
 }
 
 export interface InlineSeries {
@@ -291,13 +315,13 @@ export interface InlineSeries {
 
 // fromInlineSeries shapes a lineChart's `series: [{name, points}]`: the union of
 // the series' labels, in first-seen order, with a gap where a series lacks one.
-export function fromInlineSeries(list: InlineSeries[]): MultiSeries {
+export function fromInlineSeries(list: InlineSeries[], mode: FoldMode = 'sum'): MultiSeries {
   const g = new Grid()
   for (const s of list) {
     const si = g.name(s.name)
     for (const p of s.points ?? []) g.add(g.label(String(p.label ?? '')), si, cell(p.value))
   }
-  return finish('inline', g)
+  return finish('inline', g, mode)
 }
 
 // fromPoints is the single-series inline form (`points`, `bars`).
@@ -307,6 +331,7 @@ export function fromPoints(points: { label: string; value: number }[]): MultiSer
     labels: points.map((p) => String(p.label ?? '')),
     series: [{ name: 'value', values: points.map((p) => cell(p.value) ?? 0) }],
     folded: [],
+    foldMode: 'sum',
     merged: false,
   }
 }

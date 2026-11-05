@@ -70,16 +70,27 @@ describe('multi-series lineChart', () => {
     w.unmount()
   })
 
-  it('folds past six series into one Other and says so', () => {
+  it('draws the six largest of nine series, invents no Other line, and says what is hidden', () => {
     const reps = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']
     const w = render(long(reps))
     expect(w.findAll('g.a2ui-linechart__series')).toHaveLength(6)
     const legend = w.find('[data-testid="a2ui-series-legend"]')
-    expect(legend.text()).toContain('Other')
-    expect(w.find('[data-testid="a2ui-series-folded"]').text()).toBe('Other is the sum of 4 series')
-    // the biggest are kept: I (900s) and not A (100s)
-    expect(legend.text()).toContain('I')
-    expect(w.find('svg').attributes('aria-label')).toContain('6 series')
+    expect(legend.text()).not.toContain('Other')
+    // the biggest are kept (D..I), the smallest hidden
+    expect(legend.findAll('.a2ui-kchart__key').map((k) => k.text())).toEqual(['D', 'E', 'F', 'G', 'H', 'I'])
+    const note = w.find('[data-testid="a2ui-series-folded"]')
+    expect(note.text()).toBe('+3 more not shown; filter in SQL')
+    expect(note.attributes('title')).toBe('A, B, C')
+    const aria = w.find('svg').attributes('aria-label')!
+    expect(aria).toContain('6 series')
+    expect(aria).toContain('3 more not shown (A, B, C)')
+    w.unmount()
+  })
+
+  it('shows no note for exactly six series', () => {
+    const w = render(long(['A', 'B', 'C', 'D', 'E', 'F']))
+    expect(w.findAll('g.a2ui-linechart__series')).toHaveLength(6)
+    expect(w.find('[data-testid="a2ui-series-folded"]').exists()).toBe(false)
     w.unmount()
   })
 
@@ -254,7 +265,8 @@ describe('multi-series barChart (grouped)', () => {
   it('folds past six series into Other', () => {
     const w = render(bars(['A', 'B', 'C', 'D', 'E', 'F', 'G']))
     expect(w.findAll('[data-testid="a2ui-bargroup"]')[0].findAll('.a2ui-bar--grouped')).toHaveLength(6)
-    expect(w.find('[data-testid="a2ui-series-folded"]').exists()).toBe(true)
+    expect(w.find('[data-testid="a2ui-series-folded"]').text()).toBe('Other is the sum of 2 series')
+    expect(w.findAll('.a2ui-kchart__key').map((k) => k.text())).toContain('Other')
     w.unmount()
   })
 
