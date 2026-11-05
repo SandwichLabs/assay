@@ -217,8 +217,8 @@ a validation error, not a silently-ignored one.
 | `statRow` | — | — (a row container for `stat` children) |
 | `table` | — | `columns`, `rows`, `sql`, `connection`, `label` |
 | `barChart` | — | `bars`, `sql`, `connection`, `label`, `color`, `motion` |
-| `lineChart` | — | `points`, `sql`, `connection`, `label`, `color`, `motion` |
-| `areaChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `motion` |
+| `lineChart` | — | `points`, `sql`, `connection`, `label`, `color`, `zero`, `motion` |
+| `areaChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `zero`, `motion` |
 | `columnChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `mode`, `sorted`, `motion` |
 | `ringChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `max`, `motion` |
 | `radarChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `max`, `motion` |
@@ -261,6 +261,31 @@ component re-runs its query every time the page renders — same read-only,
 sandbox-gated classifier as a notebook sql cell. An optional `connection`
 (v2) sets the default catalog for the binding's unqualified names, exactly as
 on a sql cell.
+
+### Chart axes
+
+`lineChart`, `areaChart`, `barChart` and `columnChart` draw a value axis with
+four to six round gridlines (steps of 1, 2 or 5 times a power of ten), labelled
+with the shared number formatter.
+
+- **Zero baseline.** Data that is all non-negative starts at 0 (all
+  non-positive ends at 0; mixed data spans its own range and draws a heavier
+  zero line). `lineChart` and `areaChart` take `zero: false` to fit the axis to
+  the data instead, for a rate or index where movement in a narrow band is the
+  point. `barChart` and `columnChart` are always zero-based, because a bar's
+  length is its magnitude; a negative `barChart` value draws leftward from the
+  zero line.
+- **Time axis.** When every label of a `lineChart` or `areaChart` is a date or
+  timestamp (`2025-04-03`, `2025-04`, `2025-04-03 10:30:00`; a zone suffix is
+  ignored), points sit by time rather than by row, so gaps and uneven spacing
+  show, and rows are drawn left to right whatever their order. Ticks fall on
+  calendar boundaries and the unit is chosen from the span: minutes or hours
+  (`14:00`), days (`Apr 3`), weeks (Mondays), months (`Apr '25`), quarters
+  (`Q2 '25`) or years (`2025`). Any other label is a category, spaced evenly.
+- **Reading values.** Hover a `lineChart` or `areaChart`, or focus it and use
+  Left, Right, Home and End, to read a point's label and value (a tooltip, plus
+  a live region for screen readers). Bars show their value beside them and
+  columns above them.
 
 ### KINETIC motion charts
 

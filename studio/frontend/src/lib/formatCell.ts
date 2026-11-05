@@ -129,9 +129,19 @@ const numberFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits
 // directly by chart components that only ever display a plain JS number
 // (bar chart values, line chart axis/tooltip labels) — moved here from
 // a2ui/query.ts, same behaviour.
-export function formatNumber(v: number): string {
+//
+// `maxFractionDigits` (default 2) widens the cut for axis ticks, whose step can
+// be finer than a cent (0.005): the same formatter, one more digit count.
+const wideFormatters = new Map<number, Intl.NumberFormat>()
+export function formatNumber(v: number, maxFractionDigits = 2): string {
   if (!Number.isFinite(v)) return '—'
-  return numberFormatter.format(v)
+  if (maxFractionDigits === 2) return numberFormatter.format(v)
+  let f = wideFormatters.get(maxFractionDigits)
+  if (!f) {
+    f = new Intl.NumberFormat(undefined, { maximumFractionDigits: maxFractionDigits, minimumFractionDigits: 0 })
+    wideFormatters.set(maxFractionDigits, f)
+  }
+  return f.format(v)
 }
 
 function newlineMark(s: string): string {

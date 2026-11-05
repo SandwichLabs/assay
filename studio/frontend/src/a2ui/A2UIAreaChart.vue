@@ -1,16 +1,22 @@
 <script setup lang="ts">
 // A2UIAreaChart — the KINETIC "morphing spline": one smooth Catmull-Rom area
 // per numeric column over a shared label axis, every point animated with the
-// chart's motion preset. Hover (or focus) a column to read every series at
-// that label.
+// chart's motion preset. The axes are the line chart's (a2ui/scale.ts,
+// a2ui/xaxis.ts): round gridlines, a zero baseline unless `zero: false`, and a
+// real time axis for date labels. Hover the plot, or focus it and use the
+// arrow keys, to read every series at a label.
 import { computed, ref } from 'vue'
 import type { A2UIComponentT } from './types'
 import { isBound } from './query'
 import A2UIChartFrame from './A2UIChartFrame.vue'
+import A2UIPlotFrame from './A2UIPlotFrame.vue'
 import { useChartData } from './useChartData'
 import { useMotion } from './useMotion'
 import { areaPath, seriesClass, splinePath, toSeries, type XY } from './series'
 import { formatNumber } from '../lib/formatCell'
+import { valueScale, frac as scaleFrac, tickDigits } from './scale'
+import { buildXAxis } from './xaxis'
+import { useChartCursor } from './useChartCursor'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, table } = useChartData(() => props.component)
@@ -21,31 +27,43 @@ const { values, replay, enabled } = useMotion(() => flat.value, () => props.comp
 const W = 560
 const H = 200
 const PAD = 16
-const all = computed(() => flat.value.concat(0))
-const maxV = computed(() => Math.max(...all.value))
-const minV = computed(() => Math.min(...all.value))
-const span = computed(() => maxV.value - minV.value || 1)
+const innerW = W - PAD * 2
+const innerH = H - PAD * 2
+const scale = computed(() => valueScale(flat.value, { zero: props.component.zero !== false }))
 const n = computed(() => data.value.labels.length)
+const plotWidthPx = ref(0)
+const xa = computed(() => buildXAxis(data.value.labels, plotWidthPx.value, W))
 
 function x(i: number): number {
-  return n.value <= 1 ? W / 2 : PAD + (i / (n.value - 1)) * (W - PAD * 2)
+  return PAD + xa.value.frac[i] * innerW
 }
 function y(v: number): number {
-  return PAD + (H - PAD * 2) - ((v - minV.value) / span.value) * (H - PAD * 2)
+  return PAD + innerH - scaleFrac(scale.value, v) * innerH
 }
-const baseline = computed(() => y(Math.max(minV.value, Math.min(0, maxV.value))))
+const baseline = computed(() => y(Math.max(scale.value.min, Math.min(0, scale.value.max))))
+
+const digits = computed(() => tickDigits(scale.value.step))
+const fmtTick = (v: number) => formatNumber(v, digits.value)
+const yTicks = computed(() => scale.value.ticks.map((t) => ({ pct: (y(t) / H) * 100, label: fmtTick(t) })))
+const xTicks = computed(() => xa.value.ticks.map((t) => ({ frac: (PAD + t.frac * innerW) / W, label: t.label })))
+const axw = computed(() => Math.max(2, ...scale.value.ticks.map((t) => fmtTick(t).length)) + 1)
 
 const curves = computed(() =>
   data.value.series.map((s, si) => {
-    const pts: XY[] = s.values.map((_, i) => ({ x: x(i), y: y(values.value[si * n.value + i] ?? 0) }))
-    return { name: s.name, line: splinePath(pts), area: areaPath(pts, baseline.value), pts }
+    // left to right, so a time axis with out-of-order rows still draws a function
+    const pts: XY[] = xa.value.order.map((i) => ({ x: x(i), y: y(values.value[si * n.value + i] ?? 0) }))
+    return { name: s.name, line: splinePath(pts), area: areaPath(pts, baseline.value), pts, idx: xa.value.order }
   }),
 )
 
-const hover = ref<number | null>(null)
-const active = computed(() => hover.value ?? n.value - 1)
+const orderedFracs = computed(() => xa.value.order.map((i) => xa.value.frac[i]))
+const cursor = useChartCursor(() => orderedFracs.value, { W, padL: PAD, innerW })
+const lastIdx = computed(() => xa.value.order[n.value - 1] ?? 0)
+const active = computed(() => (cursor.active.value === null ? lastIdx.value : (xa.value.order[cursor.active.value] ?? lastIdx.value)))
+const hover = computed(() => (cursor.active.value === null ? null : active.value))
+const readText = computed(() => `${data.value.labels[active.value]}: ${data.value.series.map((s) => `${s.name} ${formatNumber(s.values[active.value])}`).join(', ')}`)
 const ariaLabel = computed(
-  () => `Area chart of ${data.value.series.map((s) => s.name).join(', ')} over ${n.value} labels, ranging ${formatNumber(minV.value)} to ${formatNumber(maxV.value)}`,
+  () => `Area chart of ${data.value.series.map((s) => s.name).join(', ')} over ${n.value} labels, ranging ${formatNumber(Math.min(...flat.value))} to ${formatNumber(Math.max(...flat.value))}`,
 )
 </script>
 
@@ -59,23 +77,24 @@ const ariaLabel = computed(
       <span>{{ data.labels[active] }}</span>
       <span v-for="(s, si) in data.series" :key="si" class="a2ui-kchart__readval" :class="seriesClass(si)">{{ formatNumber(s.values[active]) }}</span>
     </div>
-    <svg :viewBox="`0 0 ${W} ${H}`" class="a2ui-kchart__svg" role="img" :aria-label="ariaLabel" @mouseleave="hover = null">
-      <line v-for="r in [0.2, 0.5, 0.8]" :key="r" :x1="PAD" :x2="W - PAD" :y1="PAD + r * (H - PAD * 2)" :y2="PAD + r * (H - PAD * 2)" class="a2ui-kchart__grid" />
-      <line v-if="hover !== null" :x1="x(hover)" :x2="x(hover)" :y1="PAD" :y2="H - PAD" class="a2ui-kchart__cursor" />
-      <g v-for="(c, si) in curves" :key="si" :class="seriesClass(si)">
-        <path :d="c.area" class="a2ui-area__fill" />
-        <path :d="c.line" class="a2ui-area__line" :class="{ 'a2ui-area__line--secondary': si > 0 }" />
-        <circle v-for="(p, i) in c.pts" :key="i" :cx="p.x" :cy="p.y" :r="hover === i ? 5 : 3" class="a2ui-area__dot" />
-      </g>
-      <rect
-        v-for="(_, i) in data.labels" :key="'hit' + i"
-        :x="x(i) - (W / Math.max(n, 1)) / 2" y="0" :width="W / Math.max(n, 1)" :height="H"
-        class="a2ui-kchart__hit" @mouseenter="hover = i"
-      ><title>{{ data.labels[i] }}: {{ data.series.map((s) => `${s.name} ${formatNumber(s.values[i])}`).join(', ') }}</title></rect>
-    </svg>
-    <div class="a2ui-kchart__xaxis">
-      <span>{{ data.labels[0] }}</span>
-      <span v-if="n > 1">{{ data.labels[n - 1] }}</span>
-    </div>
+    <A2UIPlotFrame
+      :y-ticks="yTicks" :x-ticks="xTicks" :axw="axw"
+      tabindex="0" role="group" :aria-label="`Chart values. Use the left and right arrow keys to read each label. Now reading: ${readText}`"
+      @measure="plotWidthPx = $event"
+      @mousemove="cursor.onMove" @mouseleave="cursor.clear" @keydown="cursor.onKey" @focus="cursor.onFocus" @blur="cursor.clear"
+    >
+      <svg :viewBox="`0 0 ${W} ${H}`" class="a2ui-kchart__svg" role="img" :aria-label="ariaLabel">
+        <line
+          v-for="(t, i) in scale.ticks" :key="'g' + i" :x1="PAD" :x2="W - PAD" :y1="y(t)" :y2="y(t)"
+          class="a2ui-kchart__grid" :class="{ 'a2ui-kchart__grid--zero': t === 0 && scale.min < 0 }"
+        />
+        <line v-if="hover !== null" :x1="x(hover)" :x2="x(hover)" :y1="PAD" :y2="H - PAD" class="a2ui-kchart__cursor" />
+        <g v-for="(c, si) in curves" :key="si" :class="seriesClass(si)">
+          <path :d="c.area" class="a2ui-area__fill" />
+          <path :d="c.line" class="a2ui-area__line" :class="{ 'a2ui-area__line--secondary': si > 0 }" />
+          <circle v-for="(p, k) in c.pts" :key="k" :cx="p.x" :cy="p.y" :r="hover === c.idx[k] ? 5 : 3" class="a2ui-area__dot" />
+        </g>
+      </svg>
+    </A2UIPlotFrame>
   </A2UIChartFrame>
 </template>

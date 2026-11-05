@@ -173,6 +173,8 @@ func PromptBlock() string {
 	b.WriteString("  heatmap: row label, column label, value per cell (SELECT node, hour, load ...).\n")
 	b.WriteString("  streamChart: label, value in time order; \"refresh\" (seconds) re-runs its sql\n")
 	b.WriteString("    while visible and keeps the last \"window\" points; values above \"threshold\" flag.\n\n")
+	b.WriteString("lineChart/areaChart axes start at 0 for non-negative data (\"zero\": false opts out);\n")
+	b.WriteString("ISO date or timestamp labels get a real time axis.\n\n")
 	b.WriteString("Every chart (" + strings.Join(Charts, ", ") + ") animates in; \"motion\" tunes it:\n")
 	b.WriteString("easing one of " + quotedList(Easings) + " (\"custom\" uses stiffness/damping/mass),\n")
 	b.WriteString("speed 0.25-4, stagger true|false. Omit motion for the default spring.\n\n")

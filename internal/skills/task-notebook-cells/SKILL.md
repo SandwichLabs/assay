@@ -63,6 +63,14 @@ picker):
 Don't pick `bar`/`line` for a query that returns one row, and don't pick
 `stat` for anything that isn't already reduced to a single number.
 
+A line over date or timestamp labels (`2025-04-03`, `2025-04`) is drawn on a
+real time axis: points sit by time, so gaps show, with ticks such as `Apr '25`.
+Return the label as an ISO date or `strftime(d, '%Y-%m')`, not a formatted
+string like `April 2025`, which would be spaced as a plain category. Charts
+start their value axis at 0 for non-negative data; only an `a2ui` line or area
+chart with `zero: false` fits the axis to the data, which is right for a rate
+or index, not for money or counts.
+
 ## Labels
 
 Short and specific: `"Revenue by region"`, not `"Query 1"` or `"Result"`.

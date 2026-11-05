@@ -193,12 +193,22 @@
   border-radius: var(--sh-radius-sm);
   height: 14px;
   overflow: hidden;
+  position: relative;
 }
 .a2ui-page .a2ui-bar__fill {
+  position: absolute;
+  top: 0;
   height: 100%;
   background: var(--sh-teal);
   border-radius: var(--sh-radius-sm);
 }
+/* Gridlines run behind the fill; the zero line shows when values go negative. */
+.a2ui-page .a2ui-bar__grid { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid color-mix(in srgb, var(--sh-chalk) 70%, transparent); }
+.a2ui-page .a2ui-bar__grid--zero { border-left-color: var(--sh-graphite); z-index: 1; }
+.a2ui-page .a2ui-baraxis { display: flex; align-items: center; gap: 8px; }
+.a2ui-page .a2ui-baraxis__label { flex: 0 0 110px; }
+.a2ui-page .a2ui-baraxis__value { flex: 0 0 auto; }
+.a2ui-page .a2ui-bar__axis { flex: 1; position: relative; height: 16px; }
 .a2ui-page .a2ui-bar__value {
   /* Fixed-width value column (review fix): flex:0 0 auto let this span
      size to its own text, so a row with "1,234" made its .a2ui-bar__track
@@ -216,32 +226,34 @@
   color: var(--sh-graphite);
 }
 
-.a2ui-page .a2ui-linechart__wrap { display: flex; flex-direction: column; }
-.a2ui-page .a2ui-linechart__plot { position: relative; }
+/* Axes frame shared by lineChart and areaChart (A2UIPlotFrame.vue): a column
+   of value labels left of the plot, tick labels under it. Labels are HTML, not
+   SVG <text>, so 11px is 11 real screen pixels at any chart width (an SVG font
+   size is in viewBox units and shrinks with the SVG). y labels sit at a
+   percentage of the plot's height, x labels at a percentage of its width; the
+   SVG keeps its viewBox aspect ratio, so those land on the gridlines. The
+   first x label anchors left and the last right (see xaxis.tickAnchor) so
+   neither clips past the card. */
+.a2ui-page .a2ui-plot { display: grid; grid-template-columns: var(--a2ui-axw, 3ch) minmax(0, 1fr); }
+.a2ui-page .a2ui-plot__yaxis { position: relative; }
+.a2ui-page .a2ui-plot__body { position: relative; min-width: 0; border-radius: var(--sh-radius-sm); }
+.a2ui-page .a2ui-plot__xrow { grid-column: 2; }
 .a2ui-page .a2ui-linechart__svg { width: 100%; height: auto; display: block; }
-.a2ui-page .a2ui-linechart__line { fill: none; stroke: var(--sh-teal); stroke-width: 2; }
+.a2ui-page .a2ui-linechart__line { fill: none; stroke: var(--sh-teal); stroke-width: 2; stroke-linejoin: round; }
 .a2ui-page .a2ui-linechart__dot { fill: var(--sh-teal); }
-.a2ui-page .a2ui-linechart__grid { stroke: var(--sh-chalk); stroke-width: 1; }
-.a2ui-page .a2ui-linechart__grid--bottom { stroke-dasharray: 2 2; }
-/* Axis labels render as HTML, not SVG <text> (review fix): an SVG <text>
-   font-size is in the viewBox's own "user units", which scale down with
-   the SVG's rendered size — at the ~410px agent-panel width the 640-unit
-   viewBox renders around half scale, shrinking a 9-unit label to roughly 5
-   actual screen pixels. HTML text is sized in real CSS px regardless of
-   how much the SVG next to it is scaled, so 11px here is always 11 actual
-   screen pixels. Positioned by percentage of the viewBox (see
-   A2UILineChart.vue's xPct/yPct) rather than a ResizeObserver-measured
-   container width, since the SVG's rendered box always keeps the
-   viewBox's aspect ratio. */
+.a2ui-page .a2ui-linechart__grid { stroke: color-mix(in srgb, var(--sh-chalk) 60%, transparent); stroke-width: 1; }
+.a2ui-page .a2ui-linechart__grid--zero { stroke: var(--sh-graphite); }
+.a2ui-page .a2ui-linechart__cursor { stroke: var(--sh-graphite); stroke-width: 1; stroke-dasharray: 3 3; }
+.a2ui-page .a2ui-linechart__focus { fill: var(--sh-teal); stroke: var(--sh-surface); stroke-width: 2; pointer-events: none; }
 .a2ui-page .a2ui-linechart__axis-y {
   position: absolute;
-  left: 0;
+  right: 0;
   transform: translateY(-50%);
   font-size: 11px;
   font-family: var(--sh-font-mono);
+  font-variant-numeric: tabular-nums;
   color: var(--sh-graphite);
-  background: var(--sh-surface);
-  padding-right: 4px;
+  padding-right: 6px;
   white-space: nowrap;
 }
 .a2ui-page .a2ui-linechart__axis-x-row {
@@ -250,17 +262,42 @@
   margin-top: 2px;
 }
 .a2ui-page .a2ui-linechart__axis-x {
-  /* `left`/`transform` are set inline per label by A2UILineChart.vue's
-     labelStyle() — the first label anchors left, the last anchors right,
-     everything else centers, so none of them clip past the card's edge
-     (review fix: the first/last label used to always center on a point
-     sitting at the very edge of the plot, hanging half the label text
-     outside the card — "2026-06" rendered as "2026-0"). */
+  /* `left`/`transform` are set inline per tick by xaxis.tickAnchor() */
   position: absolute;
   top: 0;
   font-size: 11px;
   font-family: var(--sh-font-mono);
   color: var(--sh-graphite);
+  white-space: nowrap;
+}
+.a2ui-page .a2ui-linechart__tip {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 3px 7px;
+  border: var(--sh-border-thin);
+  border-radius: var(--sh-radius-sm);
+  background: var(--sh-surface);
+  color: var(--sh-ink);
+  font-family: var(--sh-font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--sh-ink) 18%, transparent);
+}
+.a2ui-page .a2ui-linechart__tip--right { transform: translate(10px, -50%); }
+.a2ui-page .a2ui-linechart__tip--left { transform: translate(calc(-100% - 10px), -50%); }
+.a2ui-page .a2ui-linechart__tip-label { color: var(--sh-graphite); }
+.a2ui-page .a2ui-linechart__tip-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Visually hidden text for screen readers (live region of the hovered value). */
+.a2ui-page .a2ui-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 
@@ -370,7 +407,8 @@
 }
 .a2ui-page .a2ui-kchart__replay:hover { color: var(--sh-ink); background: var(--sh-paper-2); }
 .a2ui-page .a2ui-kchart__svg { width: 100%; height: auto; display: block; overflow: visible; }
-.a2ui-page .a2ui-kchart__grid { stroke: var(--sh-chalk); stroke-width: 1; fill: none; }
+.a2ui-page .a2ui-kchart__grid { stroke: color-mix(in srgb, var(--sh-chalk) 60%, transparent); stroke-width: 1; fill: none; }
+.a2ui-page .a2ui-kchart__grid--zero { stroke: var(--sh-graphite); }
 .a2ui-page .a2ui-kchart__cursor { stroke: var(--sh-graphite); stroke-width: 1; stroke-dasharray: 3 3; }
 .a2ui-page .a2ui-kchart__hit { fill: transparent; cursor: crosshair; }
 .a2ui-page .a2ui-kchart__readout {
@@ -451,16 +489,38 @@
   overflow-x: auto;
 }
 .a2ui-page .a2ui-columns__col { display: flex; flex-direction: column; align-items: center; height: 100%; min-width: 0; }
-.a2ui-page .a2ui-columns__total { font-family: var(--sh-font-mono); font-size: 11px; color: var(--sh-graphite); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+.a2ui-page .a2ui-columns__total { font-family: var(--sh-font-mono); font-size: 11px; line-height: 16px; height: 16px; color: var(--sh-graphite); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+
+/* Value axis for columnChart. The gridlines and the y labels must line up with
+   the tracks' inner height, so the fixed pieces around a track are pinned:
+   total label 16px + 3px margin above, x label 16px + 4px margin below, and the
+   track's 1px border + 3px padding (--a2ui-col-inset adds a drill column's 3px). */
+.a2ui-page .a2ui-colplot { --a2ui-col-inset: 0px; display: grid; grid-template-columns: var(--a2ui-axw, 3ch) minmax(0, 1fr); }
+.a2ui-page .a2ui-colplot--drill { --a2ui-col-inset: 3px; }
+.a2ui-page .a2ui-colplot__yaxis { display: flex; flex-direction: column; height: 190px; }
+.a2ui-page .a2ui-colplot__ypad--top { flex: 0 0 calc(19px + 4px + var(--a2ui-col-inset)); }
+.a2ui-page .a2ui-colplot__ypad--bottom { flex: 0 0 calc(20px + 4px + var(--a2ui-col-inset)); }
+.a2ui-page .a2ui-colplot__yplot { position: relative; flex: 1 1 auto; }
+.a2ui-page .a2ui-colplot__main { position: relative; min-width: 0; }
+.a2ui-page .a2ui-colplot__grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(19px + 4px + var(--a2ui-col-inset));
+  bottom: calc(20px + 4px + var(--a2ui-col-inset));
+  pointer-events: none;
+}
+.a2ui-page .a2ui-colplot__line { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid color-mix(in srgb, var(--sh-chalk) 60%, transparent); }
+.a2ui-page .a2ui-colplot__line:first-child { border-top-color: var(--sh-graphite); }
+.a2ui-page .a2ui-colplot .a2ui-columns { position: relative; z-index: 1; }
 .a2ui-page .a2ui-columns__track {
   flex: 1 1 auto;
   width: 100%;
   display: flex;
   gap: 2px;
   padding: 3px;
-  border: var(--sh-border-thin);
+  border: 1px solid transparent;
   border-radius: var(--sh-radius-sm);
-  background: var(--sh-paper-2);
   overflow: hidden;
 }
 .a2ui-page .a2ui-columns__track--stacked { flex-direction: column-reverse; justify-content: flex-start; }
@@ -470,6 +530,8 @@
 .a2ui-page .a2ui-columns__track--grouped .a2ui-columns__seg { flex: 1 1 0; }
 .a2ui-page .a2ui-columns__label {
   margin-top: 4px;
+  line-height: 16px;
+  height: 16px;
   max-width: 100%;
   font-family: var(--sh-font-mono);
   font-size: 11px;

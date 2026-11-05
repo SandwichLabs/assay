@@ -19,8 +19,8 @@ Types and their fields (optional unless marked required):
   stat         label(required), color, connection, detail, sql, value
   table        columns(string[]), connection, label, rows(array of cell arrays), sql
   barChart     bars([{label, value}]), color, connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), sql
-  lineChart    color, connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), points([{label, value}]), sql
-  areaChart    columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
+  lineChart    color, connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), points([{label, value}]), sql, zero
+  areaChart    columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql, zero
   columnChart  columns(string[]), connection, label, mode(stacked|grouped), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sorted, sql
   ringChart    columns(string[]), connection, label, max(number > 0), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
   radarChart   columns(string[]), connection, label, max(number > 0), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
@@ -54,6 +54,9 @@ sql returns:
   heatmap: row label, column label, value per cell (SELECT node, hour, load ...).
   streamChart: label, value in time order; "refresh" (seconds) re-runs its sql
     while visible and keeps the last "window" points; values above "threshold" flag.
+
+lineChart/areaChart axes start at 0 for non-negative data ("zero": false opts out);
+ISO date or timestamp labels get a real time axis.
 
 Every chart (barChart, lineChart, areaChart, ringChart, columnChart, radarChart, sankeyChart, heatmap, streamChart) animates in; "motion" tunes it:
 easing one of "spring", "expo", "cinema", "steps", "custom", "none" ("custom" uses stiffness/damping/mass),
