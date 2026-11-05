@@ -57,3 +57,17 @@ func TestMCPOnWithoutStore(t *testing.T) {
 	assert.False(t, r.MCPOn("/x", "id"))
 	assert.Error(t, r.SetMCPOn("/x", "id", true))
 }
+
+func TestMCPEntriesPrunedWhenRecentsTrim(t *testing.T) {
+	r, _ := newTestRecents(t)
+	old, keep := t.TempDir(), t.TempDir()
+	r.Record(old, "idold", "Old")
+	require.NoError(t, r.SetMCPOn(old, "idold", true))
+	for i := 0; i < MaxRecents-1; i++ {
+		r.Record(t.TempDir(), "idx", "X")
+	}
+	assert.True(t, r.MCPOn(old, "idold"), "still listed, still on")
+
+	r.Record(keep, "idkeep", "Keep") // pushes the oldest off the list
+	assert.False(t, r.MCPOn(old, "idold"), "fell off recents, so it no longer serves")
+}

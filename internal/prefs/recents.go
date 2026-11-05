@@ -86,6 +86,7 @@ func (r *Recents) saveLocked(p Preferences, recs []Recent) error {
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].LastOpened > recs[j].LastOpened })
 	if len(recs) > MaxRecents {
 		recs = recs[:MaxRecents]
+		pruneMCP(&p, recs) // a workspace that fell off the list does not keep serving
 	}
 	raw, err := json.Marshal(recs)
 	if err != nil {

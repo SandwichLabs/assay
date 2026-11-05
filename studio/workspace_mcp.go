@@ -106,8 +106,10 @@ func (a *App) rememberMCPLocked(on bool) {
 	if a.ws == nil {
 		return
 	}
-	a.mcpOn, a.mcpSaveErr = false, ""
+	a.mcpSaveErr = ""
 	if err := a.recents.SetMCPOn(a.ws.Root(), a.ws.ID(), on); err != nil {
+		// The last saved choice is still what the next open uses, so the cached
+		// value stays as it was.
 		a.mcpSaveErr = err.Error()
 		a.logger.Warn("failed to remember the MCP choice", "error", err)
 		return

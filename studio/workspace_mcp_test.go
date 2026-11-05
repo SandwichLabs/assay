@@ -3,7 +3,11 @@ package main
 // #96: the MCP switch is remembered per workspace and comes back on open.
 
 import (
+	"os"
+	"path/filepath"
+
 	"errors"
+	"github.com/SandwichLabs/slaw/internal/prefs"
 	"testing"
 
 	"github.com/SandwichLabs/slaw/internal/hub"
@@ -98,4 +102,48 @@ func TestMCPSaveFailureIsNotClaimedAsRemembered(t *testing.T) {
 	assert.True(t, st.Running)
 	assert.False(t, st.Remembered)
 	assert.NotEmpty(t, st.SaveError)
+}
+
+func TestMCPFailedSaveOnStopKeepsThePreviousChoice(t *testing.T) {
+	app := newOpenApp(t)
+	st, err := app.StartMCP()
+	require.NoError(t, err)
+	require.True(t, st.Remembered)
+
+	// Preferences that can no longer be written: the store's "directory" is a file.
+	bad := filepath.Join(t.TempDir(), "notadir")
+	require.NoError(t, os.WriteFile(bad, []byte("x"), 0o600))
+	app.recents = prefs.NewRecents(prefs.NewStore(bad), nil)
+
+	require.NoError(t, app.StopMCP())
+	st = app.GetMCPStatus()
+	assert.False(t, st.Running)
+	assert.NotEmpty(t, st.SaveError)
+	assert.True(t, st.Remembered, "the last saved choice (on) is still what the next open uses")
+}
+
+func TestMCPHeldHubOpensReadOnlyThenRestartsWhenFree(t *testing.T) {
+	app := newOpenApp(t)
+	_, err := app.StartMCP()
+	require.NoError(t, err)
+	ws := app.ws
+	root := ws.Root()
+	require.NoError(t, app.CloseWorkspace())
+
+	hold, err := hub.AcquireHub(ws, "slaw mcp serve")
+	require.NoError(t, err)
+	res, err := app.OpenWorkspace(root)
+	require.NoError(t, err)
+	require.True(t, res.Info.ReadOnly, "another process holds the hub")
+	st := app.GetMCPStatus()
+	assert.False(t, st.Running)
+	assert.True(t, st.Remembered)
+	assert.Empty(t, st.StartError)
+
+	require.NoError(t, app.CloseWorkspace())
+	require.NoError(t, hold.Release())
+	res, err = app.OpenWorkspace(root)
+	require.NoError(t, err)
+	require.False(t, res.Info.ReadOnly)
+	assert.True(t, app.GetMCPStatus().Running, "free again: the remembered server restarts")
 }

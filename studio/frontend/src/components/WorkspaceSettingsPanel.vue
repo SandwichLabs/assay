@@ -207,7 +207,7 @@ onUnmounted(() => unsub?.())
           <p style="margin: 0;">It was on when you last used this workspace but did not restart. Press Start to try again.</p>
           <p style="margin: 4px 0 0;"><code class="break-all">{{ mcp.startError }}</code></p>
         </div>
-        <p v-if="mcp?.saveError" class="help" style="margin: 0;" data-testid="mcp-save-error">Studio couldn't remember this choice, so it will be off the next time you open the workspace: <code class="break-all">{{ mcp.saveError }}</code></p>
+        <p v-if="mcp?.saveError" class="help" style="margin: 0;" data-testid="mcp-save-error">Studio couldn't save this choice; the next time you open this workspace it uses the last saved one: <code class="break-all">{{ mcp.saveError }}</code></p>
         <p v-else-if="mcp?.remembered && !mcp.canStart" class="help" style="margin: 0;" data-testid="mcp-remembered">It is on for this workspace on this computer, but this window is read-only, so it isn't serving now.</p>
         <p v-else-if="mcp?.canStart" class="help" style="margin: 0;" data-testid="mcp-remembered">{{ mcp.remembered ? 'Remembered: Studio turns it on each time it opens this workspace on this computer. Stop turns that off.' : 'Press Start once and Studio will turn it on each time it opens this workspace on this computer.' }}</p>
 

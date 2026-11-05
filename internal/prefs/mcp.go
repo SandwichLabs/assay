@@ -55,6 +55,23 @@ func dropMCP(p *Preferences, path string) {
 	_ = setMCP(p, kept)
 }
 
+// pruneMCP drops the entries whose path is not in recs (no save).
+func pruneMCP(p *Preferences, recs []Recent) {
+	if _, ok := p.Extra[MCPKey]; !ok {
+		return
+	}
+	var kept []MCPEntry
+	for _, e := range mcpFrom(*p) {
+		for _, r := range recs {
+			if SamePath(e.Path, r.Path) {
+				kept = append(kept, e)
+				break
+			}
+		}
+	}
+	_ = setMCP(p, kept)
+}
+
 // moveMCP re-points the entries at oldPath to newRoot (no save).
 func moveMCP(p *Preferences, oldPath, newRoot string) {
 	if _, ok := p.Extra[MCPKey]; !ok {
