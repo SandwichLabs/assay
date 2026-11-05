@@ -161,6 +161,7 @@ func (a *App) openLocked(path string, mode openMode) (*OpenWorkspaceResult, erro
 	a.duplicateOf = workspace.DuplicateIDs(root, ws.ID(), workspace.Known(a.recents.IDs()))
 	a.startWatcherLocked()
 	a.recents.Record(ws.Root(), ws.ID(), ws.Name())
+	a.restoreMCPLocked() // before infoLocked: MCPRunning reads it
 
 	info := a.infoLocked()
 	a.emitEvent("workspace:opened", info)
@@ -241,6 +242,7 @@ func (a *App) closeWorkspaceLocked(reason string) {
 	root := a.ws.Root()
 	// Credentials held in memory (ask each time, session-only) end with the session.
 	a.secrets.ForgetSession()
+	a.mcpStartErr, a.mcpSaveErr, a.mcpOn = "", "", false
 	if a.wmcp != nil {
 		_ = a.wmcp.Stop()
 		a.wmcp, a.mcpTool = nil, nil

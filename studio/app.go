@@ -48,7 +48,18 @@ type App struct {
 	// mcpTool is the wrapped handler wmcp serves (what takes a.mu and shows the
 	// approval cards); nil while MCP is off.
 	mcpTool *agentToolHandler
-	watcher *workspace.Watcher
+	// mcpStartErr is why the remembered server did not restart on open (shown in
+	// the MCP status). mcpOn caches the remembered choice for the open workspace
+	// (read once on open, kept in step by Start/Stop) so the status never reads
+	// the prefs file; mcpSaveErr is why the choice could not be saved.
+	mcpStartErr string
+	mcpOn       bool
+	mcpSaveErr  string
+	// mcpStarter is a TEST SEAM only: when set, restoreMCPLocked calls it
+	// instead of startMCPLocked, so a test can force a failed restart. Never
+	// set outside tests.
+	mcpStarter func() error
+	watcher    *workspace.Watcher
 	// watchDone is closed by closeWorkspaceLocked to end the watcher forwarder.
 	watchDone chan struct{}
 	// issues are the connections that could not be set up (redacted messages).

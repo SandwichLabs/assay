@@ -19,12 +19,23 @@ type MCPStatus struct {
 	// workspace); Reason says why.
 	CanStart bool   `json:"canStart"`
 	Reason   string `json:"reason"`
+	// StartError is why the server did not come back when the workspace opened
+	// (it was left on); empty otherwise.
+	StartError string `json:"startError"`
+	// Remembered is whether the server is on for this workspace on this machine
+	// (it starts again when the workspace opens), even in a read-only window
+	// that cannot serve it now.
+	Remembered bool `json:"remembered"`
+	// SaveError is why the on/off choice could not be remembered; empty when it
+	// was saved.
+	SaveError string `json:"saveError"`
 }
 
 // StartMCP serves this workspace's agent tools over MCP on a loopback port and
 // publishes the endpoint in hub.lock, so `slaw mcp serve` (what Claude Desktop
 // and Claude Code launch) proxies to Studio. A write that needs approval shows
-// the same approval card the chat agent uses.
+// the same approval card the chat agent uses. The choice is remembered for this
+// workspace on this machine, and the server comes back when it is opened again.
 func (a *App) StartMCP() (*MCPStatus, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -34,32 +45,87 @@ func (a *App) StartMCP() (*MCPStatus, error) {
 	if a.readOnly || a.hold == nil {
 		return nil, errors.New("This window opened the workspace read-only, so it can't serve MCP. Take over the workspace first.")
 	}
-	if a.wmcp == nil {
-		h := a.newAgentToolHandler(agents.ModeFull)
-		h.enableApprovals("mcp")
-		m, err := hub.StartWorkspaceMCP(a.ws, a.sess, a.hold,
-			hub.WithMCPLogger(a.logger),
-			hub.WithMCPRememberPort(),
-			hub.WithMCPVersion(version),
-			hub.WithMCPPolicyRefresh(h.refreshPolicy),
-			hub.WithMCPHandler(h.inner),
-			hub.WithMCPHandlerWrap(func(slawmcp.Handler) slawmcp.Handler { return h }),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to start the MCP server: %w", err)
-		}
-		a.wmcp, a.mcpTool = m, h
-		a.logger.Info("MCP server started", "url", m.URL())
+	if err := a.startMCPLocked(); err != nil {
+		return nil, err
 	}
+	a.rememberMCPLocked(true)
 	a.emitEvent("workspace:changed", map[string]any{"kind": "mcp"})
 	return a.mcpStatusLocked(), nil
 }
 
-// StopMCP turns Studio's MCP server off and clears the endpoint from hub.lock.
+// startMCPLocked starts the server if it is not running. The caller holds a.mu
+// and has checked that the workspace is open and not read-only.
+func (a *App) startMCPLocked() error {
+	if a.wmcp != nil {
+		return nil
+	}
+	h := a.newAgentToolHandler(agents.ModeFull)
+	h.enableApprovals("mcp")
+	m, err := hub.StartWorkspaceMCP(a.ws, a.sess, a.hold,
+		hub.WithMCPLogger(a.logger),
+		hub.WithMCPRememberPort(),
+		hub.WithMCPVersion(version),
+		hub.WithMCPPolicyRefresh(h.refreshPolicy),
+		hub.WithMCPHandler(h.inner),
+		hub.WithMCPHandlerWrap(func(slawmcp.Handler) slawmcp.Handler { return h }),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to start the MCP server: %w", err)
+	}
+	a.wmcp, a.mcpTool, a.mcpStartErr = m, h, ""
+	a.logger.Info("MCP server started", "url", m.URL())
+	return nil
+}
+
+// restoreMCPLocked runs when a workspace opens: it brings the server back if the
+// person left it on here. A failure never blocks the open; it is logged and
+// shown in the MCP status, and the remembered choice stays on.
+func (a *App) restoreMCPLocked() {
+	a.mcpStartErr, a.mcpSaveErr, a.mcpOn = "", "", false
+	if a.ws == nil {
+		return
+	}
+	a.mcpOn = a.recents.MCPOn(a.ws.Root(), a.ws.ID())
+	if !a.mcpOn || a.readOnly || a.hold == nil {
+		return
+	}
+	start := a.startMCPLocked
+	if a.mcpStarter != nil {
+		start = a.mcpStarter
+	}
+	if err := start(); err != nil {
+		a.mcpStartErr = err.Error()
+		a.logger.Warn("MCP server did not restart when the workspace opened", "error", err)
+	}
+}
+
+// rememberMCPLocked records the on/off choice for the open workspace. When it
+// cannot be saved (no config dir), the status says so instead of claiming it is
+// remembered.
+func (a *App) rememberMCPLocked(on bool) {
+	if a.ws == nil {
+		return
+	}
+	a.mcpSaveErr = ""
+	if err := a.recents.SetMCPOn(a.ws.Root(), a.ws.ID(), on); err != nil {
+		// The last saved choice is still what the next open uses, so the cached
+		// value stays as it was.
+		a.mcpSaveErr = err.Error()
+		a.logger.Warn("failed to remember the MCP choice", "error", err)
+		return
+	}
+	a.mcpOn = on
+}
+
+// StopMCP turns Studio's MCP server off, clears the endpoint from hub.lock and
+// remembers that it stays off for this workspace.
 func (a *App) StopMCP() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.rememberMCPLocked(false)
+	a.mcpStartErr = ""
 	if a.wmcp == nil {
+		a.emitEvent("workspace:changed", map[string]any{"kind": "mcp"})
 		return nil
 	}
 	err := a.wmcp.Stop()
@@ -84,6 +150,8 @@ func (a *App) mcpStatusLocked() *MCPStatus {
 	case a.readOnly:
 		st.Reason = "This window opened the workspace read-only. Take over the workspace to serve MCP."
 	}
+	st.StartError = a.mcpStartErr
+	st.Remembered, st.SaveError = a.mcpOn, a.mcpSaveErr
 	if a.wmcp != nil {
 		st.Running, st.URL = true, a.wmcp.URL()
 	}
