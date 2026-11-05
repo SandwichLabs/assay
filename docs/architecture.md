@@ -36,7 +36,7 @@ A connection is a typed definition (Postgres, MotherDuck, S3, ...) in one of thr
 
 ## One owner per workspace
 
-DuckDB allows one writing process per database file. So one process owns a workspace's hub at a time, recorded in `.slaw-local/hub.lock`: Studio, or `slaw mcp serve`. Other `slaw mcp serve` processes proxy to the owner when it is serving MCP (Studio only does so after you press Start in Settings), so Claude Code and Studio work together and Studio's approval cards apply. `internal/hub` implements the lock, the proxy and take-over.
+DuckDB allows one writing process per database file. So one process owns a workspace's hub at a time, recorded in `.slaw-local/hub.lock`: Studio, or `slaw mcp serve`. Other `slaw mcp serve` processes proxy to the owner when it is serving MCP (Studio does so once you press Start once in Settings; it remembers that for this workspace on this computer), so Claude Code and Studio work together and Studio's approval cards apply. `internal/hub` implements the lock, the proxy and take-over.
 
 ## One tool surface
 

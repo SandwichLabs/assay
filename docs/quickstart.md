@@ -113,7 +113,7 @@ An artifact can be an HTML page, written by a teammate (it arrives with `git pul
 claude mcp add --scope user slaw-sales-demo -- "$(command -v slaw)" mcp serve --workspace "$PWD"
 ```
 
-(`--scope user` makes it available in every project; without it Claude Code registers the server for the current directory only.) Studio does not start its MCP server by itself. While Studio has the workspace open, `slaw mcp serve` stops with "Studio (pid N) has this workspace open but its MCP server is off". So either quit Studio first, or open **Settings, Workspace, Claude and other tools** in Studio and press **Start**; Claude Code then works through Studio, and any change it proposes shows an approval card in the Studio window.
+(`--scope user` makes it available in every project; without it Claude Code registers the server for the current directory only.) While Studio has the workspace open, `slaw mcp serve` works only if Studio's MCP server is on; otherwise it stops with "Studio (pid N) has this workspace open but its MCP server is off". Press **Start** once under **Settings, Workspace, Claude and other tools** in Studio. Studio remembers that for this workspace on this computer and turns the server on again each time it opens the workspace (**Stop** turns that off). Claude Code then works through Studio, and any change it proposes shows an approval card in the Studio window. Or quit Studio first.
 
 In Claude Code, run `/mcp` to see it connected, then ask something like *"List the tables in my Slaw workspace and tell me revenue by region."*
 

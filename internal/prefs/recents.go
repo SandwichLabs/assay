@@ -86,6 +86,7 @@ func (r *Recents) saveLocked(p Preferences, recs []Recent) error {
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].LastOpened > recs[j].LastOpened })
 	if len(recs) > MaxRecents {
 		recs = recs[:MaxRecents]
+		pruneMCP(&p, recs) // a workspace that fell off the list does not keep serving
 	}
 	raw, err := json.Marshal(recs)
 	if err != nil {
@@ -153,6 +154,9 @@ func (r *Recents) Remove(path string) (*Recent, error) {
 		}
 		kept = append(kept, e)
 	}
+	if removed != nil {
+		dropMCP(&p, path) // a forgotten workspace must not start serving again
+	}
 	if err := r.saveLocked(p, kept); err != nil {
 		return nil, fmt.Errorf("failed to update the list: %w", err)
 	}
@@ -195,6 +199,7 @@ func (r *Recents) Relocate(oldPath, newRoot string) error {
 			recs[i].Path = newRoot
 		}
 	}
+	moveMCP(&p, oldPath, newRoot)
 	return r.saveLocked(p, recs)
 }
 
@@ -226,7 +231,7 @@ func (r *Recents) SavePreferences(p Preferences) error {
 		extra[k] = v
 	}
 	// Keys the frontend does not round-trip come from disk, never from p.
-	for _, key := range []string{RecentsKey, UpdatesKey} {
+	for _, key := range []string{RecentsKey, UpdatesKey, MCPKey} {
 		if raw, ok := cur.Extra[key]; ok {
 			extra[key] = raw
 		} else {

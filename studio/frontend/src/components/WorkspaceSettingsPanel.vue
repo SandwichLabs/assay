@@ -203,6 +203,13 @@ onUnmounted(() => unsub?.())
           <button class="btn btn-sm" type="button" data-testid="copy-claude-desktop" @click="copyConfig('desktop')"><Icon name="copy" :size="14" /> {{ copied === 'desktop' ? 'Copied' : 'Copy Claude Desktop config' }}</button>
         </div>
         <p v-if="mcp && !mcp.canStart && !mcp.running" class="help" style="margin: 0;">{{ mcp.reason }}</p>
+        <div v-if="mcp?.startError" class="help" style="margin: 0;" data-testid="mcp-start-error">
+          <p style="margin: 0;">It was on when you last used this workspace but did not restart. Press Start to try again.</p>
+          <p style="margin: 4px 0 0;"><code class="break-all">{{ mcp.startError }}</code></p>
+        </div>
+        <p v-if="mcp?.saveError" class="help" style="margin: 0;" data-testid="mcp-save-error">Studio couldn't save this choice; the next time you open this workspace it uses the last saved one: <code class="break-all">{{ mcp.saveError }}</code></p>
+        <p v-else-if="mcp?.remembered && !mcp.canStart" class="help" style="margin: 0;" data-testid="mcp-remembered">It is on for this workspace on this computer, but this window is read-only, so it isn't serving now.</p>
+        <p v-else-if="mcp?.canStart" class="help" style="margin: 0;" data-testid="mcp-remembered">{{ mcp.remembered ? 'Remembered: Studio turns it on each time it opens this workspace on this computer. Stop turns that off.' : 'Press Start once and Studio will turn it on each time it opens this workspace on this computer.' }}</p>
 
         <div class="note info">
           <Icon name="info" :size="16" />
