@@ -182,12 +182,6 @@ function singlePoints(t: ResultTable, cols: string[], numeric: boolean[]): Multi
   }
 }
 
-// Grid collects (label, series) -> value, series in first-seen order. A
-// repeated pair is summed: it is the same measure listed twice, as a result with
-// no GROUP BY returns it (and then `merged` says a point is no longer one row).
-//
-// Label order merges the order each series saw its labels in (see order()).
-// All-numeric labels are sorted by value instead.
 // MinHeap of small non-negative integers.
 class MinHeap {
   private a: number[] = []
@@ -223,6 +217,12 @@ class MinHeap {
   }
 }
 
+// Grid collects (label, series) -> value, series in first-seen order. A
+// repeated pair is summed: it is the same measure listed twice, as a result with
+// no GROUP BY returns it (and then `merged` says a point is no longer one row).
+//
+// Label order merges the order each series saw its labels in (see order()).
+// All-numeric labels are sorted by value instead.
 class Grid {
   names: string[] = []
   merged = false
