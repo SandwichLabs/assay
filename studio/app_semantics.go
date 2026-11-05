@@ -106,10 +106,14 @@ func (a *App) AcceptProposal(id, shownRev string, overwrite bool) error {
 	if err := a.requireWorkspace(); err != nil {
 		return err
 	}
-	if _, err := workspace.AcceptProposal(a.ctxOrBackground(), a.ws, id, shownRev, overwrite); err != nil {
+	_, err := workspace.AcceptProposal(a.ctxOrBackground(), a.ws, id, shownRev, overwrite)
+	var nm *proposals.NotMarkedError
+	if err == nil || errors.As(err, &nm) {
+		a.emitEvent("data:changed") // a file not marked accepted was still written
+	}
+	if err != nil {
 		return proposalErr(err)
 	}
-	a.emitEvent("data:changed")
 	return nil
 }
 

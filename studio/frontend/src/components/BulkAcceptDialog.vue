@@ -41,6 +41,7 @@ useModalKeys(toRef(props, 'visible'), () => emit('cancel'), root, () => cancelBt
 .bulk-dialog { width: 100%; max-width: 560px; max-height: 85vh; display: flex; flex-direction: column; }
 .bulk-dialog__list { margin: 0; padding: 0; list-style: none; overflow: auto; min-height: 0; border: var(--sh-border-thin); border-radius: var(--sh-radius-sm); }
 .bulk-dialog__list li { display: flex; flex-direction: column; gap: 2px; padding: var(--sh-space-2) var(--sh-space-3); border-bottom: var(--sh-border-thin); overflow-wrap: anywhere; }
+.bulk-dialog__list li:last-child { border-bottom: 0; }
 .bulk-dialog__meta { font-size: var(--sh-fs-xs); color: var(--sh-graphite); }
 .bulk-dialog__stale { font-size: var(--sh-fs-xs); color: var(--sh-error); }
 </style>
