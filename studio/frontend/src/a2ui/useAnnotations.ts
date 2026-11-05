@@ -62,33 +62,48 @@ export function useAnnotations(
 export interface ColumnGeometry {
   // x of each column's centre, px from the left of the scrollable content
   centers: number[]
-  // the scrollable content's width, how far it is scrolled and how much shows
+  // the scrollable content's width and how much of it shows
   width: number
-  left: number
   view: number
+  // height the horizontal scrollbar takes from the columns (0 when there is none)
+  sbh: number
 }
 
 // columnGeometry reads where the columns of a scrolling `.a2ui-columns` grid
 // really are (they are at least 20px wide and scroll sideways when there are
 // many), so a marker follows its column rather than a fraction of the visible width.
-function columnGeometry(el: Pick<HTMLElement, 'scrollWidth' | 'scrollLeft' | 'clientWidth' | 'querySelectorAll'>): ColumnGeometry {
+function columnGeometry(el: Pick<HTMLElement, 'scrollWidth' | 'clientWidth' | 'offsetHeight' | 'clientHeight' | 'querySelectorAll'>): ColumnGeometry {
   const cols = Array.from(el.querySelectorAll<HTMLElement>(':scope > .a2ui-columns__col'))
   return {
     centers: cols.map((c) => c.offsetLeft + c.offsetWidth / 2),
     width: el.scrollWidth,
-    left: el.scrollLeft,
     view: el.clientWidth,
+    sbh: Math.max(0, el.offsetHeight - el.clientHeight),
   }
 }
 
-// useColumnGeometry: the geometry of the element bound to `el`, kept current on
-// scroll (call `measure`), resize and, through `measure`, when the columns change.
+// useColumnGeometry: the geometry of the element bound to `el`. `geom` is measured
+// when the element appears, on resize and when the caller says the columns changed
+// (`measure`); a scroll only updates `scrollLeft` (at most once a frame), so it
+// never re-lays-out the markers.
 export function useColumnGeometry() {
   const el = ref<HTMLElement | null>(null)
-  const geom = ref<ColumnGeometry>({ centers: [], width: 0, left: 0, view: 0 })
+  const geom = ref<ColumnGeometry>({ centers: [], width: 0, view: 0, sbh: 0 })
+  const scrollLeft = ref(0)
   let ro: ResizeObserver | undefined
+  let frame = 0
   const measure = () => {
-    if (el.value) geom.value = columnGeometry(el.value)
+    if (!el.value) return
+    geom.value = columnGeometry(el.value)
+    scrollLeft.value = el.value.scrollLeft
+  }
+  const onScroll = () => {
+    if (frame) return
+    const run = () => {
+      frame = 0
+      if (el.value) scrollLeft.value = el.value.scrollLeft
+    }
+    frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(run) : (run(), 0)
   }
   // the element can appear after mount (a sql-bound chart renders it once its rows arrive)
   watch(el, (e) => {
@@ -101,6 +116,9 @@ export function useColumnGeometry() {
       ro.observe(e)
     }
   }, { flush: 'post' })
-  onBeforeUnmount(() => ro?.disconnect())
-  return { el, geom, measure }
+  onBeforeUnmount(() => {
+    ro?.disconnect()
+    if (frame && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame)
+  })
+  return { el, geom, scrollLeft, measure, onScroll }
 }

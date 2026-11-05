@@ -331,7 +331,8 @@
 .a2ui-page .a2ui-annots { position: absolute; z-index: 1; pointer-events: none; }
 .a2ui-page .a2ui-annots__inner { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 /* a scrolling plot: the layer is clipped to what shows (and moved by the scroll offset) */
-.a2ui-page .a2ui-annots--scroll { overflow: hidden; }
+.a2ui-page .a2ui-annots__clip--scroll { position: absolute; top: -100px; right: 0; bottom: 0; left: 0; overflow: hidden; }
+.a2ui-page .a2ui-annots__clip:not(.a2ui-annots__clip--scroll) { display: contents; }
 .a2ui-page .a2ui-annot {
   position: absolute;
   bottom: 0;
@@ -380,7 +381,9 @@
   color: var(--sh-ink);
   font-family: var(--sh-font-mono);
   font-size: 11px;
-  white-space: nowrap;
+  width: max-content;
+  max-width: min(280px, 80vw);
+  overflow-wrap: anywhere;
   box-shadow: 0 1px 4px color-mix(in srgb, var(--sh-ink) 18%, transparent);
 }
 .a2ui-page .a2ui-annot__tip--right { transform: translate(8px, 0); }
@@ -608,12 +611,14 @@
 /* Value axis for columnChart. The gridlines and the y labels must line up with
    the tracks' inner height, so the fixed pieces around a track are pinned:
    total label 16px + 3px margin above, x label 16px + 4px margin below, and the
-   track's 1px border + 3px padding (--a2ui-col-inset adds a drill column's 3px). */
-.a2ui-page .a2ui-colplot { --a2ui-col-inset: 0px; display: grid; grid-template-columns: var(--a2ui-axw, 3ch) minmax(0, 1fr); }
+   track's 1px border + 3px padding (--a2ui-col-inset adds a drill column's 3px).
+   --a2ui-sbh is the height a horizontal scrollbar takes from the columns when they scroll
+   (measured by the chart): the base of the columns moves up by it, so the gridlines do too. */
+.a2ui-page .a2ui-colplot { --a2ui-col-inset: 0px; --a2ui-sbh: 0px; display: grid; grid-template-columns: var(--a2ui-axw, 3ch) minmax(0, 1fr); }
 .a2ui-page .a2ui-colplot--drill { --a2ui-col-inset: 3px; }
 .a2ui-page .a2ui-colplot__yaxis { display: flex; flex-direction: column; height: 190px; }
 .a2ui-page .a2ui-colplot__ypad--top { flex: 0 0 calc(19px + 4px + var(--a2ui-col-inset)); }
-.a2ui-page .a2ui-colplot__ypad--bottom { flex: 0 0 calc(20px + 4px + var(--a2ui-col-inset)); }
+.a2ui-page .a2ui-colplot__ypad--bottom { flex: 0 0 calc(20px + 4px + var(--a2ui-col-inset) + var(--a2ui-sbh)); }
 .a2ui-page .a2ui-colplot__yplot { position: relative; flex: 1 1 auto; }
 .a2ui-page .a2ui-colplot__main { position: relative; min-width: 0; }
 .a2ui-page .a2ui-colplot__grid {
@@ -621,7 +626,7 @@
   left: 0;
   right: 0;
   top: calc(19px + 4px + var(--a2ui-col-inset));
-  bottom: calc(20px + 4px + var(--a2ui-col-inset));
+  bottom: calc(20px + 4px + var(--a2ui-col-inset) + var(--a2ui-sbh));
   pointer-events: none;
 }
 .a2ui-page .a2ui-colplot__line { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid color-mix(in srgb, var(--sh-chalk) 60%, transparent); }

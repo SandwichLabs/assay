@@ -25,17 +25,18 @@ const props = defineProps<{
 const hover = ref<number | null>(null)
 // room above the plot kept inside the clip box, for the label rows
 const HEAD = 100
-const rootStyle = computed(() => ({
-  top: props.scroll ? `calc(${props.inset.top} - ${HEAD}px)` : props.inset.top,
-  right: props.inset.right, bottom: props.inset.bottom, left: props.inset.left,
-}))
+const rootStyle = computed(() => ({ top: props.inset.top, right: props.inset.right, bottom: props.inset.bottom, left: props.inset.left }))
 const innerStyle = computed(() => (props.scroll ? { top: HEAD + 'px', width: props.scroll.width + 'px', left: -props.scroll.left + 'px', right: 'auto' } : {}))
 // the tooltip opens to the left of a marker in the right part of what shows
 const onRight = (m: LaidMarker) => (props.scroll ? (m.frac * props.scroll.width - props.scroll.left) / Math.max(props.scroll.view, 1) : m.frac) > 0.6
+// the tooltip is outside the clip box (a long one is not cut at the panel edge): at the
+// marker's visible x, in px when the plot scrolls
+const tipLeft = (m: LaidMarker) => (props.scroll ? `${m.frac * props.scroll.width - props.scroll.left}px` : m.frac * 100 + '%')
 </script>
 
 <template>
-  <div class="a2ui-annots" :class="{ 'a2ui-annots--scroll': scroll }" aria-hidden="true" data-testid="a2ui-annotations" :style="rootStyle">
+  <div class="a2ui-annots" aria-hidden="true" data-testid="a2ui-annotations" :style="rootStyle">
+    <div class="a2ui-annots__clip" :class="{ 'a2ui-annots__clip--scroll': scroll }">
     <div class="a2ui-annots__inner" :style="innerStyle">
       <div
         v-for="m in markers" :key="m.key" class="a2ui-annot"
@@ -46,16 +47,17 @@ const onRight = (m: LaidMarker) => (props.scroll ? (m.frac * props.scroll.width 
       >
         <span v-if="m.lane !== null" class="a2ui-annot__label" :style="{ left: m.shift + 'px', maxWidth: m.width + 'px' }">{{ m.text }}</span>
       </div>
-      <template v-for="m in markers" :key="'tip' + m.key">
-        <div
-          v-if="hover === m.key" class="a2ui-annot__tip" :class="onRight(m) ? 'a2ui-annot__tip--left' : 'a2ui-annot__tip--right'"
-          :style="{ left: m.frac * 100 + '%' }" data-testid="a2ui-annotation-tip"
-        >
-          <span class="a2ui-annot__tip-label">{{ m.ann.label }}</span>
-          <span v-if="m.ann.label.trim() !== m.ann.at" class="a2ui-annot__tip-at">{{ m.ann.at }}</span>
-          <span class="a2ui-sr">{{ describe(m) }}</span>
-        </div>
-      </template>
     </div>
+    </div>
+    <template v-for="m in markers" :key="'tip' + m.key">
+      <div
+        v-if="hover === m.key" class="a2ui-annot__tip" :class="onRight(m) ? 'a2ui-annot__tip--left' : 'a2ui-annot__tip--right'"
+        :style="{ left: tipLeft(m) }" data-testid="a2ui-annotation-tip"
+      >
+        <span class="a2ui-annot__tip-label">{{ m.ann.label }}</span>
+        <span v-if="m.ann.label.trim() !== m.ann.at" class="a2ui-annot__tip-at">{{ m.ann.at }}</span>
+        <span class="a2ui-sr">{{ describe(m) }}</span>
+      </div>
+    </template>
   </div>
 </template>

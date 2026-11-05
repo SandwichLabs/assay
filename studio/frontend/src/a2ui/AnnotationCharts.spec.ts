@@ -253,6 +253,8 @@ describe('columnChart that scrolls sideways', () => {
     stub('offsetWidth', function (this: HTMLElement) { return this.classList.contains('a2ui-columns__col') ? 24 : 0 })
     stub('scrollWidth', function (this: HTMLElement) { return this.classList.contains('a2ui-columns') ? this.children.length * 28 - 4 : 0 })
     stub('clientWidth', function (this: HTMLElement) { return this.classList.contains('a2ui-columns') ? 100 : 0 })
+    stub('offsetHeight', function (this: HTMLElement) { return this.classList.contains('a2ui-columns') ? 190 : 0 })
+    stub('clientHeight', function (this: HTMLElement) { return this.classList.contains('a2ui-columns') ? 175 : 0 })
   })
   afterEach(() => {
     for (const [k, d] of Object.entries(saved)) {
@@ -275,8 +277,30 @@ describe('columnChart that scrolls sideways', () => {
     const cols = w.find('.a2ui-columns').element as HTMLElement
     cols.scrollLeft = 640
     await w.find('.a2ui-columns').trigger('scroll')
+    await new Promise((r) => requestAnimationFrame(() => r(0)))
     expect(w.find('.a2ui-annots__inner').attributes('style')).toContain('left: -640px')
-    expect(w.find('[data-testid="a2ui-annotations"]').classes()).toContain('a2ui-annots--scroll')
+    expect(w.find('.a2ui-annots__clip').classes()).toContain('a2ui-annots__clip--scroll')
+    // a scroll moves the layer only: the marker's own position is not recomputed
+    expect(markers(w)[0].element.getAttribute('style')).toContain(`left: ${((25 * 28 + 12) / 1452) * 100}`)
+    w.unmount()
+  })
+
+  it('takes the horizontal scrollbar height from the gridlines, axis and rules', async () => {
+    const w = render({ id: 'c', type: 'columnChart', columns: ['week', 'v'], rows: weeks52, annotations: { rows: [{ at: weeks52[3][0] as string, label: 'x' }] } })
+    await flushPromises()
+    // 190 tall box, 175 of it content: the scrollbar is 15px
+    expect(w.find('.a2ui-colplot').attributes('style')).toContain('--a2ui-sbh: 15px')
+    expect(w.find('[data-testid="a2ui-annotations"]').attributes('style')).toContain('var(--a2ui-sbh)')
+    w.unmount()
+  })
+
+  it('shows a marker tooltip outside the clip box', async () => {
+    const w = render({ id: 'c', type: 'columnChart', columns: ['week', 'v'], rows: weeks52, annotations: { rows: [{ at: weeks52[3][0] as string, label: 'A long event label that must not be cut' }] } })
+    await flushPromises()
+    await markers(w)[0].trigger('mouseenter')
+    const tip = w.find('[data-testid="a2ui-annotation-tip"]')
+    expect(tip.exists()).toBe(true)
+    expect(w.find('.a2ui-annots__clip').find('[data-testid="a2ui-annotation-tip"]').exists()).toBe(false)
     w.unmount()
   })
 })
