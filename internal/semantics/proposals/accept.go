@@ -312,10 +312,25 @@ func Accept(ctx context.Context, props Store, sem semantics.Store, id string, op
 	return pv, markAccepted(ctx, props, pv, true)
 }
 
+// NotMarkedError says the definition was written into semantics/ but its
+// proposal could not be marked accepted: the file is changed, the proposal is
+// still open.
+type NotMarkedError struct {
+	Target, ID string
+	Err        error
+}
+
+func (e *NotMarkedError) Error() string {
+	return fmt.Sprintf("%s was written, but proposal %s could not be marked accepted: %v", e.Target, e.ID, e.Err)
+}
+
+// Unwrap returns the failure to mark.
+func (e *NotMarkedError) Unwrap() error { return e.Err }
+
 func markAccepted(ctx context.Context, props Store, pv *Preview, wrote bool) error {
 	if err := props.Decide(ctx, pv.Proposal.ID, StatusAccepted, pv.Proposal.Rev); err != nil {
 		if wrote {
-			return fmt.Errorf("%s was written, but proposal %s could not be marked accepted: %w", pv.Target, pv.Proposal.ID, err)
+			return &NotMarkedError{Target: pv.Target, ID: pv.Proposal.ID, Err: err}
 		}
 		return fmt.Errorf("proposal %s could not be marked accepted: %w", pv.Proposal.ID, err)
 	}

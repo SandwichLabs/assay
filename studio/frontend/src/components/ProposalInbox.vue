@@ -18,8 +18,16 @@ const props = defineProps<{
   changedAgain: string
   updated?: boolean
   readOnly?: boolean
+  // "Accept all" (useBulkAccept): the last run's outcome as a sentence, whether it
+  // stopped early, and whether a run or the reading before it is in flight.
+  bulkSummary?: string
+  bulkFailed?: boolean
+  bulkBusy?: boolean
 }>()
-const emit = defineEmits<{ (e: 'select', id: string): void; (e: 'accept', overwrite: boolean): void; (e: 'reject'): void }>()
+const emit = defineEmits<{
+  (e: 'select', id: string): void; (e: 'accept', overwrite: boolean): void; (e: 'reject'): void
+  (e: 'accept-all'): void; (e: 'dismiss-bulk'): void
+}>()
 
 const diff = computed(() => (props.preview ? diffLines(props.preview.current_text, props.preview.proposed_text) : []))
 const stats = computed(() => diffStats(diff.value))
@@ -36,6 +44,10 @@ const mark = (op: string) => (op === '+' ? '+' : op === '-' ? '-' : ' ')
   <div class="col proposal-inbox" data-testid="proposal-inbox">
     <h2 class="card-title" style="margin: 0; font-size: 28px;">Proposals</h2>
     <div v-if="error" class="note attn" role="alert" data-testid="proposal-error"><span>{{ error }}</span></div>
+    <div v-if="bulkSummary" class="note" :class="bulkFailed ? 'warn' : ''" role="status" data-testid="proposal-bulk-summary">
+      <span>{{ bulkSummary }}</span>
+      <button type="button" class="btn btn-ghost" data-testid="proposal-bulk-dismiss" @click="emit('dismiss-bulk')">Dismiss</button>
+    </div>
 
     <template v-if="preview">
       <div class="row" style="gap: var(--sh-space-3); align-items: baseline; flex-wrap: wrap;">
@@ -80,7 +92,13 @@ const mark = (op: string) => (op === '+' ? '+' : op === '-' ? '-' : ' ')
       <p v-if="!proposals.length" class="help" style="margin: 0;" data-testid="proposal-empty">
         No proposals are waiting. When the Slaw assistant suggests a definition (it can, in the chat, once you ask it to model your data), it lands here for you to read and accept. Nothing changes until you do.
       </p>
-      <ul v-else class="proposal-inbox__cards">
+      <div v-if="proposals.length" class="row" style="gap: var(--sh-space-3); align-items: center;">
+        <button type="button" class="btn" :disabled="bulkBusy || busy || readOnly" :title="readOnly ? 'This workspace is read-only.' : 'Accept every open proposal exactly as shown, in order. Nothing is overwritten.'" data-testid="proposal-accept-all" @click="emit('accept-all')">
+          Accept all ({{ proposals.length }})
+        </button>
+        <span class="help" style="margin: 0;">Reads each one first and asks before writing.</span>
+      </div>
+      <ul v-if="proposals.length" class="proposal-inbox__cards">
         <li v-for="p in proposals" :key="p.id">
           <button type="button" class="card card-pad proposal-inbox__card" :data-testid="`proposal-card-${p.id}`" @click="emit('select', p.id)">
             <span class="row" style="gap: var(--sh-space-2); align-items: baseline;"><span class="badge badge--info">{{ p.kind }}</span><strong>{{ p.name }}</strong></span>

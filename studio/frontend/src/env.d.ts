@@ -107,6 +107,7 @@ interface AppApi {
   ListProposals(all: boolean): Promise<Proposal[]>
   GetProposal(id: string): Promise<ProposalPreview>
   AcceptProposal(id: string, shownRev: string, overwrite: boolean): Promise<void>
+  AcceptProposals(pins: { id: string; shown_rev: string }[]): Promise<BulkAcceptResult>
   RejectProposal(id: string): Promise<void>
   // Running what a definition declares (E4): assertions, join profiling, a metric's "Try it"
   RunAssertions(kind: string, name: string): Promise<AssertionRow[]>
@@ -579,6 +580,15 @@ interface Proposal {
   decided_at: string
   rev?: string
   error?: string // an unreadable proposal file
+}
+
+// BulkAcceptResult mirrors studio.BulkAcceptResult: what "Accept all" wrote, in
+// order, and the proposal that stopped it (failed_id) with the reason (error).
+interface BulkAcceptResult {
+  accepted: { id: string; kind: Proposal['kind']; name: string; target: string }[]
+  failed_id?: string
+  error?: string
+  written_not_marked?: boolean // the stopping proposal's file was written but the proposal could not be marked accepted
 }
 
 // ProposalPreview mirrors studio.ProposalPreview: a proposal beside the file it

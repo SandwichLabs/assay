@@ -13,6 +13,8 @@ import EntityCard from '../components/EntityCard.vue'
 import JoinCard from '../components/JoinCard.vue'
 import GlossaryPanel from '../components/GlossaryPanel.vue'
 import ProposalInbox from '../components/ProposalInbox.vue'
+import BulkAcceptDialog from '../components/BulkAcceptDialog.vue'
+import { useBulkAccept } from '../composables/useBulkAccept'
 import { useSemantics, type SemanticsKind } from '../composables/useSemantics'
 import { useProposals } from '../composables/useProposals'
 import { useDefinitionRuns } from '../composables/useDefinitionRuns'
@@ -21,6 +23,7 @@ import '../semantics.css'
 
 const { list, loading, error, detail, detailError, selected, isEmpty, select, reload } = useSemantics()
 const proposals = useProposals()
+const bulk = reactive(useBulkAccept(proposals.open, async () => { proposals.preview.value = null; await reload() }))
 const runs = reactive(useDefinitionRuns())
 const readOnly = computed(() => !!workspaceInfo.value?.readOnly)
 
@@ -124,8 +127,9 @@ async function reject() {
       <div v-else-if="!selected" class="sh-mono semantics-empty" data-testid="semantics-pick">Select a definition to read it.</div>
       <ProposalInbox
         v-else-if="selected.kind === 'proposal'" :proposals="proposals.open.value" :preview="proposals.preview.value" :busy="proposals.busy.value"
-        :error="proposals.error.value" :changed-again="proposals.stale.value" :updated="proposals.updated.value" :read-only="readOnly"
-        @select="(id: string) => select('proposal', id)" @accept="accept" @reject="reject"
+        :error="proposals.error.value || bulk.error" :changed-again="proposals.stale.value" :updated="proposals.updated.value" :read-only="readOnly"
+        :bulk-summary="bulk.summary" :bulk-failed="bulk.failed" :bulk-busy="bulk.busy"
+        @select="(id: string) => select('proposal', id)" @accept="accept" @reject="reject" @accept-all="bulk.prepare" @dismiss-bulk="bulk.dismiss"
       />
       <div v-else-if="detailError" class="note attn" role="alert" data-testid="definition-error"><span>{{ detailError }}</span></div>
       <template v-else-if="detail">
@@ -140,6 +144,7 @@ async function reject() {
         <GlossaryPanel v-else-if="detailKind === 'glossary'" :detail="detail" />
       </template>
     </div>
+    <BulkAcceptDialog :visible="bulk.confirming" :items="bulk.items" @confirm="bulk.confirm" @cancel="bulk.cancel" />
   </div>
 </template>
 
