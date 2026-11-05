@@ -322,6 +322,76 @@
 .a2ui-page .a2ui-bar--grouped { margin: 0; }
 .a2ui-page .a2ui-bar--grouped .a2ui-bar__track { height: 10px; }
 .a2ui-page .a2ui-bar__fill--series { background: var(--a2ui-series); }
+
+/* Event markers (annotations) on a line, area or column chart: a vertical rule
+   per marker across the plot, its label in a row above the plot. The container
+   covers exactly the plot area (insets set by the chart); a marker's own box is
+   its rule, reaching up from the plot top to its label row. The colour is the
+   closed a2ui--<token> accent; the label text stays ink. */
+.a2ui-page .a2ui-annots { position: absolute; z-index: 1; pointer-events: none; }
+.a2ui-page .a2ui-annot {
+  position: absolute;
+  bottom: 0;
+  width: 0;
+  border-left: 1.5px solid var(--a2ui-accent);
+  pointer-events: auto;
+}
+.a2ui-page .a2ui-annot--dashed { border-left-style: dashed; }
+.a2ui-page .a2ui-annot::before { content: ''; position: absolute; top: 0; bottom: 0; left: -5px; width: 10px; }
+.a2ui-page .a2ui-annot--active { border-left-width: 2.5px; }
+/* On a columnChart the rules sit behind the columns (and so behind their value
+   labels and out of the way of a drill click); only the labels rise above them. */
+.a2ui-page .a2ui-colplot__main .a2ui-annots { z-index: auto; }
+.a2ui-page .a2ui-colplot__main .a2ui-annot__label { z-index: 2; }
+/* a value label a rule runs behind keeps a backing, so the line does not strike through it */
+.a2ui-page .a2ui-colplot__main:has(.a2ui-annots) .a2ui-columns__total { padding: 0 2px; background: color-mix(in srgb, var(--sh-surface) 85%, transparent); }
+.a2ui-page .a2ui-annot__label {
+  position: absolute;
+  top: 0;
+  box-sizing: border-box;
+  max-width: 100%;
+  height: 14px;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--sh-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--sh-ink);
+  background: color-mix(in srgb, var(--sh-surface) 90%, transparent);
+  box-shadow: inset 0 -2px 0 var(--a2ui-accent);
+}
+.a2ui-page .a2ui-annot__tip {
+  position: absolute;
+  top: 8px;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 3px 7px;
+  border: var(--sh-border-thin);
+  border-radius: var(--sh-radius-sm);
+  background: var(--sh-surface);
+  color: var(--sh-ink);
+  font-family: var(--sh-font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--sh-ink) 18%, transparent);
+}
+.a2ui-page .a2ui-annot__tip--right { transform: translate(8px, 0); }
+.a2ui-page .a2ui-annot__tip--left { transform: translate(calc(-100% - 8px), 0); }
+/* a marker's own tooltip replaces the chart's cursor tooltip while it is open */
+.a2ui-page .a2ui-plot__body:has(.a2ui-annot--active) .a2ui-linechart__tip { display: none; }
+.a2ui-page .a2ui-annot__tip-label { font-weight: 700; }
+.a2ui-page .a2ui-annot__tip-at { color: var(--sh-graphite); }
+.a2ui-page .a2ui-annot__note { margin: 4px 0 0; font-size: var(--sh-fs-xs); color: var(--sh-graphite); }
+.a2ui-page .a2ui-linechart__tip-note { color: var(--sh-graphite); }
+@keyframes a2ui-annot-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: no-preference) {
+  .a2ui-page .a2ui-annot { animation: a2ui-annot-in 320ms ease-out backwards; }
+}
 /* Visually hidden text for screen readers (live region of the hovered value). */
 .a2ui-page .a2ui-sr {
   position: absolute;

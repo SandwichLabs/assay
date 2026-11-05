@@ -71,8 +71,13 @@ func hintInner(spec fieldSpec) string {
 		return "[{name, points}]"
 	case kindRows:
 		return "array of cell arrays"
+	case kindAnnotations:
+		if len(spec.values) > 0 { // the view variant (view.go): a manifest query, not sql
+			return "{rows: [{at, label, kind, color}] | query}"
+		}
+		return "{rows: [{at, label, kind, color}] | sql}"
 	case kindMotion:
-		return "{easing, speed, stagger, stiffness, damping, mass}"
+		return "{easing, speed, stagger, ...}"
 	case kindQuery:
 		return "query name"
 	case kindParam:

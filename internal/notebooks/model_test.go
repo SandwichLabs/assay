@@ -326,6 +326,34 @@ func TestCoerce_DataBoundBudgetIsNotebookWide(t *testing.T) {
 	assert.Equal(t, maxDataBoundComponents, total)
 }
 
+// A chart's annotations sql is a second live query of the same component, so it
+// counts against the notebook-wide budget and is dropped (with the sql fields)
+// when the budget runs out.
+func TestCoerce_AnnotationsSQLCountsAgainstTheBudget(t *testing.T) {
+	components := make([]any, 0, maxDataBoundComponents)
+	for i := 0; i < maxDataBoundComponents-1; i++ {
+		components = append(components, map[string]any{"id": fmt.Sprintf("s%d", i), "type": "stat", "label": "L", "sql": "SELECT 1"})
+	}
+	// one slot is left: the chart takes it, its annotations do not fit
+	components[0] = map[string]any{"id": "ch", "type": "lineChart", "sql": "SELECT 1, 2", "annotations": map[string]any{"sql": "SELECT 1 AS at, 'x' AS label"}}
+	raw := map[string]any{"cells": []any{
+		map[string]any{"id": "c1", "type": "a2ui", "page": map[string]any{"title": "p", "components": components}},
+		map[string]any{"id": "c2", "type": "a2ui", "page": map[string]any{"title": "p", "components": []any{
+			map[string]any{"id": "ch2", "type": "lineChart", "sql": "SELECT 1, 2", "annotations": map[string]any{"sql": "SELECT 1 AS at, 'x' AS label"}},
+			map[string]any{"id": "ch3", "type": "lineChart", "annotations": map[string]any{"rows": []any{map[string]any{"at": "2025-01-01", "label": "x"}}}},
+		}}},
+	}}
+	nb, warnings, err := Coerce(raw)
+	require.NoError(t, err)
+	require.Len(t, nb.Cells, 2)
+	assert.Contains(t, nb.Cells[0].Page.Components[0].Fields, "annotations", "inside the budget: kept")
+	second := nb.Cells[1].Page.Components
+	assert.NotContains(t, second[0].Fields, "sql", "over the budget: demoted")
+	assert.NotContains(t, second[0].Fields, "annotations", "over the budget: demoted")
+	assert.Contains(t, second[1].Fields, "annotations", "inline markers are not a live query")
+	require.NotEmpty(t, warnings)
+}
+
 func TestCoerce_DuplicateCellID_GetsFreshID(t *testing.T) {
 	raw := map[string]any{
 		"cells": []any{

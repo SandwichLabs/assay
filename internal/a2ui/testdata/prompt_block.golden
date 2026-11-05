@@ -18,15 +18,15 @@ Types and their fields (optional unless marked required):
   statRow      —
   stat         label(required), color, connection, detail, sql, value
   table        columns(string[]), connection, label, rows(array of cell arrays), sql
-  barChart     bars([{label, value}]), color, columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
-  lineChart    color, columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), points([{label, value}]), rows(array of cell arrays), series([{name, points}]), sql, zero
-  areaChart    columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql, zero
-  columnChart  columns(string[]), connection, label, mode(stacked|grouped), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sorted, sql
-  ringChart    columns(string[]), connection, label, max(number > 0), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
-  radarChart   columns(string[]), connection, label, max(number > 0), motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
-  sankeyChart  columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
-  heatmap      columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), rows(array of cell arrays), sql
-  streamChart  color, columns(string[]), connection, label, motion({easing, speed, stagger, stiffness, damping, mass}), refresh(number 5-3600), rows(array of cell arrays), sql, threshold, window(number 5-120)
+  barChart     bars([{label, value}]), color, columns(string[]), connection, label, motion({easing, speed, stagger, ...}), rows(array of cell arrays), sql
+  lineChart    annotations({rows: [{at, label, kind, color}] | sql}), color, columns(string[]), connection, label, motion({easing, speed, stagger, ...}), points([{label, value}]), rows(array of cell arrays), series([{name, points}]), sql, zero
+  areaChart    annotations({rows: [{at, label, kind, color}] | sql}), columns(string[]), connection, label, motion({easing, speed, stagger, ...}), rows(array of cell arrays), sql, zero
+  columnChart  annotations({rows: [{at, label, kind, color}] | sql}), columns(string[]), connection, label, mode(stacked|grouped), motion({easing, speed, stagger, ...}), rows(array of cell arrays), sorted, sql
+  ringChart    columns(string[]), connection, label, max(number > 0), motion({easing, speed, stagger, ...}), rows(array of cell arrays), sql
+  radarChart   columns(string[]), connection, label, max(number > 0), motion({easing, speed, stagger, ...}), rows(array of cell arrays), sql
+  sankeyChart  columns(string[]), connection, label, motion({easing, speed, stagger, ...}), rows(array of cell arrays), sql
+  heatmap      columns(string[]), connection, label, motion({easing, speed, stagger, ...}), rows(array of cell arrays), sql
+  streamChart  color, columns(string[]), connection, label, motion({easing, speed, stagger, ...}), refresh(number 5-3600), rows(array of cell arrays), sql, threshold, window(number 5-120)
 
 color must be one of: "yellow", "black", "error", "muted".
 

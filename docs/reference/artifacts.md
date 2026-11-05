@@ -75,6 +75,7 @@ The view is an [A2UI](notebooks.md#a2ui-component-reference) page, `{ title, com
 
 - **Data comes only from named queries.** A data-bound component (`stat`, `table`, and the charts) takes `query: "<name>"` instead of `sql`. `sql` and `connection` are refused in a view (the query holds the connection). `query` must name a query of the manifest. Inline data (`rows`, `bars`, `points`) is still allowed.
 - `refresh` (a timer re-run of a `sql` binding) is refused on a query-bound component: a view's queries re-run when a parameter they use changes.
+- **Event markers.** A `lineChart`, `areaChart` or `columnChart` may carry `annotations` (labelled vertical rules for releases, changes, incidents): inline `{rows: [{at, label, kind, color}]}`, or `{query: "<name>"}` naming a manifest query that returns `(at, label[, kind, color])`. `annotations.sql` and `annotations.connection` are refused in a view like every other `sql`. The query must return at least two columns (checked with the result columns when the artifact is saved). At most 50 markers. See [`notebooks.md`](notebooks.md#event-markers-annotations).
 - **The view-only types** (listed in the [component reference](notebooks.md#artifact-view-components)) are refused in notebooks, chat and `create_dashboard`.
 - Every other component type behaves as in [`notebooks.md`](notebooks.md).
 

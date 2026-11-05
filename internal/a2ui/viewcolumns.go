@@ -41,6 +41,9 @@ var chartShape = map[string]string{
 func CheckViewColumns(p Page, columns map[string][]string) []string {
 	var problems []string
 	for i, c := range p.Components {
+		if ap := annotationColumnProblem(c, i, columns); ap != "" {
+			problems = append(problems, ap)
+		}
 		query, _ := c.Fields["query"].(string)
 		cols, known := columns[query]
 		if query == "" || !known {
@@ -61,6 +64,23 @@ func CheckViewColumns(p Page, columns map[string][]string) []string {
 		}
 	}
 	return problems
+}
+
+// annotationColumnProblem: a chart's annotations query is read as (at, label[,
+// kind, color]), by those column names when present, else by position, so it
+// needs at least two columns.
+func annotationColumnProblem(c Component, i int, columns map[string][]string) string {
+	ann, ok := c.Fields["annotations"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	query, _ := ann["query"].(string)
+	cols, known := columns[query]
+	if query == "" || !known || len(cols) >= 2 {
+		return ""
+	}
+	return fmt.Sprintf("components[%d].annotations.query (%s %s, query %s): markers are read as (at, label[, kind, color]), so the query needs at least 2 columns, but it returns %d. Columns: %s",
+		i, c.Type, jsonenc.Quote(c.ID), jsonenc.Quote(query), len(cols), listColumns(cols))
 }
 
 func pivotColumnProblems(f map[string]any, path, label string, cols []string) []string {

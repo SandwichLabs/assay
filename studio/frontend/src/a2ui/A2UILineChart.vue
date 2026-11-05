@@ -38,6 +38,9 @@ import { useChartCursor } from './useChartCursor'
 import A2UIPlotFrame from './A2UIPlotFrame.vue'
 import A2UISeriesLegend from './A2UISeriesLegend.vue'
 import A2UISeriesTip from './A2UISeriesTip.vue'
+import A2UIAnnotations from './A2UIAnnotations.vue'
+import { placeOnAxis } from './annotations'
+import { useAnnotations } from './useAnnotations'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, ms } = useMultiSeries(() => props.component, 'points')
@@ -67,6 +70,9 @@ const { values: anim } = useMotion(
 
 const plotWidthPx = ref(0)
 const xa = computed(() => buildXAxis(labels.value, plotWidthPx.value, W))
+// event markers (annotations), placed on the time or category axis
+const annot = useAnnotations(() => props.component, (items) => placeOnAxis(items, labels.value, xa.value), () => (plotWidthPx.value * innerW.value) / W)
+const annotInset = computed(() => ({ top: (PAD.top / H) * 100 + '%', bottom: (PAD.bottom / H) * 100 + '%', left: (PAD.left / W) * 100 + '%', right: (padRight.value / W) * 100 + '%' }))
 
 function x(i: number): number {
   return PAD.left + xa.value.frac[i] * innerW.value
@@ -138,7 +144,7 @@ const ariaLabel = computed(() => {
   if (v.length === 0) return 'Line chart with no values'
   const span = xa.value.time && xa.value.ticks.length ? `, ${labels.value[xa.value.order[0]]} to ${labels.value[xa.value.order[xa.value.order.length - 1]]}` : ''
   const what = multi.value ? `${ms.value.series.length} series (${ms.value.series.map((s) => s.name).join(', ')}) over ${n.value} labels${ms.value.foldMode === 'drop' && ms.value.folded.length ? `, ${ms.value.folded.length} more not shown (${ms.value.folded.join(', ')})` : ''}` : `${v.length} points`
-  return `Line chart of ${what}${span}, ranging ${formatNumber(Math.min(...v))} to ${formatNumber(Math.max(...v))}`
+  return `Line chart of ${what}${span}, ranging ${formatNumber(Math.min(...v))} to ${formatNumber(Math.max(...v))}${annot.ariaText.value}`
 })
 </script>
 
@@ -149,6 +155,7 @@ const ariaLabel = computed(() => {
     <div v-else-if="isBound(component) && error" class="a2ui-error">QUERY ERROR: {{ error }}</div>
     <div v-else-if="n === 0 || ms.series.length === 0 || values.length === 0" class="a2ui-empty">NO ROWS</div>
     <template v-else>
+      <div :style="annot.wrapStyle.value">
       <A2UIPlotFrame
         data-testid="a2ui-linechart-plot" :y-ticks="yTicks" :x-ticks="xTicks" :axw="axw"
         tabindex="0" role="group" aria-label="Chart values. Use the left and right arrow keys to read each point."
@@ -177,10 +184,13 @@ const ariaLabel = computed(() => {
           v-for="l in endLabels" :key="'end' + l.si" class="a2ui-linechart__endlabel" :class="seriesClass(l.si)" :title="l.name"
           :style="{ left: endLeft + '%', top: l.top + '%', maxWidth: endWidth + '%' }" data-testid="a2ui-endlabel" aria-hidden="true"
         ><span class="a2ui-kchart__swatch"></span>{{ l.name }}</span>
-        <A2UISeriesTip v-if="activeIdx !== null" :label="labels[activeIdx]" :rows="readout" :multi="multi" :side="tipSide" :pos="tipStyle" />
+        <A2UISeriesTip v-if="activeIdx !== null" :label="labels[activeIdx]" :rows="readout" :multi="multi" :side="tipSide" :pos="tipStyle" :notes="annot.notesAt(activeIdx)" />
+        <A2UIAnnotations v-if="annot.markers.value.length" :markers="annot.markers.value" :inset="annotInset" />
         <span class="a2ui-sr" aria-live="polite">{{ activeText }}</span>
       </A2UIPlotFrame>
+      </div>
       <A2UISeriesLegend :names="ms.series.map((s) => s.name)" :folded="ms.folded" :mode="ms.foldMode" />
+      <p v-if="annot.note.value" class="a2ui-annot__note" role="status" data-testid="a2ui-annotation-note">{{ annot.note.value }}</p>
     </template>
   </div>
 </template>

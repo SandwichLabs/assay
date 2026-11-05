@@ -10,6 +10,8 @@ defineProps<{
   multi: boolean
   side: 'left' | 'right'
   pos: { left?: string; top?: string }
+  // event markers at this point (annotations), one line each
+  notes?: string[]
 }>()
 </script>
 
@@ -22,5 +24,6 @@ defineProps<{
       <span v-if="multi" class="a2ui-linechart__tip-name">{{ r.name }}</span>
       <span class="a2ui-linechart__tip-value">{{ r.value }}</span>
     </span>
+    <span v-for="(note, k) in notes" :key="'note' + k" class="a2ui-linechart__tip-note" data-testid="a2ui-tip-annotation">&#9656; {{ note }}</span>
   </div>
 </template>

@@ -15,6 +15,9 @@ import { formatNumber } from '../lib/formatCell'
 import { useDrill } from './useDrill'
 import { useRoving } from './useRoving'
 import { valueScale, frac as scaleFrac, formatTick } from './scale'
+import A2UIAnnotations from './A2UIAnnotations.vue'
+import { placeOnColumns } from './annotations'
+import { useAnnotations, useElementWidth } from './useAnnotations'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, table } = useChartData(() => props.component)
@@ -57,7 +60,13 @@ function topPct(ci: number): number {
   const hs = cols.value[ci].segs.map((_, si) => h(ci, si))
   return grouped.value ? Math.max(0, ...hs) : Math.min(100, hs.reduce((a, b) => a + b, 0))
 }
-const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 'stacked'}, ${cols.value.length} columns of ${data.value.series.map((s) => s.name).join(', ')}`)
+// Event markers (annotations): on the column centre of the label they name, or, for dated
+// columns in order, of the column they fall in. The overlay covers the plot area (the same
+// pinned pieces the gridlines use); from the top so the label rows clear the tallest column's value.
+const { el: mainEl, width: plotWidthPx } = useElementWidth()
+const annot = useAnnotations(() => props.component, (items) => placeOnColumns(items, cols.value.map((c) => c.label), !props.component.sorted), () => plotWidthPx.value)
+const annotInset = { top: '0px', bottom: 'calc(24px + var(--a2ui-col-inset))', left: '0px', right: '0px' }
+const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 'stacked'}, ${cols.value.length} columns of ${data.value.series.map((s) => s.name).join(', ')}${annot.ariaText.value}`)
 </script>
 
 <template>
@@ -67,6 +76,7 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
     @replay="replay"
   >
     <div v-if="drill.problem.value" class="a2ui-error" role="alert">{{ drill.problem.value }}</div>
+    <div :style="annot.wrapStyle.value">
     <div class="a2ui-colplot" :class="{ 'a2ui-colplot--drill': drill.enabled.value }" :style="{ '--a2ui-axw': axw + 'ch' }">
     <div class="a2ui-colplot__yaxis" aria-hidden="true">
       <div class="a2ui-colplot__ypad a2ui-colplot__ypad--top"></div>
@@ -75,7 +85,7 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
       </div>
       <div class="a2ui-colplot__ypad a2ui-colplot__ypad--bottom"></div>
     </div>
-    <div class="a2ui-colplot__main">
+    <div ref="mainEl" class="a2ui-colplot__main">
     <div class="a2ui-colplot__grid" aria-hidden="true">
       <div v-for="(t, i) in scale.ticks" :key="i" class="a2ui-colplot__line" :style="{ bottom: scaleFrac(scale, t) * 100 + '%' }"></div>
     </div>
@@ -105,8 +115,11 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
         <span class="a2ui-columns__label" :title="c.label">{{ c.label }}</span>
       </div>
     </div>
+    <A2UIAnnotations v-if="annot.markers.value.length" :markers="annot.markers.value" :inset="annotInset" />
     </div>
     </div>
+    </div>
+    <p v-if="annot.note.value" class="a2ui-annot__note" role="status" data-testid="a2ui-annotation-note">{{ annot.note.value }}</p>
     <div v-if="isBound(component) && loading" class="a2ui-loading" role="status">RUNNING QUERY…</div>
     <div v-if="drill.error.value" class="a2ui-error" role="alert" data-testid="a2ui-drill-error">{{ drill.error.value }}</div>
   </A2UIChartFrame>

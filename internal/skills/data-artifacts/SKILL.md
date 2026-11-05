@@ -100,6 +100,15 @@ field is a colour or style.
   column per series) draws several series: up to six; past that a line draws
   the six largest and says how many are not shown, a bar sums the rest into
   "Other". A grouped `barChart` cannot `drill`.
+- **Event markers.** A `lineChart`, `areaChart` or `columnChart` may mark events
+  with `"annotations": {"query": "events"}`, where `events` is a manifest query
+  returning `(at, label[, kind, color])` (`SELECT start_date AS at, name AS label
+  FROM live_ops_events`), or with inline `"annotations": {"rows": [{"at":
+  "2025-05-01", "label": "Price cut"}]}`. `annotations.sql` is refused in a view.
+  Use it for "mark each release / change / incident". It draws one labelled rule per
+  event (`kind`: `solid` or `dashed`; `color` from the usual set, default
+  `muted`), at most 50, and the chart says how many fell outside its range.
+  The query must return at least two columns. `barChart` has no markers.
 - **Controls** name a parameter and re-run only the queries that use it:
   `select` (`param`: an enum or boolean), `dateRange` (`start`, `end`: two
   date parameters), `numberInput` (`param`: number or integer), `textInput`

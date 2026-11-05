@@ -71,6 +71,31 @@ func TestCreateDashboard_VetsOnTheComponentsConnection(t *testing.T) {
 	assert.Contains(t, resp.Error.Message, "components[0].sql")
 }
 
+// A chart's annotations sql is a second live binding: vetted like the chart's
+// own, on its own connection, and reported by its own path.
+func TestCreateDashboard_VetsAnnotationsSQL(t *testing.T) {
+	fx := newArtifactFixture(t, ModeReadWrite, withAsk(true))
+	chart := func(annSQL string) map[string]any {
+		return map[string]any{"page": map[string]any{"title": "D", "components": []any{
+			map[string]any{"id": "ch", "type": "lineChart", "sql": "SELECT 1, 2", "annotations": map[string]any{"sql": annSQL}},
+		}}}
+	}
+	resp := fx.call("create_dashboard", chart("DELETE FROM t"))
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, ErrInvalidParams, resp.Error.Code)
+	assert.Contains(t, resp.Error.Message, "components[0].annotations.sql")
+	assert.Contains(t, resp.Error.Message, "read-only")
+	assert.NotContains(t, resp.Error.Message, "components[0].sql ")
+
+	resp = fx.call("create_dashboard", chart("SELECT getenv('HOME') AS at, 'x' AS label"))
+	require.NotNil(t, resp.Error)
+	assert.Contains(t, resp.Error.Message, "components[0].annotations.sql")
+
+	resp = fx.call("create_dashboard", chart("SELECT COUNT(*) AS at, 'x' AS label FROM t"))
+	require.NotNil(t, resp.Error)
+	assert.Contains(t, resp.Error.Message, "valid and ready")
+}
+
 func TestReadSkill_A2UIOverTheHandler(t *testing.T) {
 	handler, _, _ := newSkillsTestHandler(t, ModeReadOnly)
 	resp := handler.Handle(t.Context(), &Request{JSONRPC: "2.0", ID: 1, Method: "read_skill", Params: map[string]any{"name": "a2ui"}})
