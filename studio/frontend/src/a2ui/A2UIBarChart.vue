@@ -17,7 +17,7 @@ import { formatNumber } from '../lib/formatCell'
 import { useMotion } from './useMotion'
 import { useDrill } from './useDrill'
 import { useRoving } from './useRoving'
-import { valueScale, frac as scaleFrac, tickDigits } from './scale'
+import { valueScale, frac as scaleFrac, formatTick } from './scale'
 import { tickAnchor } from './xaxis'
 
 const props = defineProps<{ component: A2UIComponentT }>()
@@ -31,8 +31,7 @@ const zeroPct = computed(() => scaleFrac(scale.value, 0) * 100)
 // Animate from zero, so a bar grows out of the zero line.
 const { values: anim } = useMotion(() => values.value, () => props.component.motion)
 
-const digits = computed(() => tickDigits(scale.value.step))
-const fmtTick = (v: number) => formatNumber(v, digits.value)
+const fmtTick = (v: number) => formatTick(v, scale.value.step)
 const tickPcts = computed(() => scale.value.ticks.map((t) => ({ pct: scaleFrac(scale.value, t) * 100, label: fmtTick(t), zero: t === 0 })))
 // One shared value-column width, so every track is the same length.
 const valueCh = computed(() => Math.max(4, ...values.value.map((v) => formatNumber(v).length)) + 1)

@@ -30,6 +30,20 @@ describe('buildXAxis', () => {
     expect(buildXAxis(['2025-01', '2025-02'], 600, 640).ticks.map((t) => t.label)).toEqual(["Jan '25", "Feb '25"])
     expect(buildXAxis(['2025-04-03', '2025-04-04'], 600, 640).ticks.map((t) => t.label)).toEqual(['Apr 3', 'Apr 4'])
   })
+  it('treats midnight timestamps as days and first-of-month dates as months', () => {
+    const days = ['2025-04-03 00:00:00', '2025-04-04 00:00:00', '2025-04-05T00:00:00Z', '2025-04-06 00:00:00']
+    const months = ['2025-01-01', '2025-02-01', '2025-03-01']
+    for (const w of [300, 600]) {
+      const d = buildXAxis(days, w, 640).ticks.map((t) => t.label)
+      expect(d.every((l) => /^Apr \d+$/.test(l)), `${w}px ${d}`).toBe(true)
+      const m = buildXAxis(months, w, 640).ticks.map((t) => t.label)
+      expect(m.every((l) => /^(Jan|Feb|Mar|Q1) '25$/.test(l)), `${w}px ${m}`).toBe(true)
+    }
+    const years = buildXAxis(['2023-01-01', '2024-01-01', '2025-01-01'], 600, 640).ticks.map((t) => t.label)
+    expect(years).toEqual(['2023', '2024', '2025'])
+    // a real time of day keeps the finer ticks
+    expect(buildXAxis(['2025-04-03 00:00:00', '2025-04-03 06:00:00'], 600, 640).ticks[0].label).toMatch(/:/)
+  })
   it('falls back to categories when one label is not a date', () => {
     expect(buildXAxis(['2025-01-01', 'total'], 600, 640).time).toBe(false)
   })

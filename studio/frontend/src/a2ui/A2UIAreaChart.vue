@@ -14,7 +14,7 @@ import { useChartData } from './useChartData'
 import { useMotion } from './useMotion'
 import { areaPath, seriesClass, splinePath, toSeries, type XY } from './series'
 import { formatNumber } from '../lib/formatCell'
-import { valueScale, frac as scaleFrac, tickDigits } from './scale'
+import { valueScale, frac as scaleFrac, formatTick } from './scale'
 import { buildXAxis } from './xaxis'
 import { useChartCursor } from './useChartCursor'
 
@@ -42,8 +42,7 @@ function y(v: number): number {
 }
 const baseline = computed(() => y(Math.max(scale.value.min, Math.min(0, scale.value.max))))
 
-const digits = computed(() => tickDigits(scale.value.step))
-const fmtTick = (v: number) => formatNumber(v, digits.value)
+const fmtTick = (v: number) => formatTick(v, scale.value.step)
 const yTicks = computed(() => scale.value.ticks.map((t) => ({ pct: (y(t) / H) * 100, label: fmtTick(t) })))
 const xTicks = computed(() => xa.value.ticks.map((t) => ({ frac: (PAD + t.frac * innerW) / W, label: t.label })))
 const axw = computed(() => Math.max(2, ...scale.value.ticks.map((t) => fmtTick(t).length)) + 1)

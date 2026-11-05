@@ -14,7 +14,7 @@ import { seriesClass, toSeries } from './series'
 import { formatNumber } from '../lib/formatCell'
 import { useDrill } from './useDrill'
 import { useRoving } from './useRoving'
-import { valueScale, frac as scaleFrac, tickDigits } from './scale'
+import { valueScale, frac as scaleFrac, formatTick } from './scale'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, table } = useChartData(() => props.component)
@@ -45,8 +45,7 @@ const scale = computed(() => {
   const m = grouped.value ? Math.max(0, ...cols.value.flatMap((c) => c.segs)) : Math.max(0, ...cols.value.map((c) => c.total))
   return valueScale([0, m])
 })
-const digits = computed(() => tickDigits(scale.value.step))
-const fmtTick = (v: number) => formatNumber(v, digits.value)
+const fmtTick = (v: number) => formatTick(v, scale.value.step)
 const axw = computed(() => Math.max(2, ...scale.value.ticks.map((t) => fmtTick(t).length)) + 1)
 function h(ci: number, si: number): number {
   const v = values.value[ci * k.value + si] ?? 0

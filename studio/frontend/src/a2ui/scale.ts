@@ -8,6 +8,8 @@
 // calendar time in UTC arithmetic, ignoring any zone suffix, so DST never
 // shifts a tick and the same data reads the same in every locale.
 
+import { formatNumber } from '../lib/formatCell'
+
 export interface NiceScale {
   // tick values, ascending; ticks[0] === min and the last tick === max
   ticks: number[]
@@ -21,13 +23,20 @@ const TARGET_TICKS = 5
 
 function decimalsFor(step: number): number {
   if (!(step > 0) || !Number.isFinite(step)) return 0
-  return Math.min(10, Math.max(0, -Math.floor(Math.log10(step) + 1e-9)))
+  return Math.min(30, Math.max(0, -Math.floor(Math.log10(step) + 1e-9)))
 }
 
 // tickDigits: fraction digits a tick label needs for this step (0.005 -> 3),
 // for formatNumber's second argument.
 export function tickDigits(step: number): number {
   return Math.min(8, Math.max(2, decimalsFor(step)))
+}
+
+// formatTick labels a gridline value with the shared number formatter. Steps
+// below a millionth would print as 0.000000000001, so those use exponent form.
+export function formatTick(v: number, step: number): string {
+  if (step > 0 && step < 1e-6 && v !== 0 && Number.isFinite(v)) return v.toExponential()
+  return formatNumber(v, tickDigits(step))
 }
 
 function tidy(v: number, decimals: number): number {
@@ -77,6 +86,8 @@ export function niceTicks(lo: number, hi: number): NiceScale {
   const dec = decimalsFor(best.step) + 1
   const ticks: number[] = []
   for (let k = best.a; k <= best.b; k++) ticks.push(tidy(k * best.step, dec))
+  // a top tick that overflowed (values near the double limit) has no scale
+  if (!ticks.every(Number.isFinite) || !(ticks[ticks.length - 1] > ticks[0])) return { ticks: [0, 1], min: 0, max: 1, step: 1 }
   return { ticks, min: ticks[0], max: ticks[ticks.length - 1], step: best.step }
 }
 
@@ -283,7 +294,15 @@ export function timeAxis(labels: string[]): TimeAxis | null {
   }
   const min = Math.min(...times)
   const max = Math.max(...times)
-  return min === max ? null : { times, floor, min, max }
+  if (min === max) return null
+  // Round-number times raise the floor: date_trunc('day', ts) arrives as a
+  // midnight TIMESTAMP, and a monthly series of DATEs all fall on the 1st.
+  const all = (f: (d: Date) => boolean) => times.every((t) => f(new Date(t)))
+  const midnight = (d: Date) => d.getTime() % DAY === 0
+  if (all((d) => midnight(d) && d.getUTCMonth() === 0 && d.getUTCDate() === 1)) floor = 'year'
+  else if (all((d) => midnight(d) && d.getUTCDate() === 1) && UNIT_RANK[floor] < UNIT_RANK.month) floor = 'month'
+  else if (all(midnight) && UNIT_RANK[floor] < UNIT_RANK.day) floor = 'day'
+  return { times, floor, min, max }
 }
 
 // timeFrac maps a time to 0 (axis.min) .. 1 (axis.max).

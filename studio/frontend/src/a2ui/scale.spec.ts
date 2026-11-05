@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { niceTicks, valueScale, frac, parseTime, timeTicks, timeAxis, timeFrac, maxTicksForWidth, timeGranularity } from './scale'
+import { niceTicks, valueScale, frac, parseTime, timeTicks, timeAxis, timeFrac, maxTicksForWidth, timeGranularity, formatTick } from './scale'
 
 const d = (s: string) => parseTime(s)!
 const DAY = 24 * 3600 * 1000
@@ -50,6 +50,18 @@ describe('niceTicks', () => {
     }
     expect(valueScale([-1.7e308, 1.7e308]).ticks.length).toBeGreaterThanOrEqual(2)
     expect(valueScale([Infinity, NaN, 3]).ticks.length).toBeGreaterThan(1)
+  })
+  it('handles values at the double limit and tiny values', () => {
+    const big = valueScale([1.7e308])
+    expect(big.ticks.every(Number.isFinite)).toBe(true)
+    expect(big.max).toBeGreaterThan(big.min)
+    const tiny = valueScale([1e-12, 3e-12])
+    expect(tiny.max).toBeGreaterThan(tiny.min)
+    expect(new Set(tiny.ticks).size).toBe(tiny.ticks.length)
+    expect(tiny.max).toBeGreaterThanOrEqual(3e-12)
+    expect(formatTick(2e-12, tiny.step)).toBe('2e-12')
+    expect(formatTick(0, tiny.step)).toBe('0')
+    expect(formatTick(1500, 500)).toBe('1,500')
   })
   it('does not emit repeated ticks for a range lost in rounding', () => {
     const s = niceTicks(1, 1 + 1e-12)

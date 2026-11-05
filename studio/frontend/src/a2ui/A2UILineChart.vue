@@ -19,7 +19,7 @@ import { toPoints, colorClass, type Point, isBound } from './query'
 import { useLiveQuery } from './useLiveQuery'
 import { formatNumber } from '../lib/formatCell'
 import { useMotion } from './useMotion'
-import { valueScale, frac as scaleFrac, tickDigits } from './scale'
+import { valueScale, frac as scaleFrac, formatTick } from './scale'
 import { buildXAxis } from './xaxis'
 import { useChartCursor } from './useChartCursor'
 import A2UIPlotFrame from './A2UIPlotFrame.vue'
@@ -38,8 +38,7 @@ const innerH = H - PAD.top - PAD.bottom
 
 const values = computed(() => points.value.map((p) => p.value))
 const scale = computed(() => valueScale(values.value, { zero: props.component.zero !== false }))
-const digits = computed(() => tickDigits(scale.value.step))
-const fmtTick = (v: number) => formatNumber(v, digits.value)
+const fmtTick = (v: number) => formatTick(v, scale.value.step)
 
 // The line rises from the bottom gridline with the component's "motion"
 // preset; axis labels and tooltips always show the real values.
