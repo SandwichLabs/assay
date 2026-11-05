@@ -496,25 +496,36 @@ func coerceMotion(raw any, cellID string, warnings *[]string) map[string]any {
 // static/empty instead of firing a live query. Returns the remaining
 // budget after this page.
 func demoteExcessDataBound(page *a2ui.Page, budget int, cellID string, warnings *[]string) int {
-	var dataBoundIdx []int
+	// a chart's annotations with their own sql are a second live query of the
+	// same component, so they count against the budget on their own
+	type binding struct {
+		idx   int
+		field string
+	}
+	var bound []binding
 	for i, c := range page.Components {
 		if _, ok := c.Fields["sql"]; ok {
-			dataBoundIdx = append(dataBoundIdx, i)
+			bound = append(bound, binding{i, "sql"})
+		}
+		if ann, ok := c.Fields["annotations"].(map[string]any); ok {
+			if _, live := ann["sql"]; live {
+				bound = append(bound, binding{i, "annotations"})
+			}
 		}
 	}
-	if len(dataBoundIdx) == 0 {
+	if len(bound) == 0 {
 		return budget
 	}
-	if len(dataBoundIdx) <= budget {
-		return budget - len(dataBoundIdx)
+	if len(bound) <= budget {
+		return budget - len(bound)
 	}
 	keep := budget
 	if keep < 0 {
 		keep = 0
 	}
 	demoted := 0
-	for _, idx := range dataBoundIdx[keep:] {
-		delete(page.Components[idx].Fields, "sql")
+	for _, b := range bound[keep:] {
+		delete(page.Components[b.idx].Fields, b.field)
 		demoted++
 	}
 	*warnings = append(*warnings, fmt.Sprintf(

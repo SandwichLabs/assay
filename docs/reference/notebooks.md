@@ -217,9 +217,9 @@ a validation error, not a silently-ignored one.
 | `statRow` | — | — (a row container for `stat` children) |
 | `table` | — | `columns`, `rows`, `sql`, `connection`, `label` |
 | `barChart` | — | `bars`, `columns`, `rows`, `sql`, `connection`, `label`, `color`, `motion` |
-| `lineChart` | — | `points`, `series`, `columns`, `rows`, `sql`, `connection`, `label`, `color`, `zero`, `motion` |
-| `areaChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `zero`, `motion` |
-| `columnChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `mode`, `sorted`, `motion` |
+| `lineChart` | — | `points`, `series`, `columns`, `rows`, `sql`, `connection`, `label`, `color`, `zero`, `annotations`, `motion` |
+| `areaChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `zero`, `annotations`, `motion` |
+| `columnChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `mode`, `sorted`, `annotations`, `motion` |
 | `ringChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `max`, `motion` |
 | `radarChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `max`, `motion` |
 | `sankeyChart` | — | `columns`, `rows`, `sql`, `connection`, `label`, `motion` |
@@ -354,6 +354,67 @@ and LINE views pick this up from a query result without any component.
   TypeScript side (`bestView`) are tested against one fixture,
   `internal/agents/testdata/long_shape_views.json`. A wide result is never
   suggested, only drawn when the view is chosen.
+
+### Event markers (annotations)
+
+`lineChart`, `areaChart` and `columnChart` take an optional, closed `annotations`
+object that draws a labelled vertical rule at each event: a release, a price
+change, an incident, a live-ops event. It answers "did change X move metric Y?".
+`barChart` does not take it (its bars are horizontal, a vertical rule means
+nothing there). One source, like any data-bound field:
+
+```json
+"annotations": { "rows": [ { "at": "2025-05-01", "label": "Starter pack price cut" },
+                          { "at": "2025-06-12", "label": "Double XP", "kind": "dashed", "color": "error" } ] }
+"annotations": { "sql": "SELECT start_date AS at, event_name AS label, kind FROM live_ops_events",
+                 "connection": "gloamwick" }
+```
+
+- **Marker.** `at` (required): a date or timestamp on a time axis, or a category
+  label on a category axis (a number is read as its text). `label` (required): short
+  text, one line, at most 80 characters. `kind`: `solid` (default) or `dashed`, so two
+  classes of event read differently without picking colours. `color`: the usual closed
+  set (`yellow`, `black`, `error`, `muted`), default `muted`. Unknown fields are
+  refused. An `at` shaped like a date (`2025-02-31`, `2025-13-01`) must be a real one.
+- **Sources.** Inline `rows`, or `sql` (+ `connection`) as its own **second live
+  binding**: it goes through the same read-only SQL policy as the chart's own `sql`
+  (a notebook `create_dashboard` vets both and reports `components[i].annotations.sql`),
+  counts against the notebook-wide limit of live components, and fails on its own: a
+  failed or refused annotation query leaves the chart and adds a note under it. The
+  query's columns are read by name (`at`, `label`, `kind`, `color`), else the first is
+  `at` and the second `label`. A `kind` or `color` outside the closed sets is drawn
+  solid and muted, and the note says how many. Inside a data artifact view the source
+  is `query` (a manifest query name, same columns) and `sql` is refused, as on every
+  other field ([`artifacts.md`](artifacts.md)); the query needs at least two columns.
+- **Limit.** At most 50 markers. More inline is a validation error: an agent write
+  (`create_dashboard`, `write_artifact`) is refused with the count. A hand-edited or
+  bundled notebook that carries one (or any other invalid `annotations`) loses the
+  whole `a2ui` cell on load, as with any invalid page. More rows from `sql` are dropped
+  at run time (the first 50 in query order are kept) and the chart says how many. A
+  query's `at` or `label` is cut to 80 characters and one line (a result is not
+  validated), and the chart notes how many were.
+- **Placement.** On a time axis a marker sits at its exact time, so a Wednesday event
+  on a weekly series sits between two points, and the exact value is in its tooltip.
+  On a category axis `at` must match a label and the rule sits on that label. A
+  `columnChart` puts the rule on the column centre; when its columns are dates in order
+  (and not `sorted`), a date sits on the column it falls in, up to one column past the
+  last. A marker outside the chart's x range, or one whose `at` is not on this axis,
+  is not drawn, and the chart notes how many. On a `lineChart` or `areaChart` that
+  includes a date after the last point (or before the first): the axis ends at the data.
+- **Labels.** Each label sits in a row above the plot at its rule. Close dates are
+  stacked into up to four rows so labels never overlap and no rule runs through
+  another's label; if even that is not enough, the extra labels are left off (their rules
+  and tooltips stay) and the note says how many. Earlier rows win: the labels kept are
+  the first ones in source order, so `ORDER BY` puts the important events first. Long labels are shortened with an
+  ellipsis; the full text is in the tooltip.
+- **Reading them.** Hover a rule or its label for the full label and the exact `at`. A
+  `lineChart`'s tooltip (and an `areaChart`'s readout) also lists the markers at the
+  point under the cursor. The chart's text alternative (`aria-label`) lists every drawn
+  marker; the overlay itself is hidden from assistive technology so nothing is read
+  twice. Rules and labels use the closed colour classes (`--slaw-*` roles, light and
+  dark) and fade in only when the OS has not asked for reduced motion.
+- **With several series.** A multi-series `lineChart` draws one line per series and one
+  shared set of markers across all of them.
 
 ### KINETIC motion charts
 

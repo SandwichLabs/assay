@@ -141,16 +141,26 @@ func (h *Handler) vetNotebookSQL(ctx context.Context, rawConnection, sqlStr, wha
 func (h *Handler) vetDashboardSQL(ctx context.Context, page a2ui.Page) []string {
 	var failures []string
 	for i, c := range page.Components {
-		sqlStr, _ := c.Fields["sql"].(string)
-		if strings.TrimSpace(sqlStr) == "" {
-			continue
-		}
-		conn, _ := c.Fields["connection"].(string)
-		if _, vf := h.vetNotebookSQL(ctx, conn, sqlStr, "dashboard sql bindings"); vf != nil {
-			failures = append(failures, fmt.Sprintf("components[%d].sql (%s %q): %s", i, c.Type, c.ID, vf.msg))
+		failures = append(failures, h.vetBinding(ctx, c, i, c.Fields, "sql")...)
+		// a chart's annotations are a second live binding of the same component
+		if ann, ok := c.Fields["annotations"].(map[string]any); ok {
+			failures = append(failures, h.vetBinding(ctx, c, i, ann, "annotations.sql")...)
 		}
 	}
 	return failures
+}
+
+// vetBinding vets one sql field (and its sibling connection) of component c.
+func (h *Handler) vetBinding(ctx context.Context, c a2ui.Component, i int, fields map[string]any, path string) []string {
+	sqlStr, _ := fields["sql"].(string)
+	if strings.TrimSpace(sqlStr) == "" {
+		return nil
+	}
+	conn, _ := fields["connection"].(string)
+	if _, vf := h.vetNotebookSQL(ctx, conn, sqlStr, "dashboard sql bindings"); vf != nil {
+		return []string{fmt.Sprintf("components[%d].%s (%s %q): %s", i, path, c.Type, c.ID, vf.msg)}
+	}
+	return nil
 }
 
 func (h *Handler) handleAddQueryCell(ctx context.Context, req *Request) *Response {

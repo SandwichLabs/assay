@@ -55,7 +55,8 @@ func SkillBody() string {
 	b.WriteString("or integer, `textInput` text, and `dateRange` two different date parameters (`start`, `end`).\n")
 	b.WriteString("`pivot` lays out a query's result: `rows` (up to " + fmt.Sprint(maxPivotRows) + " column names), one `columns` column and a\n")
 	b.WriteString("`value` column, each a different column. `drill` is `{param, column}`: clicking a row or bar\n")
-	b.WriteString("sets that parameter to the clicked row's value of that column; it needs a `query`.\n")
+	b.WriteString("sets that parameter to the clicked row's value of that column; it needs a `query`.\n\n")
+	b.WriteString(annotationsSection())
 	return b.String()
 }
 

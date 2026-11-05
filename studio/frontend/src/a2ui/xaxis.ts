@@ -3,7 +3,7 @@
 // calendar boundaries); anything else is evenly spaced categories, thinned to
 // what fits (query.pickLabelIndices). Shared by the line and area charts.
 import { pickLabelIndices } from './query'
-import { maxTicksForWidth, timeAxis, timeFrac, timeTicks } from './scale'
+import { maxTicksForWidth, timeAxis, timeFrac, timeTicks, type TimeAxis } from './scale'
 
 export interface XTick {
   frac: number
@@ -12,6 +12,8 @@ export interface XTick {
 
 export interface XAxis {
   time: boolean
+  // the time scale behind `frac` (null for categories), for placing a date between labels
+  axis: TimeAxis | null
   // x position (0..1) of each input label, in input order
   frac: number[]
   // input indices sorted left to right (input order for categories)
@@ -25,11 +27,11 @@ export function buildXAxis(labels: string[], widthPx: number, viewW: number): XA
   if (ta) {
     const order = labels.map((_, i) => i).sort((a, b) => ta.times[a] - ta.times[b] || a - b)
     const ticks = timeTicks(ta.min, ta.max, maxTicksForWidth(widthPx), ta.floor).map((t) => ({ frac: timeFrac(ta, t.t), label: t.label }))
-    return { time: true, frac: ta.times.map((t) => timeFrac(ta, t)), order, ticks }
+    return { time: true, axis: ta, frac: ta.times.map((t) => timeFrac(ta, t)), order, ticks }
   }
   const frac = labels.map((_, i) => (n === 1 ? 0.5 : i / (n - 1)))
   const ticks = pickLabelIndices(labels, widthPx, viewW).map((i) => ({ frac: frac[i], label: labels[i] }))
-  return { time: false, frac, order: labels.map((_, i) => i), ticks }
+  return { time: false, axis: null, frac, order: labels.map((_, i) => i), ticks }
 }
 
 // tickAnchor: how an x tick label sits on its position, so the first and last

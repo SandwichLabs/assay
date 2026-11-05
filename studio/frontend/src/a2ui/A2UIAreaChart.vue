@@ -17,6 +17,9 @@ import { formatNumber } from '../lib/formatCell'
 import { valueScale, frac as scaleFrac, formatTick } from './scale'
 import { buildXAxis } from './xaxis'
 import { useChartCursor } from './useChartCursor'
+import A2UIAnnotations from './A2UIAnnotations.vue'
+import { placeOnAxis } from './annotations'
+import { useAnnotations } from './useAnnotations'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, table } = useChartData(() => props.component)
@@ -33,6 +36,9 @@ const scale = computed(() => valueScale(flat.value, { zero: props.component.zero
 const n = computed(() => data.value.labels.length)
 const plotWidthPx = ref(0)
 const xa = computed(() => buildXAxis(data.value.labels, plotWidthPx.value, W))
+// event markers (annotations), placed on the time or category axis
+const annot = useAnnotations(() => props.component, (items) => placeOnAxis(items, data.value.labels, xa.value), () => (plotWidthPx.value * innerW) / W)
+const annotInset = { top: (PAD / H) * 100 + '%', bottom: (PAD / H) * 100 + '%', left: (PAD / W) * 100 + '%', right: (PAD / W) * 100 + '%' }
 
 function x(i: number): number {
   return PAD + xa.value.frac[i] * innerW
@@ -61,7 +67,7 @@ const lastIdx = computed(() => xa.value.order[n.value - 1] ?? 0)
 const active = computed(() => (cursor.active.value === null ? lastIdx.value : (xa.value.order[cursor.active.value] ?? lastIdx.value)))
 const hover = computed(() => (cursor.active.value === null ? null : active.value))
 const ariaLabel = computed(
-  () => `Area chart of ${data.value.series.map((s) => s.name).join(', ')} over ${n.value} labels, ranging ${formatNumber(Math.min(...flat.value))} to ${formatNumber(Math.max(...flat.value))}`,
+  () => `Area chart of ${data.value.series.map((s) => s.name).join(', ')} over ${n.value} labels, ranging ${formatNumber(Math.min(...flat.value))} to ${formatNumber(Math.max(...flat.value))}${annot.ariaText.value}`,
 )
 </script>
 
@@ -74,7 +80,9 @@ const ariaLabel = computed(
     <div class="a2ui-kchart__readout" aria-live="polite">
       <span>{{ data.labels[active] }}</span>
       <span v-for="(s, si) in data.series" :key="si" class="a2ui-kchart__readval" :class="seriesClass(si)">{{ formatNumber(s.values[active]) }}</span>
+      <span v-for="(note, k) in annot.notesAt(hover)" :key="'note' + k" class="a2ui-linechart__tip-note" data-testid="a2ui-tip-annotation">&#9656; {{ note }}</span>
     </div>
+    <div :style="annot.wrapStyle.value">
     <A2UIPlotFrame
       :y-ticks="yTicks" :x-ticks="xTicks" :axw="axw"
       tabindex="0" role="group" aria-label="Chart values. Use the left and right arrow keys to read each label."
@@ -93,6 +101,9 @@ const ariaLabel = computed(
           <circle v-for="(p, k) in c.pts" :key="k" :cx="p.x" :cy="p.y" :r="hover === c.idx[k] ? 5 : 3" class="a2ui-area__dot" />
         </g>
       </svg>
+      <A2UIAnnotations v-if="annot.markers.value.length" :markers="annot.markers.value" :inset="annotInset" />
     </A2UIPlotFrame>
+    </div>
+    <p v-if="annot.note.value" class="a2ui-annot__note" role="status" data-testid="a2ui-annotation-note">{{ annot.note.value }}</p>
   </A2UIChartFrame>
 </template>

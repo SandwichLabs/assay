@@ -78,6 +78,7 @@ const (
 	kindPoint
 	kindSeriesList
 	kindRows
+	kindAnnotations
 	kindMotion
 	kindRange
 	// View-only kinds (view.go); only reachable through ValidateView.
@@ -98,23 +99,24 @@ type fieldSpec struct {
 }
 
 var (
-	strSpec        = fieldSpec{kind: kindString}
-	connSpec       = fieldSpec{kind: kindConnection}
-	numSpec        = fieldSpec{kind: kindNumber}
-	boolSpec       = fieldSpec{kind: kindBoolean}
-	strOrNumSpec   = fieldSpec{kind: kindStringOrNumber}
-	colorSpec      = fieldSpec{kind: kindEnum, values: toAny(ColorTokens)}
-	headingLvlSpec = fieldSpec{kind: kindEnum, values: []any{float64(1), float64(2), float64(3)}}
-	layoutSpec     = fieldSpec{kind: kindEnum, values: []any{"row", "column", "grid"}}
-	strArraySpec   = fieldSpec{kind: kindArray, of: &strSpec}
-	pointArraySpec = fieldSpec{kind: kindArray, of: &fieldSpec{kind: kindPoint}}
-	seriesListSpec = fieldSpec{kind: kindSeriesList}
-	rowsSpec       = fieldSpec{kind: kindRows}
-	motionSpec     = fieldSpec{kind: kindMotion}
-	maxSpec        = fieldSpec{kind: kindRange, min: 1e-9, max: math.MaxFloat64}
-	columnModeSpec = fieldSpec{kind: kindEnum, values: []any{"stacked", "grouped"}}
-	refreshSpec    = fieldSpec{kind: kindRange, min: 5, max: 3600}
-	windowSpec     = fieldSpec{kind: kindRange, min: 5, max: 120}
+	strSpec         = fieldSpec{kind: kindString}
+	connSpec        = fieldSpec{kind: kindConnection}
+	numSpec         = fieldSpec{kind: kindNumber}
+	boolSpec        = fieldSpec{kind: kindBoolean}
+	strOrNumSpec    = fieldSpec{kind: kindStringOrNumber}
+	colorSpec       = fieldSpec{kind: kindEnum, values: toAny(ColorTokens)}
+	headingLvlSpec  = fieldSpec{kind: kindEnum, values: []any{float64(1), float64(2), float64(3)}}
+	layoutSpec      = fieldSpec{kind: kindEnum, values: []any{"row", "column", "grid"}}
+	strArraySpec    = fieldSpec{kind: kindArray, of: &strSpec}
+	pointArraySpec  = fieldSpec{kind: kindArray, of: &fieldSpec{kind: kindPoint}}
+	seriesListSpec  = fieldSpec{kind: kindSeriesList}
+	rowsSpec        = fieldSpec{kind: kindRows}
+	annotationsSpec = fieldSpec{kind: kindAnnotations}
+	motionSpec      = fieldSpec{kind: kindMotion}
+	maxSpec         = fieldSpec{kind: kindRange, min: 1e-9, max: math.MaxFloat64}
+	columnModeSpec  = fieldSpec{kind: kindEnum, values: []any{"stacked", "grouped"}}
+	refreshSpec     = fieldSpec{kind: kindRange, min: 5, max: 3600}
+	windowSpec      = fieldSpec{kind: kindRange, min: 5, max: 120}
 )
 
 // tableData is the field set every KINETIC chart shares: inline data in the
@@ -157,15 +159,15 @@ var Components = map[string]componentSpec{
 	"statRow":     {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{}},
 	"table":       {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "connection": connSpec, "label": strSpec}},
 	"barChart":    {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"bars": pointArraySpec, "columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec, "motion": motionSpec}},
-	"lineChart":   {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"points": pointArraySpec, "series": seriesListSpec, "columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec, "zero": boolSpec, "motion": motionSpec}},
+	"lineChart":   {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"points": pointArraySpec, "series": seriesListSpec, "columns": strArraySpec, "rows": rowsSpec, "sql": strSpec, "connection": connSpec, "label": strSpec, "color": colorSpec, "zero": boolSpec, "annotations": annotationsSpec, "motion": motionSpec}},
 	"list":        {req: map[string]fieldSpec{"items": strArraySpec}, opt: map[string]fieldSpec{"label": strSpec, "color": colorSpec}},
 	"code":        {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"language": strSpec}},
 	"callout":     {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"icon": strSpec, "color": colorSpec}},
 	"badge":       {req: map[string]fieldSpec{"text": strSpec}, opt: map[string]fieldSpec{"color": colorSpec}},
 	"container":   {req: map[string]fieldSpec{}, opt: map[string]fieldSpec{"layout": layoutSpec, "gap": numSpec}},
-	"areaChart":   {req: map[string]fieldSpec{}, opt: tableData(map[string]fieldSpec{"zero": boolSpec})},
+	"areaChart":   {req: map[string]fieldSpec{}, opt: tableData(map[string]fieldSpec{"zero": boolSpec, "annotations": annotationsSpec})},
 	"ringChart":   {req: map[string]fieldSpec{}, opt: tableData(map[string]fieldSpec{"max": maxSpec})},
-	"columnChart": {req: map[string]fieldSpec{}, opt: tableData(map[string]fieldSpec{"mode": columnModeSpec, "sorted": boolSpec})},
+	"columnChart": {req: map[string]fieldSpec{}, opt: tableData(map[string]fieldSpec{"mode": columnModeSpec, "sorted": boolSpec, "annotations": annotationsSpec})},
 	"radarChart":  {req: map[string]fieldSpec{}, opt: tableData(map[string]fieldSpec{"max": maxSpec})},
 	"sankeyChart": {req: map[string]fieldSpec{}, opt: tableData(nil)},
 	"heatmap":     {req: map[string]fieldSpec{}, opt: tableData(nil)},

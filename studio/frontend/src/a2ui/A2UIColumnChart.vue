@@ -4,7 +4,7 @@
 // ("mode"), optionally sorted by total ("sorted"). Every segment rises with
 // the motion preset, staggered column by column. Heights are computed
 // percentages bound through a numeric :style, never a model string.
-import { computed } from 'vue'
+import { computed, nextTick, watch } from 'vue'
 import type { A2UIComponentT } from './types'
 import { isBound } from './query'
 import A2UIChartFrame from './A2UIChartFrame.vue'
@@ -15,6 +15,9 @@ import { formatNumber } from '../lib/formatCell'
 import { useDrill } from './useDrill'
 import { useRoving } from './useRoving'
 import { valueScale, frac as scaleFrac, formatTick } from './scale'
+import A2UIAnnotations from './A2UIAnnotations.vue'
+import { placeOnColumns, type Annotation } from './annotations'
+import { useAnnotations, useColumnGeometry } from './useAnnotations'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, table } = useChartData(() => props.component)
@@ -57,7 +60,22 @@ function topPct(ci: number): number {
   const hs = cols.value[ci].segs.map((_, si) => h(ci, si))
   return grouped.value ? Math.max(0, ...hs) : Math.min(100, hs.reduce((a, b) => a + b, 0))
 }
-const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 'stacked'}, ${cols.value.length} columns of ${data.value.series.map((s) => s.name).join(', ')}`)
+// Event markers (annotations): on the column centre of the label they name, or, for dated
+// columns in order, of the column they fall in. The overlay covers the plot area (the same
+// pinned pieces the gridlines use); from the top so the label rows clear the tallest column's value.
+// The columns scroll sideways when there are many, so markers sit at the measured centre of
+// their column inside the scrolling content (and scroll with it), not at a fraction of what shows.
+const { el: colsEl, geom, scrollLeft, measure, onScroll } = useColumnGeometry()
+const scrollProp = computed(() => ({ width: geom.value.width, left: scrollLeft.value, view: geom.value.view }))
+const place = (items: Annotation[]) => {
+  const p = placeOnColumns(items, cols.value.map((c) => c.label), !props.component.sorted)
+  const g = geom.value
+  return g.width > 0 && g.centers.length === cols.value.length ? { ...p, markers: p.markers.map((m) => ({ ...m, frac: g.centers[m.bucket] / g.width })) } : p
+}
+const annot = useAnnotations(() => props.component, place, () => geom.value.width)
+watch(() => cols.value.map((c) => c.label).join('\0'), () => void nextTick(measure))
+const annotInset = { top: '0px', bottom: 'calc(24px + var(--a2ui-col-inset) + var(--a2ui-sbh))', left: '0px', right: '0px' }
+const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 'stacked'}, ${cols.value.length} columns of ${data.value.series.map((s) => s.name).join(', ')}${annot.ariaText.value}`)
 </script>
 
 <template>
@@ -67,7 +85,8 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
     @replay="replay"
   >
     <div v-if="drill.problem.value" class="a2ui-error" role="alert">{{ drill.problem.value }}</div>
-    <div class="a2ui-colplot" :class="{ 'a2ui-colplot--drill': drill.enabled.value }" :style="{ '--a2ui-axw': axw + 'ch' }">
+    <div :style="annot.wrapStyle.value">
+    <div class="a2ui-colplot" :class="{ 'a2ui-colplot--drill': drill.enabled.value }" :style="{ '--a2ui-axw': axw + 'ch', '--a2ui-sbh': geom.sbh + 'px' }">
     <div class="a2ui-colplot__yaxis" aria-hidden="true">
       <div class="a2ui-colplot__ypad a2ui-colplot__ypad--top"></div>
       <div class="a2ui-colplot__yplot">
@@ -80,8 +99,8 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
       <div v-for="(t, i) in scale.ticks" :key="i" class="a2ui-colplot__line" :style="{ bottom: scaleFrac(scale, t) * 100 + '%' }"></div>
     </div>
     <div
-      class="a2ui-columns" :role="drill.enabled.value ? 'group' : 'img'" :aria-label="ariaLabel"
-      @keydown="drill.enabled.value && roving.onKeydown($event)" @focusin="roving.onFocusin"
+      ref="colsEl" class="a2ui-columns" :role="drill.enabled.value ? 'group' : 'img'" :aria-label="ariaLabel"
+      @keydown="drill.enabled.value && roving.onKeydown($event)" @focusin="roving.onFocusin" @scroll.passive="onScroll"
     >
       <div
         v-for="(c, ci) in cols" :key="c.label + ci" class="a2ui-columns__col"
@@ -105,8 +124,11 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
         <span class="a2ui-columns__label" :title="c.label">{{ c.label }}</span>
       </div>
     </div>
+    <A2UIAnnotations v-if="annot.markers.value.length" :markers="annot.markers.value" :inset="annotInset" :scroll="scrollProp" />
     </div>
     </div>
+    </div>
+    <p v-if="annot.note.value" class="a2ui-annot__note" role="status" data-testid="a2ui-annotation-note">{{ annot.note.value }}</p>
     <div v-if="isBound(component) && loading" class="a2ui-loading" role="status">RUNNING QUERY…</div>
     <div v-if="drill.error.value" class="a2ui-error" role="alert" data-testid="a2ui-drill-error">{{ drill.error.value }}</div>
   </A2UIChartFrame>

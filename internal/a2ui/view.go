@@ -134,6 +134,12 @@ func viewVariant(name string, spec componentSpec) componentSpec {
 		delete(out.opt, "refresh")
 		out.opt["query"] = querySpec
 	}
+	if f, ok := out.opt["annotations"]; ok {
+		// same check (checkAnnotations tells a view by its context); the marker only
+		// lets the prompt hint say query instead of sql
+		f.values = []any{"view"}
+		out.opt["annotations"] = f
+	}
 	for _, d := range drillable {
 		if d == name {
 			out.opt["drill"] = drillSpec
@@ -190,6 +196,8 @@ func checkViewValue(vc *ViewContext, spec fieldSpec, value any, path string, err
 		checkNameList(value, path, errs)
 	case kindColumnName:
 		checkColumnName(value, path, errs)
+	case kindAnnotations:
+		checkAnnotations(vc, value, path, errs)
 	default:
 		checkValue(spec, value, path, errs)
 	}

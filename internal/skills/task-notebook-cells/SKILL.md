@@ -89,6 +89,14 @@ start their value axis at 0 for non-negative data; only an `a2ui` line or area
 chart with `zero: false` fits the axis to the data, which is right for a rate
 or index, not for money or counts.
 
+A cell's `line` or `bar` view cannot mark events. For "mark each release /
+price change / incident" on a time series, write the cell as the dated series
+and say in `explanation` that a dashboard (`create_dashboard`) `lineChart`,
+`areaChart` or `columnChart` with `annotations` draws one labelled rule per event,
+from inline `rows` or an `annotations.sql` over the events table
+(`SELECT start_date AS at, name AS label FROM events`). Do not fake markers with a
+second series of event values.
+
 ## Labels
 
 Short and specific: `"Revenue by region"`, not `"Query 1"` or `"Result"`.
