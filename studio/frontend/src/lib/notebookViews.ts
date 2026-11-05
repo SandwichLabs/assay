@@ -29,8 +29,8 @@ export const VIEW_COMPONENT: Record<ViewKind, string> = {
 
 export const VIEW_HINTS: Record<ViewKind, string> = {
   table: 'every column, as rows',
-  bar: 'a label column, then a number — one bar per row',
-  line: 'an ordered label column, then a number — good for terms or dates',
+  bar: 'a label column, then a number — one bar per row (label, series, value gives grouped bars)',
+  line: 'an ordered label column, then a number — or label, series, value for one line per series',
   stat: 'one number: the first column of the first row',
   area: 'a label column, then one number column per series — smooth areas',
   columns: 'a label column, then one number column per series — stacked columns',
@@ -39,6 +39,12 @@ export const VIEW_HINTS: Record<ViewKind, string> = {
   sankey: 'source, target, then a numeric weight — one ribbon per row',
   heatmap: 'a row label, a column label, then a number — one cell per row',
 }
+
+// bestView picks a chart for a (label, series, value) result only up to this
+// many series and rows; a bigger one is a table until the person asks. The
+// chart itself folds series past six into "Other". Mirrors internal/agents.
+const MAX_LONG_SERIES = 6
+const MAX_LONG_ROWS = 200
 
 // MAX_RINGS matches the ring chart's (and internal/agents' maxRings) limit.
 const MAX_RINGS = 6
@@ -54,12 +60,23 @@ function isNumericFamily(dbType: string): boolean {
   return f === 'integer' || f === 'decimal' || f === 'float'
 }
 
+// LongShape describes a (label, series, value) result: three columns, a text
+// second and a numeric third, what a GROUP BY label, series returns. The chart
+// (a2ui/multiseries.ts) draws one line, or one bar per label, per series.
+interface LongShape {
+  labels: number
+  series: number
+  // no (label, series) pair repeats
+  unique: boolean
+}
+
 export interface Shape {
   cols: string[]
   numeric: string[]
   label: string[]
   rowCount: number
   firstDistinct: boolean
+  long?: LongShape
 }
 
 /**
@@ -95,13 +112,23 @@ export function describeShape(columns: string[], rows: any[][], types?: string[]
   }
   const firstIdx = 0
   const seen = new Set(rows.map((r) => String(r[firstIdx])))
+  const long = longShape(cols, numeric, rows)
   return {
     cols,
     numeric,
     label,
     rowCount: rows.length,
     firstDistinct: rows.length > 0 && seen.size === rows.length,
+    ...(long ? { long } : {}),
   }
+}
+
+function longShape(cols: string[], numeric: string[], rows: any[][]): LongShape | undefined {
+  if (cols.length !== 3 || numeric.includes(cols[1]) || !numeric.includes(cols[2])) return undefined
+  const labels = new Set(rows.map((r) => String(r[0] ?? '')))
+  const series = new Set(rows.map((r) => String(r[1] ?? '')))
+  const pairs = new Set(rows.map((r) => JSON.stringify([String(r[0] ?? ''), String(r[1] ?? '')])))
+  return { labels: labels.size, series: series.size, unique: pairs.size === rows.length }
 }
 
 interface ViewFit {
@@ -169,10 +196,16 @@ function looksOrdered(name: string): boolean {
  * table.
  */
 export function bestView(shape: Shape): ViewKind {
-  const { cols, numeric, rowCount, firstDistinct } = shape
+  const { cols, numeric, rowCount, firstDistinct, long } = shape
   if (rowCount === 1 && cols.length === 1 && numeric.length === 1) return 'stat'
 
   const CHARTABLE_ROWS = 25
+  // (label, series, value): a line when the label reads as a sequence, else
+  // grouped bars. Two to six series, at least two labels, no repeated pair.
+  if (long && long.unique && long.series >= 2 && long.series <= MAX_LONG_SERIES && long.labels >= 2 && rowCount <= MAX_LONG_ROWS) {
+    if (looksOrdered(cols[0])) return 'line'
+    return long.labels <= CHARTABLE_ROWS ? 'bar' : 'table'
+  }
   if (cols.length === 2 && numeric.includes(cols[1]) && rowCount > 1
       && rowCount <= CHARTABLE_ROWS && firstDistinct) {
     return looksOrdered(cols[0]) ? 'line' : 'bar'

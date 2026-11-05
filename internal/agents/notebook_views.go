@@ -22,6 +22,18 @@ type viewShape struct {
 	numeric       map[string]bool
 	rowCount      int
 	firstDistinct bool
+	// long is set for a (label, series, value) result; see longViewShape.
+	long *longViewShape
+}
+
+// longViewShape describes a (label, series, value) result: exactly three
+// columns, a non-numeric second and a numeric third, what a GROUP BY label,
+// series returns. Mirrors LongShape in notebookViews.ts.
+type longViewShape struct {
+	labels int
+	series int
+	// unique is true when no (label, series) pair repeats.
+	unique bool
 }
 
 // isNumericValue judges a value from a Go-side result set (preview_query,
@@ -67,7 +79,25 @@ func describeViewShape(cols []string, rows [][]any) viewShape {
 		}
 		seen[key] = true
 	}
-	return viewShape{cols: cols, numeric: numeric, rowCount: len(rows), firstDistinct: firstDistinct}
+	return viewShape{cols: cols, numeric: numeric, rowCount: len(rows), firstDistinct: firstDistinct, long: describeLongShape(cols, numeric, rows)}
+}
+
+// describeLongShape returns the (label, series, value) description of a
+// result, or nil when it is not one. Same rule as longShape() in
+// notebookViews.ts.
+func describeLongShape(cols []string, numeric map[string]bool, rows [][]any) *longViewShape {
+	if len(cols) != 3 || numeric[cols[1]] || !numeric[cols[2]] {
+		return nil
+	}
+	labels, series, pairs := map[string]bool{}, map[string]bool{}, map[[2]string]bool{}
+	for _, r := range rows {
+		if len(r) < 2 {
+			continue
+		}
+		l, sr := toDisplayString(r[0]), toDisplayString(r[1])
+		labels[l], series[sr], pairs[[2]string{l, sr}] = true, true, true
+	}
+	return &longViewShape{labels: len(labels), series: len(series), unique: len(pairs) == len(rows)}
 }
 
 func toDisplayString(v any) string {
@@ -168,6 +198,14 @@ func looksOrderedName(name string) bool {
 
 const chartableRows = 25
 
+// A (label, series, value) result is charted by bestViewFor only up to this
+// many series and rows (the chart itself folds series past six into "Other").
+// Mirrors MAX_LONG_SERIES and MAX_LONG_ROWS in notebookViews.ts.
+const (
+	maxLongSeries = 6
+	maxLongRows   = 200
+)
+
 // bestViewFor is the conservative "which view suits this shape" pick — same
 // rules as bestView() in notebookViews.ts. Prefers table whenever a chart
 // would be a guess.
@@ -178,6 +216,18 @@ func bestViewFor(shape viewShape) string {
 				return "stat"
 			}
 		}
+	}
+	// (label, series, value): a line when the label reads as a sequence, else
+	// grouped bars. Two to six series, at least two labels, no repeated pair.
+	if l := shape.long; l != nil && l.unique && l.series >= 2 && l.series <= maxLongSeries &&
+		l.labels >= 2 && shape.rowCount <= maxLongRows {
+		if looksOrderedName(shape.cols[0]) {
+			return "line"
+		}
+		if l.labels <= chartableRows {
+			return "bar"
+		}
+		return "table"
 	}
 	if len(shape.cols) == 2 && shape.numeric[shape.cols[1]] && shape.rowCount > 1 &&
 		shape.rowCount <= chartableRows && shape.firstDistinct {

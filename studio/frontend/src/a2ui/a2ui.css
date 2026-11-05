@@ -291,6 +291,21 @@
 .a2ui-page .a2ui-linechart__tip--left { transform: translate(calc(-100% - 10px), -50%); }
 .a2ui-page .a2ui-linechart__tip-label { color: var(--sh-graphite); }
 .a2ui-page .a2ui-linechart__tip-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Several series: each series group takes its colour from the chart role its
+   .a2ui-series-N class selects. A tooltip row is a swatch, the series name and
+   its value. */
+.a2ui-page .a2ui-linechart__series .a2ui-linechart__line { stroke: var(--a2ui-series); }
+.a2ui-page .a2ui-linechart__series .a2ui-linechart__dot { fill: var(--a2ui-series); }
+.a2ui-page .a2ui-linechart__series .a2ui-linechart__focus { fill: var(--a2ui-series); }
+.a2ui-page .a2ui-linechart__tip-row { display: flex; align-items: center; gap: 5px; }
+.a2ui-page .a2ui-linechart__tip-name { color: var(--sh-graphite); flex: 1; }
+.a2ui-page .a2ui-kchart__note { color: var(--sh-graphite); font-style: italic; }
+/* Grouped bars (barChart with several series): a label, then one thin bar per series. */
+.a2ui-page .a2ui-bargroup { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; }
+.a2ui-page .a2ui-bargroup__bars { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.a2ui-page .a2ui-bar--grouped { margin: 0; }
+.a2ui-page .a2ui-bar--grouped .a2ui-bar__track { height: 10px; }
+.a2ui-page .a2ui-bar__fill--series { background: var(--a2ui-series); }
 /* Visually hidden text for screen readers (live region of the hovered value). */
 .a2ui-page .a2ui-sr {
   position: absolute;

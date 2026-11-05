@@ -56,7 +56,22 @@ picker):
   preferred over `bar` when the label column reads as a sequence (a name
   like `date`, `month`, `term`, `window`, `year`, `quarter`); otherwise
   it's `bar`. Neither fits a single-column, all-text result, or more than
-  25 rows.
+  25 rows (a long series result may have up to 200 rows).
+- **several series** — for "X by Y over time", or "X by Y and Z", return the
+  long shape `(label, series, value)` (`SELECT month, rep, sum(revenue) ...
+  GROUP BY 1, 2 ORDER BY 1`): two to six series, at least two labels, one row
+  per label and series. `suggestedView` is `line` when the first column reads
+  as a sequence (`month`, `date`, `year` ...) and `bar` otherwise (grouped
+  bars, up to 25 labels); never four separate charts or cells for one
+  question. A wide result, `(label, n1, n2)` with a numeric column per
+  series, draws the same when `line` or `bar` is chosen, but it is not
+  suggested, and its columns share one scale, so only use it for measures in
+  one unit. Series are coloured by position, never by you. A series with no
+  row at a label is a gap, not a zero, which is right: do not pad the query
+  with zeros. More than six series are summed into one "Other", which is wrong
+  for rates, averages and prices: filter to the series that matter in SQL
+  (`WHERE rep IN (top 5)`) or return a share. `ORDER BY` decides the series
+  order and so the colours.
 - **stat** — needs exactly one row and one number. Two rows, or a result
   with no numeric column, doesn't fit — aggregate or `LIMIT 1` first.
 

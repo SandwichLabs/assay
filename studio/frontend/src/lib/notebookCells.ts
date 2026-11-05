@@ -9,6 +9,7 @@ import type { A2UIPageT } from '../a2ui/types'
 import type { MotionT } from '../a2ui/motion'
 import type { SlawEditorInstance } from '../composables/useSlawEditor'
 import type { EnvelopeCell } from '../composables/useAiCellDialog'
+import { isSeriesShape } from '../a2ui/multiseries'
 import { describeShape, viewFit, VIEW_COMPONENT, VIEW_HINTS, VIEW_LABELS, VIEWS, type Shape, type ViewKind } from './notebookViews'
 import { sqlSummary, cellTitle, CELL_FALLBACK_TITLE } from './cellSummary'
 
@@ -176,11 +177,14 @@ export function synthesizedPage(cell: CellState): A2UIPageT | null {
       fields = { columns, rows, types }
       break
     case 'bar':
-      fields = { bars: toPoints(columns, rows) }
+    case 'line': {
+      // Several series (a long or wide result) go to the chart whole, as
+      // columns + rows with their types; one series stays a plain point list.
+      const several = isSeriesShape({ columns, rows, types })
+      if (several) fields = { columns, rows, types }
+      else fields = cell.view === 'bar' ? { bars: toPoints(columns, rows) } : { points: toPoints(columns, rows) }
       break
-    case 'line':
-      fields = { points: toPoints(columns, rows) }
-      break
+    }
     case 'stat':
       // a2ui's "stat" type requires a label — fall back to a column name or
       // a generic "Result" rather than an empty required field.
