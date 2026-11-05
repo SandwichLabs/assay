@@ -131,6 +131,12 @@ describe('SettingsView', () => {
     expect(app.StopMCP).toHaveBeenCalled()
   })
 
+  it('MCP says why a remembered server did not restart', async () => {
+    makeApp({ startError: 'failed to start the MCP server: port busy' })
+    const { w } = await mountAt()
+    expect(w.find('[data-testid="mcp-start-error"]').text()).toContain('port busy')
+  })
+
   it('MCP cannot start while read-only, and says why', async () => {
     makeApp({ canStart: false, reason: 'This window opened the workspace read-only. Take over the workspace to serve MCP.' })
     const { w } = await mountAt()

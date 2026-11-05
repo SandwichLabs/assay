@@ -79,7 +79,7 @@ Symptom: `slaw query` fails with "workspace NAME is open in slaw mcp serve (pid 
 
 - Over stdio (the normal setup) there is no port. The client starts `slaw mcp serve` itself, so check the command path in its config is **absolute**, and that the workspace path exists. Run the same command in a terminal: it should wait silently for input.
 - With `--transport sse`, the default address `127.0.0.1:0` picks a free port. If you chose a fixed one with `--addr` and it is taken, pick another. Non-loopback addresses are refused.
-- If Studio has the workspace with MCP off, `slaw mcp serve` stops and says to turn it on (Settings, Workspace, Claude and other tools) or close Studio.
+- If Studio has the workspace with MCP off, `slaw mcp serve` stops and says to press Start (Settings, Workspace, Claude and other tools) or close Studio. Studio remembers the choice per workspace and restarts the server on open; if it could not (the panel says why), press Start again.
 - After a take-over, reconnect the client (Claude Code: `/mcp`).
 - stdout is the protocol channel and must stay clean; any log you see in a terminal is on stderr and is expected.
 

@@ -226,7 +226,7 @@ func (r *Recents) SavePreferences(p Preferences) error {
 		extra[k] = v
 	}
 	// Keys the frontend does not round-trip come from disk, never from p.
-	for _, key := range []string{RecentsKey, UpdatesKey} {
+	for _, key := range []string{RecentsKey, UpdatesKey, MCPKey} {
 		if raw, ok := cur.Extra[key]; ok {
 			extra[key] = raw
 		} else {

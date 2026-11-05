@@ -48,7 +48,11 @@ type App struct {
 	// mcpTool is the wrapped handler wmcp serves (what takes a.mu and shows the
 	// approval cards); nil while MCP is off.
 	mcpTool *agentToolHandler
-	watcher *workspace.Watcher
+	// mcpStartErr is why the remembered server did not restart on open (shown in
+	// the MCP status); mcpStarter replaces the real start in tests.
+	mcpStartErr string
+	mcpStarter  func() error
+	watcher     *workspace.Watcher
 	// watchDone is closed by closeWorkspaceLocked to end the watcher forwarder.
 	watchDone chan struct{}
 	// issues are the connections that could not be set up (redacted messages).

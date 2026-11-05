@@ -203,6 +203,8 @@ onUnmounted(() => unsub?.())
           <button class="btn btn-sm" type="button" data-testid="copy-claude-desktop" @click="copyConfig('desktop')"><Icon name="copy" :size="14" /> {{ copied === 'desktop' ? 'Copied' : 'Copy Claude Desktop config' }}</button>
         </div>
         <p v-if="mcp && !mcp.canStart && !mcp.running" class="help" style="margin: 0;">{{ mcp.reason }}</p>
+        <p v-if="mcp?.startError" class="help" style="margin: 0;" data-testid="mcp-start-error">It was on when you last used this workspace but did not restart: {{ mcp.startError }} Press Start to try again.</p>
+        <p v-if="mcp?.canStart" class="help" style="margin: 0;">Start and Stop are remembered for this workspace on this computer. When it is on, Studio turns it on again each time it opens the workspace.</p>
 
         <div class="note info">
           <Icon name="info" :size="16" />
