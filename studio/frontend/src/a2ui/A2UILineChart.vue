@@ -2,7 +2,7 @@
 // A2UILineChart — an SVG line chart, inline "points" or a live "sql" binding.
 // role="img" + aria-label (a chart with no text alternative is inaccessible).
 //
-// Axes (a2ui/scale.ts, a2ui/xaxis.ts): 4-6 round gridlines (1/2/5 x 10^n), a
+// Axes (a2ui/scale.ts, a2ui/xaxis.ts): round gridlines (1/2/5 x 10^n, usually four or five), a
 // zero baseline for non-negative data unless the component says `zero: false`,
 // and a real time axis when every label is a date or timestamp: points sit by
 // time, not by index, with ticks on calendar boundaries ("Apr '25").
@@ -95,7 +95,7 @@ const polylinePoints = computed(() => xa.value.order.map((i) => `${x(i)},${animY
       data-testid="a2ui-linechart-plot" :y-ticks="yTicks" :x-ticks="xTicks" :axw="axw"
       tabindex="0" role="group" aria-label="Chart values. Use the left and right arrow keys to read each point."
       @measure="plotWidthPx = $event"
-      @mousemove="cursor.onMove" @mouseleave="cursor.clear" @keydown="cursor.onKey" @focus="cursor.onFocus" @blur="cursor.clear"
+      @mousemove="cursor.onMove" @mouseleave="cursor.onLeave" @keydown="cursor.onKey" @focus="cursor.onFocus" @blur="cursor.clear"
     >
       <svg :viewBox="`0 0 ${W} ${H}`" :class="['a2ui-linechart__svg', colorClass(component.color)]" role="img" :aria-label="ariaLabel">
         <line

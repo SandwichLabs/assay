@@ -50,7 +50,13 @@ const fmtTick = (v: number) => formatNumber(v, digits.value)
 const axw = computed(() => Math.max(2, ...scale.value.ticks.map((t) => fmtTick(t).length)) + 1)
 function h(ci: number, si: number): number {
   const v = values.value[ci * k.value + si] ?? 0
-  return Math.max(0, Math.min(scaleFrac(scale.value, v) * 100, 104))
+  return Math.max(0, Math.min(scaleFrac(scale.value, v) * 100, 100))
+}
+// Where the column's total label sits: just above its own stack (stacked), or
+// above its tallest bar (grouped).
+function topPct(ci: number): number {
+  const hs = cols.value[ci].segs.map((_, si) => h(ci, si))
+  return grouped.value ? Math.max(0, ...hs) : Math.min(100, hs.reduce((a, b) => a + b, 0))
 }
 const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 'stacked'}, ${cols.value.length} columns of ${data.value.series.map((s) => s.name).join(', ')}`)
 </script>
@@ -85,14 +91,17 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
         @click="drill.drill(c.src)"
         @keydown="drill.enabled.value && drill.onKey($event, c.src)"
       >
-        <span class="a2ui-columns__total">{{ formatNumber(c.total) }}</span>
-        <div class="a2ui-columns__track" :class="grouped ? 'a2ui-columns__track--grouped' : 'a2ui-columns__track--stacked'">
-          <div
-            v-for="(seg, si) in c.segs" :key="si"
-            class="a2ui-columns__seg" :class="seriesClass(si)"
-            :style="{ height: h(ci, si) + '%' }"
-            :title="`${c.label} · ${data.series[si]?.name}: ${formatNumber(seg)}`"
-          ></div>
+        <div class="a2ui-columns__headroom" aria-hidden="true"></div>
+        <div class="a2ui-columns__track">
+          <div class="a2ui-columns__inner" :class="grouped ? 'a2ui-columns__track--grouped' : 'a2ui-columns__track--stacked'">
+            <span class="a2ui-columns__total" :style="{ bottom: `calc(${topPct(ci)}% + 2px)` }">{{ formatNumber(c.total) }}</span>
+            <div
+              v-for="(seg, si) in c.segs" :key="si"
+              class="a2ui-columns__seg" :class="seriesClass(si)"
+              :style="{ height: h(ci, si) + '%' }"
+              :title="`${c.label} · ${data.series[si]?.name}: ${formatNumber(seg)}`"
+            ></div>
+          </div>
         </div>
         <span class="a2ui-columns__label" :title="c.label">{{ c.label }}</span>
       </div>

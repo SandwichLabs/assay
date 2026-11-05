@@ -42,22 +42,27 @@ function tidy(v: number, decimals: number): number {
 export function niceTicks(lo: number, hi: number): NiceScale {
   if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { ticks: [0, 1], min: 0, max: 1, step: 1 }
   if (lo > hi) [lo, hi] = [hi, lo]
-  if (lo === hi) {
-    // A single value has no range of its own: open one around it.
-    const pad = lo === 0 ? 1 : Math.abs(lo) * 0.1
+  const mag = Math.max(Math.abs(lo), Math.abs(hi))
+  if (hi - lo <= mag * 1e-9) {
+    // A single value (or a range lost in rounding) has no range of its own:
+    // open one around it, so no step is finer than the numbers can carry.
+    const pad = mag === 0 ? 1 : mag * 0.1
     lo -= pad
     hi += pad
   }
   const range = hi - lo
+  // An overflowed (Infinity) or underflowed (0) range would never find a step.
+  if (!(range > 0) || !Number.isFinite(range)) return { ticks: [0, 1], min: 0, max: 1, step: 1 }
   const e0 = Math.floor(Math.log10(range))
   let best: { step: number; a: number; b: number; cost: number; width: number } | null = null
   for (let e = e0 - 2; e <= e0 + 1; e++) {
     for (const m of STEP_MANTISSAS) {
       const step = m * 10 ** e
+      if (!(step > 0) || !Number.isFinite(step)) continue
       const a = Math.floor(lo / step + 1e-9)
       const b = Math.ceil(hi / step - 1e-9)
       const count = b - a + 1
-      if (count < 3 || count > 6) continue
+      if (!(count >= 3 && count <= 6)) continue
       // 4 or 5 ticks cost nothing; 3 or 6 cost a little; then the tightest fit.
       const cost = count === 4 || count === 5 ? 0 : 1
       const width = (b - a) * step
@@ -67,7 +72,7 @@ export function niceTicks(lo: number, hi: number): NiceScale {
   if (!best) {
     // Unreachable for finite ranges (some step always yields 3 to 6 ticks),
     // but keep a defined answer.
-    return { ticks: [tidy(lo, 6), tidy(hi, 6)], min: lo, max: hi, step: range }
+    return { ticks: [0, 1], min: 0, max: 1, step: 1 }
   }
   const dec = decimalsFor(best.step) + 1
   const ticks: number[] = []
@@ -116,7 +121,7 @@ export function parseTime(label: string): number | null {
   const m = TIME_RE.exec(label.trim())
   if (!m) return null
   const [y, mo, d, h, mi, s] = [m[1], m[2], m[3] ?? '1', m[4] ?? '0', m[5] ?? '0', m[6] ?? '0'].map(Number)
-  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) return null
+  if (y < 100 || mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) return null
   const t = Date.UTC(y, mo - 1, d, h, mi, s)
   // Date.UTC rolls 31 Feb into March; a real date round-trips.
   const back = new Date(t)
@@ -124,12 +129,15 @@ export function parseTime(label: string): number | null {
   return t
 }
 
+export type TimeUnit = Unit
+
 export interface TimeTick {
   t: number
   label: string
 }
 
-type Unit = 'minute' | 'hour' | 'day' | 'month' | 'year'
+type Unit = 'second' | 'minute' | 'hour' | 'day' | 'month' | 'year'
+const UNIT_RANK: Record<Unit, number> = { second: 0, minute: 1, hour: 2, day: 3, month: 4, year: 5 }
 interface Step {
   unit: Unit
   n: number
@@ -138,6 +146,7 @@ interface Step {
 
 // Finest first; the first step with few enough ticks wins.
 const STEPS: Step[] = [
+  { unit: 'second', n: 1 }, { unit: 'second', n: 5 }, { unit: 'second', n: 15 }, { unit: 'second', n: 30 },
   { unit: 'minute', n: 1 }, { unit: 'minute', n: 5 }, { unit: 'minute', n: 15 }, { unit: 'minute', n: 30 },
   { unit: 'hour', n: 1 }, { unit: 'hour', n: 2 }, { unit: 'hour', n: 3 }, { unit: 'hour', n: 6 }, { unit: 'hour', n: 12 },
   { unit: 'day', n: 1 }, { unit: 'day', n: 2 }, { unit: 'day', n: 7, week: true }, { unit: 'day', n: 14, week: true },
@@ -152,8 +161,8 @@ function ticksFor(min: number, max: number, st: Step): number[] {
   const out: number[] = []
   const d0 = new Date(min)
   let t: number
-  if (st.unit === 'minute' || st.unit === 'hour') {
-    const unitMs = st.unit === 'minute' ? MIN : HOUR
+  if (st.unit === 'second' || st.unit === 'minute' || st.unit === 'hour') {
+    const unitMs = st.unit === 'second' ? 1000 : st.unit === 'minute' ? MIN : HOUR
     const stepMs = st.n * unitMs
     t = Math.ceil(min / stepMs) * stepMs
     for (; t <= max && out.length < MAX_TICKS_SCAN; t += stepMs) out.push(t)
@@ -201,9 +210,10 @@ function tickLabel(t: number, st: Step, multiYear: boolean, multiDay: boolean): 
   const d = new Date(t)
   const yy = `'${pad2(d.getUTCFullYear() % 100)}`
   switch (st.unit) {
+    case 'second':
     case 'minute':
     case 'hour': {
-      const hm = `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`
+      const hm = `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}${st.unit === 'second' ? `:${pad2(d.getUTCSeconds())}` : ''}`
       return multiDay ? `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()} ${hm}` : hm
     }
     case 'day':
@@ -220,25 +230,39 @@ function tickLabel(t: number, st: Step, multiYear: boolean, multiDay: boolean): 
 // weeks, months, quarters, years in between) that keeps the tick count at or
 // under maxTicks, and labels the ticks to match: "Apr 3", "Apr '25", "Q2 '25",
 // "2025". Ticks are real calendar boundaries inside [min, max].
-export function timeTicks(min: number, max: number, maxTicks = 6): TimeTick[] {
+export function timeTicks(min: number, max: number, maxTicks = 6, floor: TimeUnit = 'second'): TimeTick[] {
   const cap = Math.max(2, Math.floor(maxTicks))
   const multiYear = new Date(min).getUTCFullYear() !== new Date(max).getUTCFullYear()
   const multiDay = Math.floor(min / DAY) !== Math.floor(max / DAY)
+  if (!(max > min) || !Number.isFinite(min) || !Number.isFinite(max)) return []
   for (const st of STEPS) {
+    // never finer than the data: a month-resolution label has no weeks in it
+    if (UNIT_RANK[st.unit] < UNIT_RANK[floor]) continue
     const ts = ticksFor(min, max, st)
     if (ts.length <= cap) {
       if (ts.length < 2) continue
       return ts.map((t) => ({ t, label: tickLabel(t, st, multiYear, multiDay) }))
     }
   }
-  // Wider than a century step allows for: fall back to the two ends.
-  const last = STEPS[STEPS.length - 1]
-  return [min, max].map((t) => ({ t, label: tickLabel(t, last, multiYear, multiDay) }))
+  // Nothing fits: fall back to the two ends, labelled to suit the span.
+  const end: Step = max - min < DAY ? { unit: 'second', n: 1 } : STEPS[STEPS.length - 1]
+  return [min, max].map((t) => ({ t, label: tickLabel(t, end, multiYear, multiDay) }))
+}
+
+// timeGranularity: the finest unit a label states, so ticks are never finer
+// than the data ("2025-01" has no days; "2025-04-03" has no hours).
+export function timeGranularity(label: string): TimeUnit {
+  const m = TIME_RE.exec(label.trim())
+  if (!m || m[3] === undefined) return 'month'
+  if (m[4] === undefined) return 'day'
+  return m[6] !== undefined && Number(m[6]) !== 0 ? 'second' : 'minute'
 }
 
 export interface TimeAxis {
   // one time per input label, in input order
   times: number[]
+  // the finest unit any label states
+  floor: TimeUnit
   min: number
   max: number
 }
@@ -249,14 +273,17 @@ export interface TimeAxis {
 export function timeAxis(labels: string[]): TimeAxis | null {
   if (labels.length < 2) return null
   const times: number[] = []
+  let floor: TimeUnit = 'year'
   for (const l of labels) {
+    const g = timeGranularity(l)
+    if (UNIT_RANK[g] < UNIT_RANK[floor]) floor = g
     const t = parseTime(l)
     if (t === null) return null
     times.push(t)
   }
   const min = Math.min(...times)
   const max = Math.max(...times)
-  return min === max ? null : { times, min, max }
+  return min === max ? null : { times, floor, min, max }
 }
 
 // timeFrac maps a time to 0 (axis.min) .. 1 (axis.max).

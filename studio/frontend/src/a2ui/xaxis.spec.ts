@@ -26,6 +26,10 @@ describe('buildXAxis', () => {
     const years = buildXAxis(['2019-01-01', '2021-06-01', '2025-01-01'], 600, 640)
     expect(years.ticks.map((t) => t.label)).toContain('2024')
   })
+  it('does not tick finer than the labels', () => {
+    expect(buildXAxis(['2025-01', '2025-02'], 600, 640).ticks.map((t) => t.label)).toEqual(["Jan '25", "Feb '25"])
+    expect(buildXAxis(['2025-04-03', '2025-04-04'], 600, 640).ticks.map((t) => t.label)).toEqual(['Apr 3', 'Apr 4'])
+  })
   it('falls back to categories when one label is not a date', () => {
     expect(buildXAxis(['2025-01-01', 'total'], 600, 640).time).toBe(false)
   })

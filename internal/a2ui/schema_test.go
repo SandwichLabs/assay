@@ -371,12 +371,6 @@ func TestValidate_ZeroBaselineOption(t *testing.T) {
 	}
 }
 
-func TestPromptBlock_DocumentsAxes(t *testing.T) {
-	block := PromptBlock()
-	assert.Contains(t, block, `"zero": false`)
-	assert.Contains(t, block, "time axis")
-}
-
 func TestValidate_MotionOnEveryChart(t *testing.T) {
 	for _, typ := range Charts {
 		_, err := Validate(`{"title":"x","components":[{"id":"c","type":"` + typ + `","motion":{"easing":"custom","speed":1.5,"stagger":false,"stiffness":190,"damping":12,"mass":1}}]}`)

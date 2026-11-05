@@ -489,7 +489,17 @@
   overflow-x: auto;
 }
 .a2ui-page .a2ui-columns__col { display: flex; flex-direction: column; align-items: center; height: 100%; min-width: 0; }
-.a2ui-page .a2ui-columns__total { font-family: var(--sh-font-mono); font-size: 11px; line-height: 16px; height: 16px; color: var(--sh-graphite); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+.a2ui-page .a2ui-columns__total {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--sh-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  color: var(--sh-graphite);
+  font-variant-numeric: tabular-nums;
+}
 
 /* Value axis for columnChart. The gridlines and the y labels must line up with
    the tracks' inner height, so the fixed pieces around a track are pinned:
@@ -513,19 +523,23 @@
 .a2ui-page .a2ui-colplot__line { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid color-mix(in srgb, var(--sh-chalk) 60%, transparent); }
 .a2ui-page .a2ui-colplot__line:first-child { border-top-color: var(--sh-graphite); }
 .a2ui-page .a2ui-colplot .a2ui-columns { position: relative; z-index: 1; }
+/* The track keeps the 1px border + 3px inset the gridline maths assumes; the
+   segments and the total label live in .a2ui-columns__inner (the content box).
+   Stacked segments touch (a 2px gap would overstate the stack), separated by an
+   inner outline instead. */
+.a2ui-page .a2ui-columns__headroom { flex: 0 0 19px; }
 .a2ui-page .a2ui-columns__track {
+  position: relative;
   flex: 1 1 auto;
   width: 100%;
-  display: flex;
-  gap: 2px;
-  padding: 3px;
   border: 1px solid transparent;
   border-radius: var(--sh-radius-sm);
-  overflow: hidden;
 }
+.a2ui-page .a2ui-columns__inner { position: absolute; inset: 3px; display: flex; }
 .a2ui-page .a2ui-columns__track--stacked { flex-direction: column-reverse; justify-content: flex-start; }
-.a2ui-page .a2ui-columns__track--grouped { flex-direction: row; align-items: flex-end; }
+.a2ui-page .a2ui-columns__track--grouped { flex-direction: row; align-items: flex-end; gap: 2px; }
 .a2ui-page .a2ui-columns__seg { background: var(--a2ui-series); border-radius: 2px; flex: none; }
+.a2ui-page .a2ui-columns__track--stacked .a2ui-columns__seg { border-radius: 0; outline: 1px solid var(--sh-surface); outline-offset: -1px; }
 .a2ui-page .a2ui-columns__track--stacked .a2ui-columns__seg { width: 100%; }
 .a2ui-page .a2ui-columns__track--grouped .a2ui-columns__seg { flex: 1 1 0; }
 .a2ui-page .a2ui-columns__label {

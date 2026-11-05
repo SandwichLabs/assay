@@ -55,9 +55,6 @@ sql returns:
   streamChart: label, value in time order; "refresh" (seconds) re-runs its sql
     while visible and keeps the last "window" points; values above "threshold" flag.
 
-lineChart/areaChart axes start at 0 for non-negative data ("zero": false opts out);
-ISO date or timestamp labels get a real time axis.
-
 Every chart (barChart, lineChart, areaChart, ringChart, columnChart, radarChart, sankeyChart, heatmap, streamChart) animates in; "motion" tunes it:
 easing one of "spring", "expo", "cinema", "steps", "custom", "none" ("custom" uses stiffness/damping/mass),
 speed 0.25-4, stagger true|false. Omit motion for the default spring.

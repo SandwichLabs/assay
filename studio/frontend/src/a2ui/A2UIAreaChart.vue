@@ -61,7 +61,6 @@ const cursor = useChartCursor(() => orderedFracs.value, { W, padL: PAD, innerW }
 const lastIdx = computed(() => xa.value.order[n.value - 1] ?? 0)
 const active = computed(() => (cursor.active.value === null ? lastIdx.value : (xa.value.order[cursor.active.value] ?? lastIdx.value)))
 const hover = computed(() => (cursor.active.value === null ? null : active.value))
-const readText = computed(() => `${data.value.labels[active.value]}: ${data.value.series.map((s) => `${s.name} ${formatNumber(s.values[active.value])}`).join(', ')}`)
 const ariaLabel = computed(
   () => `Area chart of ${data.value.series.map((s) => s.name).join(', ')} over ${n.value} labels, ranging ${formatNumber(Math.min(...flat.value))} to ${formatNumber(Math.max(...flat.value))}`,
 )
@@ -79,9 +78,9 @@ const ariaLabel = computed(
     </div>
     <A2UIPlotFrame
       :y-ticks="yTicks" :x-ticks="xTicks" :axw="axw"
-      tabindex="0" role="group" :aria-label="`Chart values. Use the left and right arrow keys to read each label. Now reading: ${readText}`"
+      tabindex="0" role="group" aria-label="Chart values. Use the left and right arrow keys to read each label."
       @measure="plotWidthPx = $event"
-      @mousemove="cursor.onMove" @mouseleave="cursor.clear" @keydown="cursor.onKey" @focus="cursor.onFocus" @blur="cursor.clear"
+      @mousemove="cursor.onMove" @mouseleave="cursor.onLeave" @keydown="cursor.onKey" @focus="cursor.onFocus" @blur="cursor.clear"
     >
       <svg :viewBox="`0 0 ${W} ${H}`" class="a2ui-kchart__svg" role="img" :aria-label="ariaLabel">
         <line

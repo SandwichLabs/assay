@@ -265,7 +265,7 @@ on a sql cell.
 ### Chart axes
 
 `lineChart`, `areaChart`, `barChart` and `columnChart` draw a value axis with
-four to six round gridlines (steps of 1, 2 or 5 times a power of ten), labelled
+round gridlines (steps of 1, 2 or 5 times a power of ten; usually four or five, never fewer than three or more than six), labelled
 with the shared number formatter.
 
 - **Zero baseline.** Data that is all non-negative starts at 0 (all
@@ -274,13 +274,15 @@ with the shared number formatter.
   the data instead, for a rate or index where movement in a narrow band is the
   point. `barChart` and `columnChart` are always zero-based, because a bar's
   length is its magnitude; a negative `barChart` value draws leftward from the
-  zero line.
+  zero line, while `columnChart` draws a negative value as 0 (as it always has).
 - **Time axis.** When every label of a `lineChart` or `areaChart` is a date or
   timestamp (`2025-04-03`, `2025-04`, `2025-04-03 10:30:00`; a zone suffix is
   ignored), points sit by time rather than by row, so gaps and uneven spacing
   show, and rows are drawn left to right whatever their order. Ticks fall on
-  calendar boundaries and the unit is chosen from the span: minutes or hours
-  (`14:00`), days (`Apr 3`), weeks (Mondays), months (`Apr '25`), quarters
+  calendar boundaries, never finer than the labels themselves (a `YYYY-MM`
+  label gets month ticks at the finest, a date gets day ticks), and the unit is
+  chosen from the span: seconds, minutes or hours
+  (`14:00`, `14:00:05`), days (`Apr 3`), weeks (Mondays), months (`Apr '25`), quarters
   (`Q2 '25`) or years (`2025`). Any other label is a category, spaced evenly.
 - **Reading values.** Hover a `lineChart` or `areaChart`, or focus it and use
   Left, Right, Home and End, to read a point's label and value (a tooltip, plus

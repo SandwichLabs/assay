@@ -59,5 +59,13 @@ export function useChartCursor(fracs: () => number[], geom: PlotGeom) {
     active.value = null
   }
 
-  return { active, onMove, onKey, onFocus, clear }
+  // The pointer leaving does not end a keyboard reading: while the plot has
+  // focus the cursor stays where the arrow keys put it.
+  function onLeave(e: MouseEvent) {
+    const el = e.currentTarget as HTMLElement | null
+    if (el && typeof document !== 'undefined' && el.contains(document.activeElement)) return
+    active.value = null
+  }
+
+  return { active, onMove, onKey, onFocus, onLeave, clear }
 }

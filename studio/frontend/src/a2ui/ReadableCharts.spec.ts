@@ -2,6 +2,8 @@
 // baseline, a real time axis for date labels, and values reachable by hover and
 // keyboard. The tick math itself is in scale.spec.ts / xaxis.spec.ts.
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { mount } from '@vue/test-utils'
 import A2UIPage from './A2UIPage.vue'
 import type { A2UIComponentT } from './types'
@@ -90,6 +92,29 @@ describe('lineChart axes', () => {
   })
 })
 
+describe('cursor', () => {
+  it('keeps the keyboard cursor when the pointer leaves a focused plot', async () => {
+    const w = mount(A2UIPage, { attachTo: document.body, props: { page: { title: 't', components: [{ id: 'l', type: 'lineChart', points: [{ label: 'a', value: 1 }, { label: 'b', value: 2 }] }] } } })
+    const plot = w.find('[data-testid="a2ui-linechart-plot"]')
+    ;(plot.element as HTMLElement).focus()
+    await plot.trigger('keydown', { key: 'Home' })
+    await plot.trigger('mouseleave')
+    expect(w.find('[data-testid="a2ui-linechart-tip"]').exists()).toBe(true)
+    ;(plot.element as HTMLElement).blur()
+    await plot.trigger('mouseleave')
+    expect(w.find('[data-testid="a2ui-linechart-tip"]').exists()).toBe(false)
+    w.unmount()
+  })
+  it('keeps a static group label while the live region carries the reading', async () => {
+    const w = render({ id: 'a', type: 'areaChart', columns: ['d', 'a'], rows: [['2025-04-01', 5], ['2025-04-02', 9]] })
+    const plot = w.find('.a2ui-plot__body')
+    const before = plot.attributes('aria-label')
+    await plot.trigger('keydown', { key: 'Home' })
+    expect(plot.attributes('aria-label')).toBe(before)
+    expect(before).not.toContain('Now reading')
+  })
+})
+
 describe('areaChart axes', () => {
   it('gets gridlines, a zero baseline and a time axis; the keyboard moves the readout', async () => {
     const w = render({ id: 'a', type: 'areaChart', columns: ['day', 'a'], rows: [['2025-04-01', 5], ['2025-04-02', 9], ['2025-04-10', 7]] })
@@ -137,5 +162,20 @@ describe('barChart and columnChart axes', () => {
     expect(y[y.length - 1]).toBe('100')
     expect(w.findAll('.a2ui-colplot__line')).toHaveLength(y.length)
     expect(w.findAll('.a2ui-columns__seg')[1].attributes('style')).toContain('height: 87%')
+  })
+
+  it('places each total just above its own stack', () => {
+    const w = render({ id: 'c', type: 'columnChart', columns: ['r', 'a', 'b'], rows: [['East', 20, 10], ['West', 50, 30]] })
+    const tops = w.findAll('.a2ui-columns__total').map((t) => t.attributes('style')!)
+    // the axis tops out at 80, so West's stack is the full height and East's 30 is 37.5%
+    expect(tops[0]).toContain('37.5%')
+    expect(tops[1]).toContain('calc(100%')
+    expect(w.findAll('.a2ui-columns__total').map((t) => t.text())).toEqual(['30', '80'])
+  })
+
+  it('stacked segments have no gap that would overstate the stack', () => {
+    const css = readFileSync(resolve(__dirname, 'a2ui.css'), 'utf8')
+    const stacked = /\.a2ui-columns__track--stacked \{[^}]*\}/.exec(css)![0]
+    expect(stacked).not.toContain('gap')
   })
 })

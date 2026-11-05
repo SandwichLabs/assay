@@ -24,7 +24,7 @@ export function buildXAxis(labels: string[], widthPx: number, viewW: number): XA
   const ta = timeAxis(labels)
   if (ta) {
     const order = labels.map((_, i) => i).sort((a, b) => ta.times[a] - ta.times[b] || a - b)
-    const ticks = timeTicks(ta.min, ta.max, maxTicksForWidth(widthPx)).map((t) => ({ frac: timeFrac(ta, t.t), label: t.label }))
+    const ticks = timeTicks(ta.min, ta.max, maxTicksForWidth(widthPx), ta.floor).map((t) => ({ frac: timeFrac(ta, t.t), label: t.label }))
     return { time: true, frac: ta.times.map((t) => timeFrac(ta, t)), order, ticks }
   }
   const frac = labels.map((_, i) => (n === 1 ? 0.5 : i / (n - 1)))

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { niceTicks, valueScale, frac, parseTime, timeTicks, timeAxis, timeFrac, maxTicksForWidth } from './scale'
+import { niceTicks, valueScale, frac, parseTime, timeTicks, timeAxis, timeFrac, maxTicksForWidth, timeGranularity } from './scale'
 
 const d = (s: string) => parseTime(s)!
 const DAY = 24 * 3600 * 1000
@@ -40,6 +40,24 @@ describe('niceTicks', () => {
     expect(s.max).toBeGreaterThan(5)
     const z = niceTicks(0, 0)
     expect(z.max).toBeGreaterThan(z.min)
+  })
+  it('terminates on overflowing, underflowing and near-equal ranges', () => {
+    // each of these used to spin the exponent loop forever
+    for (const [lo, hi] of [[-1.7e308, 1.7e308], [-Number.MAX_VALUE, Number.MAX_VALUE], [5e-324, 5e-324], [0, 5e-324], [Infinity, -Infinity]] as const) {
+      const s = niceTicks(lo, hi)
+      expect(s.ticks.length, `${lo}..${hi}`).toBeGreaterThanOrEqual(2)
+      expect(s.ticks.every(Number.isFinite)).toBe(true)
+    }
+    expect(valueScale([-1.7e308, 1.7e308]).ticks.length).toBeGreaterThanOrEqual(2)
+    expect(valueScale([Infinity, NaN, 3]).ticks.length).toBeGreaterThan(1)
+  })
+  it('does not emit repeated ticks for a range lost in rounding', () => {
+    const s = niceTicks(1, 1 + 1e-12)
+    expect(new Set(s.ticks).size).toBe(s.ticks.length)
+    expect(s.min).toBeLessThan(1)
+    expect(s.max).toBeGreaterThan(1)
+    const z = valueScale([1, 1 + 1e-12], { zero: false })
+    expect(new Set(z.ticks).size).toBe(z.ticks.length)
   })
   it('survives non-finite input and swapped bounds', () => {
     expect(niceTicks(NaN, 3).ticks).toEqual([0, 1])
@@ -97,7 +115,23 @@ describe('parseTime', () => {
     expect(parseTime('2025-04-03 10:30:00+02')).toBe(Date.UTC(2025, 3, 3, 10, 30))
   })
   it('rejects non-dates and impossible dates', () => {
-    for (const s of ['north', '2025', '12', 'Q1 2025', '2025-13-01', '2025-02-30', '2025-04-03 25:00', '']) expect(parseTime(s), s).toBeNull()
+    for (const s of ['0050-01-01', '0099-12-31', 'north', '2025', '12', 'Q1 2025', '2025-13-01', '2025-02-30', '2025-04-03 25:00', '']) expect(parseTime(s), s).toBeNull()
+  })
+})
+
+describe('timeGranularity', () => {
+  it('reads the finest unit a label states', () => {
+    expect(timeGranularity('2025-01')).toBe('month')
+    expect(timeGranularity('2025-01-05')).toBe('day')
+    expect(timeGranularity('2025-01-05 10:30')).toBe('minute')
+    expect(timeGranularity('2025-01-05 10:30:00')).toBe('minute')
+    expect(timeGranularity('2025-01-05 10:30:07')).toBe('second')
+  })
+  it('timeAxis carries the finest granularity across labels', () => {
+    expect(timeAxis(['2025-01', '2025-02'])!.floor).toBe('month')
+    expect(timeAxis(['2025-01-01', '2025-01-02'])!.floor).toBe('day')
+    expect(timeAxis(['2025-01-01', '2025-01-02 10:30:15'])!.floor).toBe('second')
+    expect(timeAxis(['2025-01-01 10:30:15', '2025-01-01 10:30:45'])!.floor).toBe('second')
   })
 })
 
@@ -160,6 +194,21 @@ describe('timeTicks', () => {
   it('hours across midnight carry the date', () => {
     const l = labels('2025-04-03 20:00:00', '2025-04-04 04:00:00', 5)
     expect(l.every((s) => /^[A-Z][a-z]{2} \d+ \d\d:\d\d$/.test(s))).toBe(true)
+  })
+  it('is never finer than the data', () => {
+    const ms = (a: string, b: string, floor: 'month' | 'day') => timeTicks(d(a), d(b), 6, floor).map((t) => t.label)
+    expect(ms('2025-01-01', '2025-02-01', 'month')).toEqual(["Jan '25", "Feb '25"])
+    expect(ms('2025-04-03', '2025-04-04', 'day')).toEqual(['Apr 3', 'Apr 4'])
+  })
+  it('labels the sub-minute fallback to suit the span', () => {
+    const t = timeTicks(d('2025-04-03 10:00:00'), d('2025-04-03 10:00:20'), 6)
+    expect(t.length).toBeGreaterThanOrEqual(2)
+    for (const x of t) expect(x.label).toMatch(/^10:00:\d\d$/)
+  })
+  it('returns nothing for an empty or non-finite span', () => {
+    expect(timeTicks(5, 5)).toEqual([])
+    expect(timeTicks(NaN, 5)).toEqual([])
+    expect(timeTicks(0, Infinity)).toEqual([])
   })
   it('respects the tick cap and always returns at least the ends', () => {
     for (const cap of [2, 3, 4, 8]) expect(timeTicks(d('2025-01-01'), d('2025-03-20'), cap).length).toBeLessThanOrEqual(Math.max(cap, 2))
