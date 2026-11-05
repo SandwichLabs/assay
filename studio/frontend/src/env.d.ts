@@ -588,6 +588,7 @@ interface BulkAcceptResult {
   accepted: { id: string; kind: Proposal['kind']; name: string; target: string }[]
   failed_id?: string
   error?: string
+  written_not_marked?: boolean // the stopping proposal's file was written but the proposal could not be marked accepted
 }
 
 // ProposalPreview mirrors studio.ProposalPreview: a proposal beside the file it

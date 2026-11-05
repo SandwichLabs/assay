@@ -13,7 +13,7 @@ import EntityCard from '../components/EntityCard.vue'
 import JoinCard from '../components/JoinCard.vue'
 import GlossaryPanel from '../components/GlossaryPanel.vue'
 import ProposalInbox from '../components/ProposalInbox.vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
+import BulkAcceptDialog from '../components/BulkAcceptDialog.vue'
 import { useBulkAccept } from '../composables/useBulkAccept'
 import { useSemantics, type SemanticsKind } from '../composables/useSemantics'
 import { useProposals } from '../composables/useProposals'
@@ -144,10 +144,7 @@ async function reject() {
         <GlossaryPanel v-else-if="detailKind === 'glossary'" :detail="detail" />
       </template>
     </div>
-    <ConfirmDialog
-      :visible="bulk.confirming" title="Accept all proposals" variant="primary" :confirm-label="`Accept ${bulk.items.length}`"
-      :message="bulk.message" @confirm="bulk.confirm" @cancel="bulk.cancel"
-    />
+    <BulkAcceptDialog :visible="bulk.confirming" :items="bulk.items" @confirm="bulk.confirm" @cancel="bulk.cancel" />
   </div>
 </template>
 

@@ -37,7 +37,8 @@ describe('useBulkAccept', () => {
     const b = useBulkAccept(ref([A, B]), done)
     await b.prepare()
     expect(b.confirming.value).toBe(true)
-    expect(b.message.value).toContain('• glossary Churn\n• metric orders')
+    expect(b.items.value.map((i) => i.id)).toEqual([B.id, A.id])
+    expect(b.items.value[0]).toMatchObject({ target: 'semantics/x', added: 1, removed: 0 })
     expect(app.AcceptProposals).not.toHaveBeenCalled()
 
     await b.confirm()
@@ -72,7 +73,7 @@ describe('useBulkAccept', () => {
     install(app)
     const b = useBulkAccept(ref([A, B]), async () => {})
     await b.prepare()
-    expect(b.message.value).toContain('• metric orders (changed since proposed: this stops the run)')
+    expect(b.items.value.find((i) => i.id === A.id)?.stale).toBe(true)
     await b.confirm()
     expect(b.failed.value).toBe(true)
     expect(b.summary.value).toBe('Accepted 1: glossary Churn. Stopped at metric orders: semantics/metrics/orders.yaml changed since this was proposed. It and the ones after it are still open.')
@@ -84,5 +85,24 @@ describe('useBulkAccept', () => {
     await b.prepare()
     expect(b.confirming.value).toBe(false)
     expect(b.error.value).toContain('unclosed fence')
+  })
+
+  it('leaves out a proposal decided elsewhere', async () => {
+    install({ GetProposal: vi.fn(async (id: string) => ({ ...pv(id === A.id ? A : B), proposal: { ...(id === A.id ? A : B), status: id === A.id ? 'rejected' : 'open' } })), AcceptProposals: vi.fn() })
+    const b = useBulkAccept(ref([A, B]), async () => {})
+    await b.prepare()
+    expect(b.items.value.map((i) => i.id)).toEqual([B.id])
+  })
+
+  it('a file written but not marked is not reported as nothing accepted', async () => {
+    install({
+      GetProposal: vi.fn(async () => pv(A)),
+      AcceptProposals: vi.fn(async () => ({ accepted: [], failed_id: A.id, error: 'x was written, but proposal y could not be marked accepted', written_not_marked: true })),
+    })
+    const b = useBulkAccept(ref([A]), async () => {})
+    await b.prepare()
+    await b.confirm()
+    expect(b.summary.value).not.toContain('Nothing was accepted')
+    expect(b.summary.value).toContain('file was written')
   })
 })

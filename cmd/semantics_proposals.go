@@ -177,6 +177,9 @@ func runSemanticsAccept(cmd *cobra.Command, args []string) error {
 	if all, _ := cmd.Flags().GetBool("all"); all {
 		return runSemanticsAcceptAll(cmd, args)
 	}
+	if cmd.Flags().Changed("kind") || cmd.Flags().Changed("yes") {
+		return errors.New("--kind and --yes only go with --all")
+	}
 	if len(args) != 1 {
 		return errors.New("accept needs a proposal id, or --all")
 	}
@@ -255,6 +258,9 @@ func runSemanticsAcceptAll(cmd *cobra.Command, args []string) error {
 		pv, err := workspace.GetProposal(ctx, ws, p.ID)
 		if err != nil {
 			return fmt.Errorf("failed to review %s, nothing was accepted: %w", p.ID, err)
+		}
+		if !pv.Proposal.Open() {
+			continue // decided elsewhere since the list was read
 		}
 		printPreview(errW, pv)
 		fmt.Fprintln(errW)

@@ -8,6 +8,7 @@
 import { computed, ref, type Ref } from 'vue'
 import { App } from '../lib/bindings'
 import { errorText } from '../lib/errors'
+import { diffLines, diffStats } from '../lib/lineDiff'
 
 export interface BulkItem {
   id: string
@@ -15,6 +16,9 @@ export interface BulkItem {
   name: string
   shownRev: string
   stale: boolean
+  target: string
+  added: number
+  removed: number
 }
 
 export function useBulkAccept(open: Ref<Proposal[]>, onDone: () => Promise<void>) {
@@ -22,15 +26,9 @@ export function useBulkAccept(open: Ref<Proposal[]>, onDone: () => Promise<void>
   const confirming = ref(false)
   const busy = ref(false)
   const error = ref('')
-  const outcome = ref<{ accepted: string[]; stopped: string; reason: string } | null>(null)
+  const outcome = ref<{ accepted: string[]; stopped: string; reason: string; unmarked: boolean } | null>(null)
 
   const label = (i: { kind: string; name: string }) => `${i.kind} ${i.name}`
-  // The confirmation text: one line per proposal, oldest first (the order it runs in).
-  const message = computed(() => {
-    const lines = items.value.map((i) => `• ${label(i)}${i.stale ? ' (changed since proposed: this stops the run)' : ''}`)
-    return `These ${items.value.length} proposals are written exactly as you reviewed them, in this order. Nothing is overwritten; the run stops at the first one that cannot be written.\n\n${lines.join('\n')}`
-  })
-
   /** Read each open proposal, then ask. Nothing is written until confirm(). */
   async function prepare() {
     error.value = ''
@@ -38,7 +36,11 @@ export function useBulkAccept(open: Ref<Proposal[]>, onDone: () => Promise<void>
     try {
       const ordered = [...open.value].sort((a, b) => (a.id < b.id ? -1 : 1)) // oldest first
       const previews = await Promise.all(ordered.map((p) => App.GetProposal(p.id)))
-      items.value = previews.map((pv) => ({ id: pv.proposal.id, kind: pv.proposal.kind, name: pv.proposal.name, shownRev: pv.shown_rev, stale: pv.stale }))
+      // One decided elsewhere since the list was loaded is not offered: it would only stop the run.
+      items.value = previews.filter((pv) => pv.proposal.status === 'open').map((pv) => {
+        const st = diffStats(diffLines(pv.current_text, pv.proposed_text))
+        return { id: pv.proposal.id, kind: pv.proposal.kind, name: pv.proposal.name, shownRev: pv.shown_rev, stale: pv.stale, target: pv.target, added: st.added, removed: st.removed }
+      })
       confirming.value = items.value.length > 0
     } catch (e) {
       items.value = []
@@ -60,7 +62,7 @@ export function useBulkAccept(open: Ref<Proposal[]>, onDone: () => Promise<void>
       const res = await App.AcceptProposals(run.map((i) => ({ id: i.id, shown_rev: i.shownRev })))
       const byId = new Map(run.map((i) => [i.id, i]))
       const stopped = res.failed_id ? label(byId.get(res.failed_id) ?? { kind: 'proposal', name: res.failed_id }) : ''
-      outcome.value = { accepted: res.accepted.map((a) => label(a)), stopped, reason: res.error ?? '' }
+      outcome.value = { accepted: res.accepted.map((a) => label(a)), stopped, reason: res.error ?? '', unmarked: !!res.written_not_marked }
     } catch (e) {
       error.value = errorText(e)
     } finally {
@@ -74,11 +76,13 @@ export function useBulkAccept(open: Ref<Proposal[]>, onDone: () => Promise<void>
   const summary = computed(() => {
     const o = outcome.value
     if (!o) return ''
-    const done = o.accepted.length ? `Accepted ${o.accepted.length}: ${o.accepted.join(', ')}.` : 'Nothing was accepted.'
-    return o.stopped ? `${done} Stopped at ${o.stopped}: ${o.reason}. It and the ones after it are still open.` : done
+    const done = o.accepted.length ? `Accepted ${o.accepted.length}: ${o.accepted.join(', ')}.` : o.unmarked ? '' : 'Nothing was accepted.'
+    if (!o.stopped) return done
+    const tail = o.unmarked ? 'Its file was written but the proposal could not be marked accepted; check it before going on. The ones after it are still open.' : 'It and the ones after it are still open.'
+    return `${done} Stopped at ${o.stopped}: ${o.reason}. ${tail}`.trim()
   })
   const failed = computed(() => !!outcome.value?.stopped)
   const dismiss = () => { outcome.value = null }
 
-  return { items, confirming, busy, error, message, summary, failed, prepare, cancel, confirm, dismiss }
+  return { items, confirming, busy, error, summary, failed, prepare, cancel, confirm, dismiss }
 }

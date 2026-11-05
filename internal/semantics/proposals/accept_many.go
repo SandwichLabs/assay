@@ -2,6 +2,7 @@ package proposals
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/SandwichLabs/slaw/internal/semantics"
@@ -29,6 +30,9 @@ type ManyResult struct {
 	Accepted []Accepted `json:"accepted"`
 	FailedID string     `json:"failed_id,omitempty"`
 	Err      error      `json:"-"`
+	// WrittenNotMarked is true when the failing proposal's definition was
+	// written but the proposal could not be marked accepted (*NotMarkedError).
+	WrittenNotMarked bool `json:"written_not_marked,omitempty"`
 }
 
 // AcceptMany accepts the pinned proposals in order, each through Accept, so
@@ -50,6 +54,8 @@ func AcceptMany(ctx context.Context, props Store, sem semantics.Store, pins []Pi
 		pv, err := Accept(ctx, props, sem, pin.ID, AcceptOptions{ShownRev: pin.ShownRev}, show...)
 		if err != nil {
 			res.FailedID, res.Err = pin.ID, err
+			var nm *NotMarkedError
+			res.WrittenNotMarked = errors.As(err, &nm)
 			return res
 		}
 		p := pv.Proposal

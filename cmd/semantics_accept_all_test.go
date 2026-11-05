@@ -153,3 +153,16 @@ func TestSemanticsAcceptAll_StaleAtDisplayStopsWithTheStaleText(t *testing.T) {
 	require.NoError(t, rerr)
 	assert.Equal(t, string(before), string(after), "bulk accept never overwrites")
 }
+
+func TestSemanticsAccept_KindAndYesNeedAll(t *testing.T) {
+	root := proposalWorkspace(t)
+	id := proposeNetRevenue(t, root, nil)
+	for _, flag := range [][]string{{"--kind", "metric"}, {"--yes"}} {
+		args := append([]string{"semantics", "accept", id}, flag...)
+		_, _, err := runSlaw(append(args, "--workspace", root)...)
+		require.Error(t, err, flag)
+		assert.Contains(t, err.Error(), "only go with --all")
+	}
+	_, statErr := os.Stat(filepath.Join(root, "semantics", "metrics", "net_revenue.yaml"))
+	assert.True(t, os.IsNotExist(statErr))
+}

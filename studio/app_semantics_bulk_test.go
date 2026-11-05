@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,4 +100,28 @@ func TestAcceptProposals_NeedsPinsAndAWorkspace(t *testing.T) {
 	closed := &App{}
 	_, err = closed.AcceptProposals(nil)
 	assert.Error(t, err)
+}
+
+func TestAcceptProposals_RefusesAProposalFileEditedAfterItWasRead(t *testing.T) {
+	app := newOpenApp(t)
+	g := fileProposal(t, app, termDraft("Churn"))
+	pv, err := app.GetProposal(g.ID)
+	require.NoError(t, err)
+
+	// the proposal file itself is edited by hand between the read and the accept
+	path := filepath.Join(app.ws.Root(), ".slaw-local", "proposals", g.ID+".yaml")
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	edited := strings.Replace(string(raw), "Churn is x", "Churn is something else", 1)
+	require.NotEqual(t, string(raw), edited)
+	require.NoError(t, os.WriteFile(path, []byte(edited), 0o600))
+
+	res, err := app.AcceptProposals([]ProposalPin{{ID: g.ID, ShownRev: pv.ShownRev}})
+	require.NoError(t, err)
+	assert.Equal(t, g.ID, res.FailedID)
+	assert.Contains(t, res.Error, "changed again since you looked")
+	assert.Empty(t, res.Accepted)
+	g2, err := app.ws.Semantics().Glossary(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, g2.Terms, "nothing was written")
 }

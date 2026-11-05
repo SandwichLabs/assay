@@ -120,6 +120,9 @@ type BulkAcceptResult struct {
 	Accepted []proposals.Accepted `json:"accepted"`
 	FailedID string               `json:"failed_id,omitempty"`
 	Error    string               `json:"error,omitempty"`
+	// WrittenNotMarked: the failing proposal's file was written but the
+	// proposal could not be marked accepted.
+	WrittenNotMarked bool `json:"written_not_marked,omitempty"`
 }
 
 // AcceptProposals accepts the proposals the person was shown, in order. Each
@@ -135,10 +138,10 @@ func (a *App) AcceptProposals(pins []ProposalPin) (*BulkAcceptResult, error) {
 		return nil, err
 	}
 	res := workspace.AcceptProposals(a.ctxOrBackground(), a.ws, pins)
-	if len(res.Accepted) > 0 {
-		a.emitEvent("data:changed")
+	if len(pins) > 0 {
+		a.emitEvent("data:changed") // a run that stopped may still have written a file
 	}
-	out := &BulkAcceptResult{Accepted: res.Accepted, FailedID: res.FailedID}
+	out := &BulkAcceptResult{Accepted: res.Accepted, FailedID: res.FailedID, WrittenNotMarked: res.WrittenNotMarked}
 	if res.Err != nil {
 		out.Error = res.Err.Error()
 	}

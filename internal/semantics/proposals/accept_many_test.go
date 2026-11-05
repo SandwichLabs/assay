@@ -2,6 +2,7 @@ package proposals
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -172,4 +173,43 @@ func TestAcceptMany_EmptyListIsANoOp(t *testing.T) {
 	assert.Empty(t, res.FailedID)
 	assert.NotNil(t, res.Accepted)
 	assert.Empty(t, res.Accepted)
+}
+
+func TestAcceptMany_SecondProposalForTheSameGlossaryTermStops(t *testing.T) {
+	ctx := context.Background()
+	props, sem := &Mock{}, &semantics.Mock{}
+	first := mustBuild(t, Draft{Kind: semantics.KindGlossary, Rationale: "r", Definition: map[string]any{"term": "Churn", "text": "one"}})
+	second := mustBuild(t, Draft{Kind: semantics.KindGlossary, Rationale: "r", Definition: map[string]any{"term": "Churn", "text": "two"}})
+	require.NoError(t, props.Create(ctx, first))
+	require.NoError(t, props.Create(ctx, second))
+	res := AcceptMany(ctx, props, sem, pinsOf(t, props, sem, first.ID, second.ID))
+	require.Error(t, res.Err)
+	assert.ErrorIs(t, res.Err, ErrConflict)
+	assert.Equal(t, second.ID, res.FailedID)
+	require.Len(t, res.Accepted, 1)
+	g, err := sem.Glossary(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, g.Text, "one")
+	assert.NotContains(t, g.Text, "two")
+}
+
+type failingDecide struct{ Store }
+
+func (failingDecide) Decide(context.Context, string, string, string) error {
+	return errors.New("disk full")
+}
+
+func TestAcceptMany_WrittenButNotMarkedIsReportedAsSuch(t *testing.T) {
+	ctx := context.Background()
+	mock, sem := &Mock{}, &semantics.Mock{}
+	a := fileMetric(t, mock, "alpha", "sum(a)")
+	pins := pinsOf(t, mock, sem, a.ID)
+	res := AcceptMany(ctx, failingDecide{mock}, sem, pins)
+	var nm *NotMarkedError
+	require.ErrorAs(t, res.Err, &nm)
+	assert.True(t, res.WrittenNotMarked)
+	assert.Equal(t, a.ID, res.FailedID)
+	assert.Empty(t, res.Accepted)
+	_, err := sem.Metric(ctx, "alpha")
+	require.NoError(t, err, "the file was written")
 }

@@ -4,10 +4,6 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
-### Added
-
-- Bulk accept for the proposals inbox (#321): `slaw semantics accept --all [--kind K] [--yes]` and Studio's "Accept all". Each proposal is pinned to the version shown, nothing is overwritten, and the run stops at the first proposal that is refused.
-
 ## [0.6.1] - 2026-11-04
 
 Fixes from the first agent-experience report on 0.6.0 (#321, #322): glossary proposals that no longer make one another stale, clearer refusals for agents, and Studio opening artifacts with `_` in their name.
