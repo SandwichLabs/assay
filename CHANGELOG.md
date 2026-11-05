@@ -4,6 +4,22 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-05
+
+The rest of the first agent-experience report (#321): an MCP client that keeps working across Studio restarts, proposals that reach the inbox while "Ask before changes" is on, accepting a batch of proposals at once, and `slaw artifact render` for static pages.
+
+### Added
+
+- **`slaw semantics accept --all [--kind K]` and Studio's "Accept all" (#321).** The CLI prints every open proposal's diff, oldest first, and asks once (default No; `--yes` skips the question, and without it the command needs a terminal). Studio's inbox lists each proposal's kind, name, file and lines added and removed before you confirm. Both accept the versions they read (the CLI the ones it printed, Studio the ones read when you pressed Accept all), never overwrite, and stop at the first proposal that is stale or has changed or been decided since you saw it, saying what was accepted before it (stale ones are flagged before you confirm; one already decided elsewhere is left out of the list). A stale proposal is still accepted one at a time with `--overwrite --rev` or Studio's "Accept anyway". No agent tool or MCP method can accept.
+- **`slaw artifact render <name> [--out dir] [-p name=value] [--force]` (#321).** Draws an allowed static `view: html` page, the way Studio's page frame does, into a folder: `index.html`, the host stylesheet `_slaw/theme.css` (the built-in light theme) and the page's stylesheets, images, fonts and JSON files (not its templates). Only a page you have allowed, unchanged since, is drawn; a page with script, an A2UI view or a script view is refused. Queries run through the same read-only, policy-checked path as in Studio, and `-p` values are bound as parameters. The written page carries a content security policy (no script, no network, its own files only). The folder defaults to `./<name>-render`. Nothing is written outside it, a folder that already has files in it needs `--force` (which overwrites only the files render writes), and a failed draw writes nothing.
+
+### Changed
+
+- **Studio remembers the MCP server per workspace (#96).** Press Start once (Settings → Workspace → Claude and other tools) and Studio starts the server again each time it opens that workspace on this computer; Stop turns that off. The choice is kept in your own settings, never in the workspace folder or a bundle, so a cloned or pulled workspace cannot turn it on. `slaw mcp serve` from an MCP client now keeps working across Studio restarts, and its error when the server is off says where the Start button is. A server that does not restart shows why in Settings, and the workspace still opens. A read-only window does not start it.
+- **An agent's `propose_definition` reaches the inbox even while "Ask before changes" is on (#321).** A proposal changes nothing in `semantics/` until a person accepts it, so the inbox is the review; this holds for headless `slaw mcp serve` too. The sandbox tier still applies (read-only refuses a proposal), as do the inbox caps. A committed `ask_before_writes: true` does not cover proposals.
+- When the sandbox is Full control and "Ask before changes" is still on, Studio's assistant settings say that every change still waits for your OK and that a tool connected through `slaw mcp serve` while Studio is closed is refused, and, when the setting is yours rather than the team's, that turning it off lets changes to the workspace's own files through (#321).
+- The page window's theme stylesheet moved to `internal/pagetheme`, shared with `slaw artifact render`. Studio's page frame now says a scripted page is scripted, even before it is allowed.
+
 ## [0.6.1] - 2026-11-04
 
 Fixes from the first agent-experience report on 0.6.0 (#321, #322): glossary proposals that no longer make one another stale, clearer refusals for agents, and Studio opening artifacts with `_` in their name.
@@ -329,7 +345,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/slaw/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/SandwichLabs/slaw/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/SandwichLabs/slaw/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/SandwichLabs/slaw/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/SandwichLabs/slaw/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/SandwichLabs/vibe/compare/v0.4.0...v0.5.0
