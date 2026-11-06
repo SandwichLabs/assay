@@ -291,6 +291,9 @@ func (r *itemImporter) noteSkip(it item) {
 // something the bundle did not rename is left as it is. A rewrite re-encodes
 // the document (comments are not kept) and says so in the result's warnings.
 func (r *itemImporter) rewriteRefs(it item) item {
+	if it.Kind == KindWatch {
+		return r.rewriteWatchRefs(it)
+	}
 	if it.Kind != KindSemantics {
 		return it
 	}

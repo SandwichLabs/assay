@@ -60,6 +60,7 @@ The shipped surface. [`reference/README.md`](reference/README.md) is the index; 
 | [`reference/llm-config.md`](reference/llm-config.md) | LLM provider configuration and the API key |
 | [`reference/notebooks.md`](reference/notebooks.md) | Notebooks and the A2UI component reference |
 | [`reference/semantics.md`](reference/semantics.md) | The semantic layer: `semantics/` entities, metrics, joins and the glossary; formats, caps, name rule, `slaw semantics`, proposals an agent files and you accept |
+| [`reference/watches.md`](reference/watches.md) | Watches: `watches/` standing questions with a condition, `slaw watch list/show/check/history`, outcomes, the local check history |
 | [`reference/artifacts.md`](reference/artifacts.md) | Data artifacts: the manifest, parameter types, view rules, controls, pivot, drill-down, running, sharing |
 | [`reference/import-office.md`](reference/import-office.md) | Import (CSV/TSV/XLSX) and export |
 | [`reference/templates.md`](reference/templates.md) | Starter templates |

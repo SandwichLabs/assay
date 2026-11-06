@@ -14,6 +14,7 @@ import (
 	"github.com/SandwichLabs/slaw/internal/queries"
 	"github.com/SandwichLabs/slaw/internal/semantics"
 	"github.com/SandwichLabs/slaw/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/watches"
 	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
@@ -78,7 +79,10 @@ const (
 	KindArtifact ItemKind = "artifact"
 	// KindSemantics is a file under semantics/. Its id is "entities/<name>",
 	// "metrics/<name>", "joins/<name>" or "glossary".
-	KindSemantics   ItemKind = "semantics"
+	KindSemantics ItemKind = "semantics"
+	// KindWatch is a standing question, watches/<name>.yaml. Its history never
+	// travels: it is machine-local state under .slaw-local/.
+	KindWatch       ItemKind = "watch"
 	KindConnections ItemKind = "connections"
 )
 
@@ -117,6 +121,7 @@ type Target interface {
 	Skills() skills.Store
 	Artifacts() artifacts.Store
 	Semantics() semantics.Store
+	Watches() watches.Store
 	AddConnection(scope workspace.Scope, def workspace.ConnectionDef) error
 	RemoveConnection(ctx context.Context, scope workspace.Scope, name string) error
 }
@@ -134,6 +139,8 @@ type Selection struct {
 	Skills    []string `json:"skills"`
 	Artifacts []string `json:"artifacts"`
 	Semantics []string `json:"semantics"`
+	// Watches are watch names.
+	Watches []string `json:"watches"`
 	// SharedConnections adds every committed (team) slaw.yaml definition;
 	// TeamConnections names just some of them.
 	SharedConnections bool     `json:"sharedConnections"`
@@ -166,16 +173,8 @@ type ExportResult struct {
 // accepted names is closed: this is what keeps a hostile archive from writing
 // anywhere but the stores' own files.
 func classify(name string) (ItemKind, string, error) {
-	if name == "" || strings.ContainsAny(name, "\\\x00:") || strings.HasPrefix(name, "/") {
-		return "", "", corrupt("unsafe entry name %q", name)
-	}
-	if path.Clean(name) != name {
-		return "", "", corrupt("unsafe entry name %q", name)
-	}
-	for _, seg := range strings.Split(name, "/") {
-		if seg == "" || seg == "." || seg == ".." {
-			return "", "", corrupt("unsafe entry name %q", name)
-		}
+	if err := checkEntryName(name); err != nil {
+		return "", "", err
 	}
 	switch name {
 	case ManifestName:
@@ -184,6 +183,9 @@ func classify(name string) (ItemKind, string, error) {
 		return KindConnections, "", nil
 	}
 	parts := strings.Split(name, "/")
+	if n, ok := watchEntryName(parts); ok {
+		return KindWatch, n, nil
+	}
 	switch {
 	case len(parts) == 2 && parts[0] == notebooks.Dir && strings.HasSuffix(parts[1], notebooks.Extension):
 		id := strings.TrimSuffix(parts[1], notebooks.Extension)
@@ -218,7 +220,34 @@ func classify(name string) (ItemKind, string, error) {
 			return KindArtifact, parts[1], nil
 		}
 	}
-	return "", "", corrupt("unexpected entry %q (a bundle holds only notebooks, queries, skills, data artifacts, semantic definitions and connection definitions)", name)
+	return "", "", corrupt("unexpected entry %q (a bundle holds only notebooks, queries, skills, data artifacts, semantic definitions, watches and connection definitions)", name)
+}
+
+// checkEntryName refuses a name that is not a plain relative path: empty,
+// absolute, with a backslash, NUL or colon, or with an empty, "." or ".."
+// segment.
+func checkEntryName(name string) error {
+	if name == "" || strings.ContainsAny(name, "\\\x00:") || strings.HasPrefix(name, "/") {
+		return corrupt("unsafe entry name %q", name)
+	}
+	if path.Clean(name) != name {
+		return corrupt("unsafe entry name %q", name)
+	}
+	for _, seg := range strings.Split(name, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return corrupt("unsafe entry name %q", name)
+		}
+	}
+	return nil
+}
+
+// watchEntryName is the watch a watches/<name>.yaml entry holds.
+func watchEntryName(parts []string) (string, bool) {
+	if len(parts) != 2 || parts[0] != watches.Dir || !strings.HasSuffix(parts[1], watches.Extension) {
+		return "", false
+	}
+	n := strings.TrimSuffix(parts[1], watches.Extension)
+	return n, watches.ValidateName(n) == nil
 }
 
 func entryPath(kind ItemKind, id string) string {
@@ -236,6 +265,8 @@ func entryPath(kind ItemKind, id string) string {
 			return semantics.Dir + "/" + semantics.GlossaryFile
 		}
 		return semantics.Dir + "/" + id + semantics.Extension
+	case KindWatch:
+		return watches.Dir + "/" + id + watches.Extension
 	}
 	return ConnectionsName
 }

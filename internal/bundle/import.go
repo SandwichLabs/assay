@@ -161,6 +161,8 @@ func (p *Package) noteRev(ctx context.Context, t Target, kind ItemKind, id strin
 		rev = artifactRev(ctx, t, id)
 	case KindSemantics:
 		rev = semanticsRev(ctx, t, id)
+	case KindWatch:
+		rev = watchRev(ctx, t, id)
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -453,6 +455,9 @@ func (r *itemImporter) freeID(it item) (string, error) {
 	if it.Kind == KindSemantics {
 		return r.renameSemantics(it)
 	}
+	if it.Kind == KindWatch {
+		return r.renameWatch(it)
+	}
 	var probeErr error
 	final := filestore.UniqueSlug(it.ID, func(c string) bool {
 		has, err := storeHas(r.t, it.Kind, c)
@@ -491,6 +496,8 @@ func (p *Package) write(ctx context.Context, t Target, it item, finalID string, 
 		final, err = p.writeArtifact(ctx, t, it, finalID, overwrite)
 	case KindSemantics:
 		final, err = p.writeSemantics(ctx, t, it, finalID, overwrite)
+	case KindWatch:
+		final, err = p.writeWatch(ctx, t, it, finalID, overwrite)
 	default:
 		err = fmt.Errorf("unknown kind %q", it.Kind)
 	}
