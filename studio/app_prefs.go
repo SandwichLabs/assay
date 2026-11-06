@@ -20,13 +20,15 @@ func (a *App) prefsStore() (*prefs.Store, error) {
 
 // GetPreferences returns the user's app-level preferences (theme, appearance).
 // A missing or unreadable settings file yields the defaults; a parse error is
-// logged, never surfaced, so a bad edit can't lock the user out of the UI.
+// logged here, never returned, so a bad edit can't lock the user out of the UI.
+// A read leaves the file alone, but says so up front (the notice event and
+// TakePreferencesNotice); the first write moves it aside to
+// settings.json.corrupt-<time> and says that too.
 func (a *App) GetPreferences() (prefs.Preferences, error) {
-	s, err := a.prefsStore()
-	if err != nil {
+	if _, err := a.prefsStore(); err != nil {
 		return prefs.Defaults(), nil
 	}
-	p, err := s.Load()
+	p, err := a.recents.Preferences()
 	if err != nil {
 		a.logger.Warn("preferences: falling back to defaults", "error", err)
 	}
@@ -39,6 +41,16 @@ func (a *App) SetPreferences(p prefs.Preferences) error {
 	// recent-workspaces list lives beside them in the same document and always
 	// comes from disk, so a stale copy never rolls it back.
 	return a.recents.SavePreferences(p)
+}
+
+// TakePreferencesNotice returns, once, a plain-words message when a corrupt
+// settings file was moved aside by a write (it names the copy's path), and ""
+// otherwise. The shell shows it as a dismissible banner.
+func (a *App) TakePreferencesNotice() string {
+	if a.prefs == nil {
+		return ""
+	}
+	return a.prefs.TakeNotice()
 }
 
 // UserThemesResult is what ListUserThemes returns: every readable theme file
