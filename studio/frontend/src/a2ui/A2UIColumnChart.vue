@@ -128,7 +128,7 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
         <span
           v-if="!xaxis.time" class="a2ui-columns__label" :title="c.label"
         >{{ c.label }}</span>
-        <span v-else class="a2ui-columns__label a2ui-columns__label--tick" :title="xaxis.labels[ci] ? c.label : undefined" :aria-hidden="xaxis.labels[ci] ? undefined : 'true'" data-testid="a2ui-column-tick"><span>{{ xaxis.labels[ci] }}</span></span>
+        <span v-else class="a2ui-columns__label a2ui-columns__label--tick" :data-anchor="xaxis.anchors[ci] || undefined" :title="xaxis.labels[ci] ? c.label : undefined" :aria-hidden="xaxis.labels[ci] ? undefined : 'true'" data-testid="a2ui-column-tick"><span>{{ xaxis.labels[ci] }}</span></span>
       </div>
     </div>
     <A2UIAnnotations v-if="annot.markers.value.length" :markers="annot.markers.value" :inset="annotInset" :scroll="scrollProp" />
