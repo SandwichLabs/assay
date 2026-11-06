@@ -4,6 +4,59 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-06
+
+Chart axes on round numbers and real dates, several series on one line or bar chart, and event markers (#13 items 1 and 2, #320).
+
+**Opening in an older Slaw:** a notebook or data artifact view that uses `annotations`, `zero`, a `lineChart` `series`, or `columns`/`rows` on a line or bar chart does not load in Slaw 0.6.2 or older. There the whole A2UI cell is dropped, along with any other components in it.
+
+### Added
+
+- **Several series on one chart (#13).**
+  - `lineChart` and `barChart` can draw several series on one shared scale and axis, with a legend. They read either a long `(label, series, value)` result or a wide one (a label, then two or more numeric columns, none named `value` or `total`).
+  - Inline, `lineChart` takes `series: [{name, points}]` (up to 12 series of 500 points each), and both charts take `columns` + `rows`.
+  - On a line chart, a missing point breaks the line rather than reading as zero, and hover and the keyboard readout list each series' value at that label.
+  - A grouped bar's hover text and accessible name list every bar in the group.
+  - Past six series, a line chart draws the six with the largest total and says "+N more not shown; filter in SQL". A bar chart keeps the five largest and sums the rest into "Other".
+  - A notebook query cell with no pinned view now suggests LINE or BARS for a `(label, series, value)` result when it has:
+    - 2 to 6 series;
+    - at least two labels;
+    - no repeated pair;
+    - at most 200 rows.
+
+    BARS past 25 labels falls back to TABLE. The agent's `preview_query` suggests the same.
+- **Event markers on line, area and column charts (#320).**
+  - Markers come from `annotations`, as inline `rows`, their own read-only `sql` (with an optional `connection`), or a named `query` in a data artifact view.
+  - Each marker has these fields:
+    - `at`;
+    - a one-line `label`, at most 80 characters;
+    - `kind`, `solid` or `dashed`;
+    - a `color` from the closed colour list.
+  - At most 50 are drawn. More than 50 inline is refused, and extra rows from SQL are dropped with a note.
+  - Labels are stacked into up to four rows so they do not overlap. A label with no room is left off (its rule and tooltip stay), and the chart notes how many.
+  - Hover shows the full label and its `at`. The chart's text alternative lists every marker drawn.
+  - The marker SQL is held to the same read-only policy as the chart's own, including in `create_dashboard`. It counts against the notebook's limit on live components. A failed marker query leaves the chart in place with a note.
+
+### Changed
+
+- **Readable chart axes (#13).**
+  - Gridlines fall on round steps (1, 2 or 5 × 10ⁿ, usually 4 or 5 of them).
+  - Line and area charts start at zero for non-negative data; `zero: false` opts out.
+  - On line and area charts, a date axis is spaced by real time and never labelled finer than the data (`Apr 3`, `Apr '25`, `Q2 '25`, `2025`). Dated rows are drawn in date order.
+  - Line and area charts show the value under the pointer. Left, Right, Home and End step through the points, and the values are also announced to screen readers.
+  - Bar charts get a value axis and draw negative bars from the zero line.
+  - Column charts get a value axis with a round top tick, and a stacked column's total now sits on its stack.
+- **Chart colours are darker in two built-in themes:** light `chart.2` and `chart.3`, and signal `chart.2`. Every built-in theme's six chart colours now pass 3:1 against the page and panel background, and a test checks it. Static HTML pages use the same new colours.
+- **Existing charts may now draw several series.** These now draw a wide result as one series per column, and a `(label, series, value)` result as one series per series value:
+  - a notebook cell pinned to BARS or LINE;
+  - a `lineChart` or `barChart` bound to `sql`.
+
+  Before, they drew only the second column. Up to six series are drawn. A two-column `(label, value)` result draws as before; to keep one series, return two columns.
+
+### Fixed
+
+- A bar or line chart whose second column is text (an attribute such as `SELECT day, top_product, sales`) now plots the next numeric column instead of drawing every value as zero.
+
 ## [0.6.2] - 2026-11-05
 
 The rest of the first agent-experience report (#321): an MCP client that keeps working across Studio restarts, proposals that reach the inbox while "Ask before changes" is on, accepting a batch of proposals at once, and `slaw artifact render` for static pages.
@@ -345,7 +398,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/slaw/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/SandwichLabs/slaw/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/SandwichLabs/slaw/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/SandwichLabs/slaw/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/SandwichLabs/slaw/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/SandwichLabs/slaw/compare/v0.5.0...v0.6.0
