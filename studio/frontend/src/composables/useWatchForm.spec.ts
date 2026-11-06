@@ -261,6 +261,23 @@ describe('useWatchForm', () => {
     expect(f.canSave.value).toBe(true)
   })
 
+  it('a list that failed to load cannot call a target missing, so Save is not blocked', async () => {
+    makeApp({
+      ListDefinitions: vi.fn(async () => { throw new Error('semantics unreadable') }),
+      ListQueries: vi.fn(async () => { throw new Error('queries unreadable') }),
+      GetWatch: vi.fn(async () => detail({ question: { metric: 'revenue' }, when: { below: '1' } })),
+    })
+    const f = useWatchForm(vi.fn())
+    await f.openEdit('stuck')
+    expect(f.metrics.value).toEqual([])
+    expect(f.targetMissing.value).toBe(false)
+    expect(f.canSave.value).toBe(true)
+    f.pickKind('query')
+    f.pickTarget('stuck_orders')
+    expect(f.targetMissing.value).toBe(false)
+    expect(f.canSave.value).toBe(true)
+  })
+
   it('a metric that is gone, or cannot be read, is missing too', async () => {
     makeApp({ GetWatch: vi.fn(async () => detail({ question: { metric: 'bad' }, when: { below: '1' } })) })
     const f = useWatchForm(vi.fn())

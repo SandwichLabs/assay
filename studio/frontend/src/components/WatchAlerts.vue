@@ -4,15 +4,18 @@
 // read as a small table. The rows exist only in the result of the check in this
 // session; the history never keeps them, so after a restart the panel says to
 // check again to see them. Cells are shown as text.
-import { whenText } from '../lib/watchText'
+import { newest, whenText } from '../lib/watchText'
 
 defineProps<{
   alerts: WatchSummary[]
   // This session's check results by watch name (they carry the sample rows).
   results: Record<string, WatchResult>
 }>()
-const reasonOf = (w: WatchSummary, r?: WatchResult) => r?.reason ?? w.last?.reason ?? 'The condition holds.'
-const atOf = (w: WatchSummary, r?: WatchResult) => whenText(r?.at ?? w.last?.at)
+// The newest check wins, so a card never describes an older check than the badge counts. Rows come
+// from this window's result only when it is the newest; a stopped or older one shows none.
+const reasonOf = (w: WatchSummary, r?: WatchResult) => newest(w, r).entry?.reason ?? 'The condition holds.'
+const atOf = (w: WatchSummary, r?: WatchResult) => whenText(newest(w, r).entry?.at)
+const sampleOf = (w: WatchSummary, r?: WatchResult) => newest(w, r).result?.sample
 </script>
 
 <template>
@@ -28,19 +31,19 @@ const atOf = (w: WatchSummary, r?: WatchResult) => whenText(r?.at ?? w.last?.at)
           <span class="alert-card__when">{{ atOf(w, results[w.name]) }}</span>
         </div>
         <p class="alert-card__reason" :data-testid="`alert-reason-${w.name}`">{{ reasonOf(w, results[w.name]) }}</p>
-        <div v-if="results[w.name]?.sample" class="alert-card__sample">
+        <div v-if="sampleOf(w, results[w.name])" class="alert-card__sample">
           <div class="table-wrap">
             <table class="table" :aria-label="`First rows read by ${w.name}`" :data-testid="`alert-sample-${w.name}`">
-              <thead><tr><th v-for="c in results[w.name].sample!.columns" :key="c" scope="col">{{ c }}</th></tr></thead>
+              <thead><tr><th v-for="c in sampleOf(w, results[w.name])!.columns" :key="c" scope="col">{{ c }}</th></tr></thead>
               <tbody>
-                <tr v-for="(row, i) in results[w.name].sample!.rows" :key="i">
+                <tr v-for="(row, i) in sampleOf(w, results[w.name])!.rows" :key="i">
                   <td v-for="(cell, j) in row" :key="j">{{ cell }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p class="help">
-            The first {{ results[w.name].sample!.rows.length }} {{ results[w.name].sample!.rows.length === 1 ? 'row' : 'rows' }}<template v-if="results[w.name].sample!.capped">, trimmed</template>.
+            The first {{ sampleOf(w, results[w.name])!.rows.length }} {{ sampleOf(w, results[w.name])!.rows.length === 1 ? 'row' : 'rows' }}<template v-if="sampleOf(w, results[w.name])!.capped">, trimmed</template>.
             They are shown here only and are not kept in the history.
           </p>
         </div>

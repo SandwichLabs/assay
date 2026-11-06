@@ -263,6 +263,37 @@ describe('WatchesView', () => {
     w.unmount()
   })
 
+  it('a stopped check\'s alert card reads the history\'s reason, not the cancel text', async () => {
+    const app = makeApp()
+    const w = await mountView()
+    app.CheckWatches = vi.fn(async () => ({ cancelled: true, results: [result('revenue_cap', 'error', 'the check was canceled', { at: '2026-11-07T00:00:00Z', interrupted: true })] }))
+    await w.find('[data-testid="check-revenue_cap"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="alert-reason-revenue_cap"]').text()).toBe('revenue is 1,240, above 1,000')
+    expect(w.find('[data-testid="alert-revenue_cap"]').text()).toContain('2026-11-06')
+    expect(w.find('[data-testid="watch-status-revenue_cap"]').text()).toContain('stopped')
+    w.unmount()
+  })
+
+  it('a check recorded by another process after this window\'s keeps row, card and badge in agreement and drops the stale rows', async () => {
+    const app = makeApp()
+    const w = await mountView()
+    await w.find('[data-testid="check-stuck_orders"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="alert-sample-stuck_orders"]').exists()).toBe(true) // the window's result is newest
+    // The command line then checks it again (a newer entry in the history) and it is fine.
+    const newer = { watch: 'stuck_orders', at: '2099-01-01T00:00:00Z', status: 'ok', reason: 'stuck returned 0 rows', rows: 0, duration_ms: 1 }
+    app.ListWatches = vi.fn(async () => ({ watches: structuredClone(SUMMARIES).map((x) => (x.name === 'stuck_orders' ? { ...x, last: newer, last_status: 'ok', last_checked: newer.at } : x)), alerts: 1 }))
+    handlers['watches:checked']()
+    await new Promise((r) => setTimeout(r, 400))
+    await flushPromises()
+    expect(w.find('[data-testid="watch-status-stuck_orders"]').text()).toContain('ok')
+    expect(w.find('[data-testid="watch-reason-stuck_orders"]').text()).toBe('stuck returned 0 rows')
+    expect(w.find('[data-testid="alert-stuck_orders"]').exists()).toBe(false)
+    expect(w.find('[data-testid="alert-sample-stuck_orders"]').exists()).toBe(false)
+    w.unmount()
+  })
+
   it('says so when there are no watches, and offers the New watch form', async () => {
     makeApp({ ListWatches: vi.fn(async () => ({ watches: [], alerts: 0 })) })
     const w = await mountView()

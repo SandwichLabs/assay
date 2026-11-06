@@ -36,6 +36,7 @@ export function useWatchForm(onSaved: (name: string) => void | Promise<void>) {
   const replacing = ref('')
   const queries = ref<QuerySummary[]>([])
   const metrics = ref<DefinitionSummary[]>([])
+  const optionsLoaded = { query: ref(false), metric: ref(false) }
   const specs = ref<QueryParamT[]>([])
   const preview = ref('')
   const previewError = ref('')
@@ -73,7 +74,8 @@ export function useWatchForm(onSaved: (name: string) => void | Promise<void>) {
 
   /** The saved query or metric the file names is not in the workspace (deleted, renamed, or unreadable). */
   const targetMissing = computed(() => {
-    if (loading.value || !target.value) return false
+    // Only a list that actually loaded can say a name is gone; a failed read must not block Save.
+    if (loading.value || !target.value || !optionsLoaded[kind.value].value) return false
     return kind.value === 'query' ? !queries.value.some((q) => q.id === target.value) : !metrics.value.some((m) => m.name === target.value)
   })
   /** A declared parameter with no default must be given a value: the check would refuse it. */
@@ -112,6 +114,8 @@ export function useWatchForm(onSaved: (name: string) => void | Promise<void>) {
     const [q, defs] = await Promise.allSettled([App.ListQueries(), App.ListDefinitions()])
     queries.value = q.status === 'fulfilled' ? q.value : []
     metrics.value = defs.status === 'fulfilled' ? defs.value.metrics.filter((m) => !m.error) : []
+    optionsLoaded.query.value = q.status === 'fulfilled'
+    optionsLoaded.metric.value = defs.status === 'fulfilled'
   }
 
   async function loadSpecs() {

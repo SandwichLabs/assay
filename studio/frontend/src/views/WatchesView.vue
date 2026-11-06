@@ -21,6 +21,7 @@ import { askConfirm } from '../composables/useConfirm'
 import { workspaceInfo } from '../composables/useWorkspace'
 import { App } from '../lib/bindings'
 import { errorText } from '../lib/errors'
+import { newest } from '../lib/watchText'
 import { ref } from 'vue'
 
 const { list, loading, error, reload } = useWatches()
@@ -34,8 +35,7 @@ const actionError = ref('')
 const watches = computed(() => list.value?.watches ?? [])
 // A watch whose newest check fired: this window's result wins over the history's.
 const fired = computed(() => watches.value.filter((w) => {
-  const r = checks.results[w.name]
-  return !w.error && (r && !r.interrupted ? r.status : w.last_status) === 'alert'
+  return !w.error && (newest(w, checks.results[w.name]).entry?.status ?? w.last_status) === 'alert'
 }))
 const checkable = computed(() => watches.value.some((w) => !w.error))
 

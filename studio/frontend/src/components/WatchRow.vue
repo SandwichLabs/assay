@@ -4,7 +4,7 @@
 // reason, when it last fired, and its actions. A file that cannot be read shows
 // its error in place of a question and is not checkable; Edit replaces it.
 import { computed } from 'vue'
-import { readText, statusBadge, statusLabel, whenText } from '../lib/watchText'
+import { newest, readText, statusBadge, statusLabel, whenText } from '../lib/watchText'
 
 const props = defineProps<{
   watch: WatchSummary
@@ -19,26 +19,26 @@ const props = defineProps<{
 }>()
 defineEmits<{ check: []; edit: []; history: []; remove: [] }>()
 
-// A result a stop cut short says nothing about the watch: it shows as "stopped", this window only.
-const stopped = computed(() => !!props.result?.interrupted)
+// The newest check wins: this window's result, unless the history holds a newer one (a check run
+// by the command line) or this window's was cut short, which shows as "stopped" and is not recorded.
+const now = computed(() => newest(props.watch, props.result))
+const stopped = computed(() => now.value.stopped)
 const live = computed(() => (props.phase === 'running' || props.phase === 'queued' ? props.phase : ''))
 const status = computed(() => {
   if (props.watch.error) return 'error'
   if (live.value) return live.value
   if (props.phase) return props.phase // finished in the run in flight
   if (stopped.value) return 'stopped'
-  return props.result?.status ?? props.watch.last_status
+  return now.value.entry?.status ?? props.watch.last_status
 })
 const reason = computed(() => {
   if (props.watch.error) return props.watch.error
   if (live.value || props.phase) return ''
   if (stopped.value) return 'Stopped before it finished. This check was not recorded.'
-  return props.result?.reason || props.watch.last?.reason || ''
+  return now.value.entry?.reason ?? ''
 })
-// What the last check read: this window's result unless it was cut short.
-const last = computed(() => (props.result && !stopped.value ? props.result : props.watch.last))
-const read = computed(() => (last.value ? readText(last.value) : ''))
-const checkedAt = computed(() => whenText((props.result && !stopped.value ? props.result.at : undefined) ?? props.watch.last_checked))
+const read = computed(() => (now.value.entry ? readText(now.value.entry) : ''))
+const checkedAt = computed(() => whenText(now.value.entry?.at ?? props.watch.last_checked))
 </script>
 
 <template>

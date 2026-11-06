@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkSummary, durationText, groupDecimal, readText, statusBadge, statusLabel, whenText } from './watchText'
+import { checkSummary, newest, durationText, groupDecimal, readText, statusBadge, statusLabel, whenText } from './watchText'
 
 describe('watchText', () => {
   it('writes a time as the local date and minute, or the fallback', () => {
@@ -49,6 +49,28 @@ describe('watchText', () => {
     expect(checkSummary([r('ok')], false)).toBe('Checked 1 watch: all ok.')
     expect(checkSummary([r('ok'), r('error', true)], true)).toBe('Stopped. Checked 1 watch: all ok.')
     expect(checkSummary([r('error', true)], true)).toBe('Stopped. Checked 0 watches: nothing finished.')
+  })
+
+  it('the newest check wins: the window result unless the history is newer, and never an interrupted one', () => {
+    const hist = (at: string): WatchEntry => ({ watch: 'w', at, status: 'alert', reason: 'from history', duration_ms: 1 })
+    const res = (at: string, over: Partial<WatchResult> = {}): WatchResult => ({ watch: 'w', at, status: 'ok', reason: 'from window', duration_ms: 1, question: '', condition: '', ...over })
+    const sample = { columns: ['id'], rows: [['1']] }
+    // No history: the window's result.
+    expect(newest({}, res('2026-11-06T20:00:00Z')).entry?.reason).toBe('from window')
+    // Equal times are the same check: the window's, which has the rows.
+    const same = newest({ last: hist('2026-11-06T20:00:00Z') }, res('2026-11-06T20:00:00Z', { sample }))
+    expect(same.result?.sample).toBe(sample)
+    // The history is newer (a check run by the command line): its entry, and no rows from the window.
+    const older = newest({ last: hist('2026-11-06T21:00:00Z') }, res('2026-11-06T20:00:00Z', { sample }))
+    expect(older.entry?.reason).toBe('from history')
+    expect(older.result).toBeUndefined()
+    // A stopped check newer than the history is "stopped" and shows the history's outcome.
+    const stopped = newest({ last: hist('2026-11-06T19:00:00Z') }, res('2026-11-06T20:00:00Z', { interrupted: true, reason: 'the check was canceled' }))
+    expect(stopped).toEqual({ entry: hist('2026-11-06T19:00:00Z'), stopped: true })
+    // A stopped check older than the history is simply superseded.
+    expect(newest({ last: hist('2026-11-06T21:00:00Z') }, res('2026-11-06T20:00:00Z', { interrupted: true })).stopped).toBe(false)
+    // Nothing at all.
+    expect(newest({})).toEqual({ entry: undefined, stopped: false })
   })
 
   it('writes a duration', () => {

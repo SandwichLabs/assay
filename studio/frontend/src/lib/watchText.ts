@@ -48,3 +48,20 @@ export function checkSummary(results: Array<Pick<WatchResult, 'status' | 'interr
   const tail = parts.length ? parts.join(', ') : done.length ? 'all ok' : 'nothing finished'
   return `${cancelled ? 'Stopped. ' : ''}Checked ${plural(done.length, 'watch', 'watches')}: ${tail}.`
 }
+
+/** What a watch's newest check is: this window's result or the history's entry, whichever is not older. */
+export interface Newest {
+  /** The newest recorded or in-window outcome (never an interrupted one), if any. */
+  entry?: WatchEntry
+  /** Set only when this window's result is the newest: it alone carries the sample rows. */
+  result?: WatchResult
+  /** This window's check was cut short after the history's newest entry: shown as "stopped". */
+  stopped: boolean
+}
+
+export function newest(w: Pick<WatchSummary, 'last'>, r?: WatchResult): Newest {
+  const newer = !!r && (!w.last || !(Date.parse(r.at) < Date.parse(w.last.at)))
+  if (r && newer && r.interrupted) return { entry: w.last, stopped: true }
+  if (r && newer) return { entry: r, result: r, stopped: false }
+  return { entry: w.last, stopped: false }
+}
