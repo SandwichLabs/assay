@@ -13,6 +13,34 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
   - `.slaw` bundles carry `watches/<name>.yaml` entries.
   - Nothing runs by itself yet: no scheduler, no notifications. Studio's Watches view comes next. See `docs/reference/watches.md`.
 
+## [0.6.4] - 2026-11-06
+
+Date labels on column charts, and settings that survive a corrupt file and two Slaw processes writing at once (#333, #334).
+
+### Changed
+
+- **Column charts with dated columns get a date axis (#333).**
+  - It applies when every column label is a date, the columns are in strictly increasing date order and the chart is not `sorted`.
+  - The axis shows labels such as `Apr 7`, `Feb '25` or `Q2 '25` instead of each label cut down to fit its column ("20…").
+  - Each label is the date of the column it sits under, at the step's granularity, and is never finer than the spacing between columns.
+  - The first and last columns are labelled when they fit. A label that would hang past an end of the chart is aligned to that end.
+  - A narrow chart falls back to labels spread evenly across its columns, and a wide chart that scrolls is labelled along its whole width.
+  - Hovering a column still shows its full label. Columns that are not dates are labelled as before.
+- **Settings are written under a lock shared by Studio, `slaw update` and `slaw config updates`, in 0.6.4 and later (#334).**
+  - Two Studios, or Studio and those commands, no longer drop each other's changes to recent workspaces, update settings or the per-workspace MCP choice.
+  - The lock is a `settings.lock` file in the config folder, kept between runs.
+  - A second Studio window opened earlier no longer puts back its own theme, UI scale or motion setting when you change another one: only the setting you changed is written. If two windows change the same setting, the later one wins.
+  - Changing an appearance setting no longer writes back Studio's startup copy of the settings keys it does not know about, so keys another Slaw process (for example a newer version) wrote after the window opened are kept.
+  - A write that waits more than 5 seconds for the lock fails and says another Slaw process is writing.
+
+### Fixed
+
+- **A corrupt `settings.json` is no longer overwritten with defaults (#334).**
+  - Studio starts with default settings and shows a banner saying the file could not be read.
+  - The next change moves the bad file to `settings.json.corrupt-<time>` in the same folder before writing, and says where.
+  - A settings file that cannot be read at all (for example because of its permissions) is not replaced, and setting changes fail until it can be read.
+  - See [troubleshooting](docs/troubleshooting.md#my-settings-were-reset-to-defaults), which also covers an unsafe `settings.lock`.
+
 ## [0.6.3] - 2026-11-06
 
 Chart axes on round numbers and real dates, several series on one line or bar chart, and event markers (#13 items 1 and 2, #320).
@@ -407,7 +435,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/slaw/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/SandwichLabs/slaw/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/SandwichLabs/slaw/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/SandwichLabs/slaw/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/SandwichLabs/slaw/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/SandwichLabs/slaw/compare/v0.6.0...v0.6.1
