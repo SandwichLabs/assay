@@ -63,10 +63,13 @@ func (a *AgentAccess) Skills() skills.Store { return a.ws.Skills() }
 // Artifacts is the workspace's artifacts/ folder.
 func (a *AgentAccess) Artifacts() artifacts.Store { return a.ws.Artifacts() }
 
-// Watches is the workspace's watches/ folder. The agent may write a watch file
+// Watches is the workspace's watches/ folder as a write tool sees it: list, get,
+// source and put, no delete. The agent may write a watch file
 // (write_watch) but nothing here can check one: checking is CheckWatches, the
 // person's action.
-func (a *AgentAccess) Watches() watches.Store { return a.ws.Watches() }
+func (a *AgentAccess) Watches() watches.WriteStore {
+	return struct{ watches.WriteStore }{a.ws.Watches()}
+}
 
 // WatchHistory is the record of checks as the agent sees it: read only, with no
 // way to append to it.

@@ -50,7 +50,7 @@ func tierNeeded(category string) SandboxMode {
 func categoryWhat(category string) string {
 	switch category {
 	case "content":
-		return "writes files in the workspace folder (artifacts, notebooks, skills, saved queries)"
+		return "writes files in the workspace folder (artifacts, notebooks, skills, saved queries, watches)"
 	case "data":
 		return "changes rows in a connection"
 	case "schema":

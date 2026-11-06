@@ -50,6 +50,14 @@ type ReadStore interface {
 	Source(ctx context.Context, name string) (*Source, error)
 }
 
+// WriteStore is what an agent's write tool is given: the read half plus Put. It
+// has no Delete and no PutSource, so a tool cannot remove a watch or write bytes
+// the encoder did not produce.
+type WriteStore interface {
+	ReadStore
+	Put(ctx context.Context, w *Watch, opts ...WriteOption) error
+}
+
 // Source is one file's text as stored.
 type Source struct {
 	Name string `json:"name"`

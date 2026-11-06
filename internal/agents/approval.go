@@ -243,6 +243,7 @@ func describeWrite(ctx context.Context, req *Request, userDB *sql.DB, class sqlC
 			verb = "Replace"
 		}
 		ar.Summary = fmt.Sprintf("%s watch %s%s", verb, stringParam(req.Params["name"]), watchAsks(req))
+		ar.SQL = watchCardFile(req)
 	case "write_artifact":
 		ar.Rows = -1
 		verb := "Save"

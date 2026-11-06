@@ -140,6 +140,11 @@ func (c *core) Source(_ context.Context, name string) (*Source, error) {
 	return &Source{Name: name, Text: string(data), Rev: rev}, nil
 }
 
+// ErrCaseVariant is what a write is refused with when a file that differs only
+// in capitalisation exists. It also satisfies ErrConflict, so a caller that
+// only knows conflicts still refuses the write.
+var ErrCaseVariant = errors.New("a file with different capitalisation exists")
+
 // caseVariantError says a differently-cased file would be the same file on a
 // case-insensitive filesystem, so a write is refused rather than risk it.
 type caseVariantError struct{ want, have string }
@@ -147,7 +152,9 @@ type caseVariantError struct{ want, have string }
 func (e *caseVariantError) Error() string {
 	return fmt.Sprintf("%s exists with different capitalisation (%s); on a case-insensitive filesystem a write would replace it. Rename or remove it first", e.have, e.want)
 }
-func (e *caseVariantError) Is(target error) bool { return target == ErrConflict }
+func (e *caseVariantError) Is(target error) bool {
+	return target == ErrConflict || target == ErrCaseVariant
+}
 
 // checkCaseVariant refuses a write when the folder holds a file whose name
 // equals the target's ignoring case but not exactly.

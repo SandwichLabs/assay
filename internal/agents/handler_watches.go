@@ -28,7 +28,7 @@ import (
 // a watches/ folder. Like ArtifactsProvider it is optional, so the access
 // doubles of other packages need not change; without it the tools say so.
 type WatchesProvider interface {
-	Watches() watches.Store
+	Watches() watches.WriteStore
 	WatchHistory() watches.HistoryReader
 }
 
@@ -136,6 +136,9 @@ func (h *Handler) handleGetWatch(ctx context.Context, req *Request) *Response {
 		return NewErrorResponse(req.ID, ErrInvalidParams, err.Error())
 	}
 	name := strings.TrimSpace(stringParam(req.Params["name"]))
+	if err := watches.ValidateName(name); err != nil {
+		return NewErrorResponse(req.ID, ErrInvalidParams, scrubStoreText(watches.ReadableError(err))+" (see list_watches for the names)")
+	}
 	w, err := acc.Watches().Get(ctx, name)
 	switch {
 	case errors.Is(err, watches.ErrNotFound):
@@ -188,6 +191,10 @@ func (h *Handler) handleWriteWatch(ctx context.Context, req *Request) *Response 
 	w.Rev = rev
 	if err := st.Put(ctx, w, watches.WithRev(rev)); err != nil {
 		switch {
+		case errors.Is(err, watches.ErrCaseVariant):
+			return withFile(NewErrorResponse(req.ID, ErrInvalidParams, "not saved: "+scrubStoreText(err.Error())), canonical)
+		case errors.Is(err, watches.ErrConflict) && rev == "":
+			return withFile(NewErrorResponse(req.ID, ErrInvalidParams, fmt.Sprintf("not saved: a watch named %q was created while this was being checked (a person or another tool), so nothing was written. Call get_watch for it, then send its rev to replace it, or pick another name.", w.Name)), canonical)
 		case errors.Is(err, watches.ErrConflict):
 			return NewErrorResponse(req.ID, ErrInvalidParams, staleWatchMessage(w.Name))
 		case errors.Is(err, watches.ErrInvalid):
@@ -274,9 +281,9 @@ func questionFromParams(raw any) (watches.Question, error) {
 		}
 		q.Params = map[string]string{}
 		for k, v := range pm {
-			s, ok := paramText(v)
-			if !ok {
-				return q, fmt.Errorf("params.%s must be a string, number or boolean", truncateRunesText(k, 40))
+			s, err := paramText(v)
+			if err != nil {
+				return q, fmt.Errorf("params.%s: %w", truncateRunesText(k, 40), err)
 			}
 			q.Params[k] = s
 		}
@@ -286,33 +293,48 @@ func questionFromParams(raw any) (watches.Question, error) {
 
 // paramText is a parameter value as the text a person would give to
 // `slaw query --saved -p name=value`.
-func paramText(v any) (string, bool) {
+func paramText(v any) (string, error) {
 	switch x := v.(type) {
 	case string:
-		return x, true
+		return x, nil
 	case bool:
-		return strconv.FormatBool(x), true
+		return strconv.FormatBool(x), nil
 	}
 	return numberText(v)
 }
 
-// numberText is a JSON number as plain decimal text. A float64 argument cannot
-// carry more than 15 significant digits, so an exact threshold is sent as a
-// string.
-func numberText(v any) (string, bool) {
+// maxFloatDigits is how many significant digits a float64 argument can carry
+// without rounding.
+const maxFloatDigits = 15
+
+// numberText is a JSON number as plain decimal text. A number that arrives as a
+// float64 is refused when it has more than 15 significant digits: the client's
+// JSON encoder or ours already rounded it, so what was meant is lost. It is sent
+// as a string to keep it exact.
+func numberText(v any) (string, error) {
 	switch x := v.(type) {
 	case float64:
-		return strconv.FormatFloat(x, 'f', -1, 64), true
+		return floatText(x, 64)
 	case float32:
-		return strconv.FormatFloat(float64(x), 'f', -1, 32), true
+		return floatText(float64(x), 32)
 	case int:
-		return strconv.Itoa(x), true
+		return strconv.Itoa(x), nil
 	case int64:
-		return strconv.FormatInt(x, 10), true
+		return strconv.FormatInt(x, 10), nil
 	case json.Number:
-		return x.String(), true
+		return x.String(), nil
 	}
-	return "", false
+	return "", errors.New("must be a number")
+}
+
+func floatText(x float64, bits int) (string, error) {
+	g := strconv.FormatFloat(x, 'g', -1, bits)
+	mant, _, _ := strings.Cut(g, "e")
+	digits := strings.TrimLeft(strings.NewReplacer("-", "", ".", "").Replace(mant), "0")
+	if len(digits) > maxFloatDigits {
+		return "", fmt.Errorf("%s has more than %d significant digits, which a JSON number cannot carry exactly; send it as a string to keep it exact", g, maxFloatDigits)
+	}
+	return strconv.FormatFloat(x, 'f', -1, bits), nil
 }
 
 func conditionFromParams(raw any) (watches.Condition, error) {
@@ -367,8 +389,9 @@ func thresholdFromParam(label string, v any) (*watches.Threshold, error) {
 	}
 	text, ok := v.(string)
 	if !ok {
-		if text, ok = numberText(v); !ok {
-			return nil, fmt.Errorf("%s must be a number", label)
+		var err error
+		if text, err = numberText(v); err != nil {
+			return nil, fmt.Errorf("%s %w", label, err)
 		}
 	}
 	t, err := watches.ParseThreshold(strings.TrimSpace(text))
@@ -394,7 +417,7 @@ func canonicalWatch(req *Request, w *watches.Watch) (string, *Response) {
 
 // checkWatchTarget settles whether a write creates or replaces: a create never
 // replaces a file, and a replace needs the rev the agent read.
-func checkWatchTarget(ctx context.Context, req *Request, st watches.Store, name, rev, canonical string) *Response {
+func checkWatchTarget(ctx context.Context, req *Request, st watches.WriteStore, name, rev, canonical string) *Response {
 	fail := func(format string, args ...any) *Response {
 		return withFile(NewErrorResponse(req.ID, ErrInvalidParams, "not saved: "+fmt.Sprintf(format, args...)), canonical)
 	}
@@ -457,7 +480,7 @@ func (h *Handler) checkWatchMetric(ctx context.Context, req *Request, w *watches
 		return nil, withFile(NewErrorResponse(req.ID, ErrInvalidParams, scrubStoreText(fmt.Sprintf("not saved: the metric %q cannot be read: %s", name, semantics.ReadableError(err)))), canonical)
 	}
 	if info := h.metricQueryInfo(ctx, m); info["query_error"] != nil {
-		return []string{scrubStoreText(fmt.Sprintf("metric %q: %v, so every check will be an error until it is fixed", name, info["query_error"]))}, nil
+		return []string{scrubStoreText(fmt.Sprintf("metric %q: %v, so every check will be an error until the person fixes the metric's saved query (a metric is a reviewed definition and you cannot change it)", name, info["query_error"]))}, nil
 	}
 	return nil, nil
 }
@@ -477,4 +500,19 @@ func watchAsks(req *Request) string {
 		what = "metric " + q.Metric
 	}
 	return fmt.Sprintf(": %s, fires when %s", what, c.Describe())
+}
+
+// watchCardFile is the canonical file a write_watch would write, for the
+// approval card, so the person sees the params and description they approve. It
+// is empty for a request that does not validate.
+func watchCardFile(req *Request) string {
+	w, _, errResp := watchFromRequest(req)
+	if errResp != nil {
+		return ""
+	}
+	data, err := watches.Encode(w)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }

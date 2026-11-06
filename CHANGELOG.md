@@ -8,9 +8,10 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
 
 - **Watches for the agent (#247, phase 0).**
   - New tools `list_watches` and `get_watch` (read-only, every tier) and `write_watch` (creates or replaces `watches/<name>.yaml`), for the in-app agent and MCP clients alike.
-  - `write_watch` is a content tool like `write_artifact`: refused under `read-only`, asks first when "Ask before changes" is on, and is checked before the approval gate (a bad shape, or a saved query or metric that does not exist, is refused with the reason; a valid request with nobody to approve comes back "valid and ready, not saved" with the canonical file). It validates with the same decoder and encoder as Studio's New watch form, replaces only against the `rev` it read, and warns when a required query parameter has no value.
+  - `write_watch` is a content tool like `write_artifact`: refused under `read-only`, asks first when "Ask before changes" is on, and, when nobody can approve (headless MCP), is checked before the gate (a bad shape, or a saved query or metric that does not exist, is refused with the reason; a valid request comes back "valid and ready, not saved" with the canonical file). With an approver the card comes first, as for the other content tools, and shows the canonical file. It validates with the same decoder and encoder as Studio's New watch form, replaces only against the `rev` it read, and warns when a required query parameter has no value.
   - The agent sees when a watch was last checked and its status, never a reason or any rows, and no tool or MCP method can check a watch: the person checks in Studio or with `slaw watch check`.
-  - The `semantic-layer` skill says how to propose a watch.
+  - A JSON number with more than 15 significant digits is refused (it has already been rounded); send it as a string. Integer thresholds beyond 64 bits are now written and read back exactly, and the displayed threshold is exact.
+  - The `semantic-layer` skill says how to write a watch.
 - **Watches (#247, phase 0).**
   - A watch is a standing question with a condition, kept as `watches/<name>.yaml`: a saved query (with parameters) or a metric, and `rows: any|none` or an `above`, `below` or `outside` threshold.
   - `slaw watch list|show|check|history` lists them and checks them on demand through the agent policy's read-only path. `check` exits 0 when every watch is ok, 1 when any alert fired, 2 when none fired but some could not be checked.

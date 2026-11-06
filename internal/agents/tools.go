@@ -397,10 +397,10 @@ var Tools = []ToolDef{
 			{Name: "name", Type: "string", Required: true, Desc: "Watch name: lower-case letters, digits and underscores, starting with a letter or underscore"},
 			{Name: "question", Type: "object", Required: true, Desc: "What to ask: {query: <saved query id>, params?: {name: value}} or {metric: <metric name>} (run at its grain total)", Fields: []ParamDef{
 				{Name: "query", Type: "string", Required: false, Desc: "Saved query id from list_queries"},
-				{Name: "params", Type: "object", Required: false, Desc: "Values for the saved query's declared parameters, {name: value}; they are bound, never SQL text"},
+				{Name: "params", Type: "object", Required: false, Desc: "Values for the saved query's declared parameters, {name: value}; they are bound, never SQL text. Send a number with more than 15 significant digits as a string."},
 				{Name: "metric", Type: "string", Required: false, Desc: "Metric name from list_definitions"},
 			}},
-			{Name: "when", Type: "object", Required: true, Desc: "When it fires, exactly one of: rows \"any\" (fires when there are rows) or \"none\"; above N; below N; outside [low, high]. A threshold needs a result of one row and one numeric column. Send a number as a plain decimal (a string keeps it exact).", Fields: []ParamDef{
+			{Name: "when", Type: "object", Required: true, Desc: "When it fires, exactly one of: rows \"any\" (fires when there are rows) or \"none\"; above N; below N; outside [low, high]. A threshold needs a result of one row and one numeric column. Send a number as a plain decimal; a number with more than 15 significant digits is refused as a JSON number, so send it as a string to keep it exact.", Fields: []ParamDef{
 				{Name: "rows", Type: "string", Required: false, Desc: "any | none"},
 				{Name: "above", Type: "number", Required: false, Desc: "Fires when the value is greater"},
 				{Name: "below", Type: "number", Required: false, Desc: "Fires when the value is less"},

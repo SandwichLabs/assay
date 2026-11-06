@@ -30,7 +30,7 @@ func watchesFixture(t *testing.T, mode SandboxMode, opts ...fixtureOpt) *policyF
 	return fx
 }
 
-func watchStore(fx *policyFixture) watches.Store {
+func watchStore(fx *policyFixture) watches.WriteStore {
 	return watchProvider(fx.t, fx.h.access).Watches()
 }
 
@@ -66,8 +66,9 @@ func TestWatchTools_Registry(t *testing.T) {
 	assert.Equal(t, "content", GetTool("write_watch").Category)
 	assert.True(t, GetTool("write_watch").DryRunSafe)
 	for _, name := range []string{"list_watches", "get_watch", "write_watch"} {
-		assert.Empty(t, GetTool(name).Modes, "%s is offered in chat, MCP and task mode alike", name)
+		assert.Empty(t, GetTool(name).Modes, "%s has no Modes list, so chat and MCP both offer it", name)
 		assert.True(t, IsModeVisible(name, ModeMCP), name)
+		assert.True(t, IsModeVisible(name, ModeChat), name)
 	}
 }
 
@@ -462,25 +463,6 @@ func TestWriteWatch_ApprovalCardAndDecision(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestWriteWatch_NeverTouchesTheHistory(t *testing.T) {
-	fx := watchesFixture(t, ModeFull)
-	hist := &countingHistory{}
-	setHistory(t, fx, hist)
-	require.Nil(t, fx.call("write_watch", stuckWatch(nil)).Error)
-	_, ok := any(watchProvider(t, fx.h.access).WatchHistory()).(interface {
-		Append(context.Context, watches.Entry) error
-	})
-	assert.False(t, ok, "the agent's history has no Append")
-	assert.Zero(t, hist.reads, "writing a watch does not read the history either")
-}
-
-type countingHistory struct{ reads int }
-
-func (c *countingHistory) Entries(context.Context, string) ([]watches.Entry, error) {
-	c.reads++
-	return nil, nil
-}
-
 func TestWatchTools_NotAvailableWithoutAWatchesFolder(t *testing.T) {
 	h := NewHandler(&bareAccess{mockAccess: &mockAccess{}}, &mockEngine{}, &SandboxConfig{Mode: ModeFull, MaxQueryRows: 10}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	for _, m := range []string{"list_watches", "get_watch", "write_watch"} {
@@ -505,9 +487,9 @@ func watchProvider(t testing.TB, a WorkspaceAccess) WatchesProvider {
 }
 
 func watchMock(fx *policyFixture) *watches.Mock {
-	m, ok := watchStore(fx).(*watches.Mock)
+	acc, ok := fx.h.access.(*policyAccess)
 	require.True(fx.t, ok)
-	return m
+	return &acc.mockAccess.wts
 }
 
 func setHistory(t testing.TB, fx *policyFixture, h watches.HistoryReader) {

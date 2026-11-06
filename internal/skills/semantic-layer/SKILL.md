@@ -160,7 +160,7 @@ could not run.
 ## 6. Watches
 
 A watch is a standing question with a condition (`watches/<name>.yaml`):
-propose one with `write_watch` over a saved query or a metric that exists
+write one with `write_watch` over a saved query or a metric that exists
 (`list_watches` and `get_watch` read them; send the `rev` to replace one). You
 cannot check a watch: the person checks it in Studio's Watches view or with
 `slaw watch check`, so tell them it is written and not yet checked.

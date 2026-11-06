@@ -228,7 +228,7 @@ type mockAccess struct {
 	whist watches.HistoryReader
 }
 
-func (m *mockAccess) Watches() watches.Store { return &m.wts }
+func (m *mockAccess) Watches() watches.WriteStore { return &m.wts }
 
 // WatchHistory is a history with nothing in it until a test sets whist.
 func (m *mockAccess) WatchHistory() watches.HistoryReader {
