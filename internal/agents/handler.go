@@ -570,6 +570,14 @@ func (h *Handler) dispatch(ctx context.Context, req *Request) *Response {
 	case "propose_definition":
 		return h.handleProposeDefinition(ctx, req)
 
+	// Watches (E7 W3): read the files, write one; no tool checks a watch
+	case "list_watches":
+		return h.handleListWatches(ctx, req)
+	case "get_watch":
+		return h.handleGetWatch(ctx, req)
+	case "write_watch":
+		return h.handleWriteWatch(ctx, req)
+
 	// A2UI artifacts (#67)
 	case "present_data":
 		return h.handlePresentData(ctx, req)

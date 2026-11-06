@@ -82,6 +82,14 @@ const (
 // HistoryPath is the history file's path relative to the workspace root.
 const HistoryPath = localDir + "/" + historyDir + "/" + historyFile
 
+// HistoryReader is the read half of History: what a surface that must never
+// record or change a check (an agent's list tool) is given.
+type HistoryReader interface {
+	// Entries returns the entries of one watch ("" is every watch), oldest
+	// first; never nil. A missing history is empty.
+	Entries(ctx context.Context, watch string) ([]Entry, error)
+}
+
 // History is the record of checks. It is machine-local: the file history keeps
 // it under .slaw-local/ and nothing bundles or commits it.
 type History interface {

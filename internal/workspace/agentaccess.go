@@ -14,6 +14,7 @@ import (
 	"github.com/SandwichLabs/slaw/internal/semantics/proposals"
 	"github.com/SandwichLabs/slaw/internal/session"
 	"github.com/SandwichLabs/slaw/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/watches"
 )
 
 // AgentAccess is a workspace as the agent sees it: its DuckDB hub plus its
@@ -61,6 +62,17 @@ func (a *AgentAccess) Skills() skills.Store { return a.ws.Skills() }
 
 // Artifacts is the workspace's artifacts/ folder.
 func (a *AgentAccess) Artifacts() artifacts.Store { return a.ws.Artifacts() }
+
+// Watches is the workspace's watches/ folder. The agent may write a watch file
+// (write_watch) but nothing here can check one: checking is CheckWatches, the
+// person's action.
+func (a *AgentAccess) Watches() watches.Store { return a.ws.Watches() }
+
+// WatchHistory is the record of checks as the agent sees it: read only, with no
+// way to append to it.
+func (a *AgentAccess) WatchHistory() watches.HistoryReader {
+	return struct{ watches.HistoryReader }{a.ws.WatchHistory()}
+}
 
 // Semantics is the workspace's semantics/ folder, read only: the agent's tools
 // are given no way to write a definition (accepting a proposal is the person's).

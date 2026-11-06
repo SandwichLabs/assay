@@ -371,6 +371,45 @@ var Tools = []ToolDef{
 			{Name: "replaces_rev", Type: "string", Required: false, Desc: "The rev get_definition returned for the definition this replaces (for a glossary term, get_definition with that term: the term's own rev). Omit for a new one."},
 		},
 	},
+	// Watches (E7 W3): standing questions with a condition, files under
+	// watches/. The agent reads and writes the files; no tool checks one (the
+	// person does, in Studio or with `slaw watch check`).
+	{
+		Name:        "list_watches",
+		Description: "List the workspace's watches (watches/): standing questions with a condition. Each has its name, description, question (saved query and params, or metric), when (rows any|none, above, below or outside), condition text, rev, and, if it has been checked, last_checked and last_status (ok|alert|error). A file that cannot be read is listed with its error. Nothing here runs a watch or returns results; the person checks watches.",
+		Category:    "introspect",
+		Params:      []ParamDef{},
+	},
+	{
+		Name:        "get_watch",
+		Description: "Get one watch as data: its fields, its canonical YAML and its rev (send the rev to write_watch to change it). Never returns check results.",
+		Category:    "introspect",
+		Params: []ParamDef{
+			{Name: "name", Type: "string", Required: true, Desc: "Watch name, from list_watches"},
+		},
+	},
+	{
+		Name:        "write_watch",
+		Description: "Create or replace a watch, watches/<name>.yaml: a saved query (save_query first) or a metric, plus a condition that makes it fire. Checked now like the file decoder does, so a bad name, shape or threshold is refused with the reason, and a missing saved query or metric is refused; a required query parameter with no value only warns. To replace one, send the rev from get_watch; without it the write only creates and an existing name is refused. It writes the file only: you cannot check a watch, the person does (Studio's Watches view or `slaw watch check`).",
+		Category:    "content",
+		DryRunSafe:  true,
+		Params: []ParamDef{
+			{Name: "name", Type: "string", Required: true, Desc: "Watch name: lower-case letters, digits and underscores, starting with a letter or underscore"},
+			{Name: "question", Type: "object", Required: true, Desc: "What to ask: {query: <saved query id>, params?: {name: value}} or {metric: <metric name>} (run at its grain total)", Fields: []ParamDef{
+				{Name: "query", Type: "string", Required: false, Desc: "Saved query id from list_queries"},
+				{Name: "params", Type: "object", Required: false, Desc: "Values for the saved query's declared parameters, {name: value}; they are bound, never SQL text"},
+				{Name: "metric", Type: "string", Required: false, Desc: "Metric name from list_definitions"},
+			}},
+			{Name: "when", Type: "object", Required: true, Desc: "When it fires, exactly one of: rows \"any\" (fires when there are rows) or \"none\"; above N; below N; outside [low, high]. A threshold needs a result of one row and one numeric column. Send a number as a plain decimal (a string keeps it exact).", Fields: []ParamDef{
+				{Name: "rows", Type: "string", Required: false, Desc: "any | none"},
+				{Name: "above", Type: "number", Required: false, Desc: "Fires when the value is greater"},
+				{Name: "below", Type: "number", Required: false, Desc: "Fires when the value is less"},
+				{Name: "outside", Type: "array", Required: false, Desc: "[low, high], fires when the value is below low or above high", Items: &ParamDef{Type: "number"}},
+			}},
+			{Name: "description", Type: "string", Required: false, Desc: "One line on what the watch is for (200 characters at most)"},
+			{Name: "rev", Type: "string", Required: false, Desc: "The rev get_watch or list_watches returned for the watch being replaced. Omit to create."},
+		},
+	},
 	{
 		Name:        "run_saved_query",
 		Description: "Run a saved query by id (see list_queries) and return its rows like run_query. Send values for its declared parameters as params {name: value}; a name you omit takes its default. It goes through run_query's gates, on the query's own connection, and runs reads only.",

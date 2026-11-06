@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -279,4 +280,38 @@ func TestErrorResult_DataIsAlsoATextBlock(t *testing.T) {
 
 	plain := errorResult(agents.NewErrorResponse(1, agents.ErrInvalidParams, "bad").Error)
 	assert.Len(t, plain.Content, 1)
+}
+
+// The watch tools reach MCP clients from the same registry with the same
+// gating: the two readers work at every tier, the writer only where a content
+// write is allowed, and no tool checks a watch or reads a check's results.
+func TestWatchToolsOverMCP(t *testing.T) {
+	offered := map[string]agents.ToolDef{}
+	for _, td := range agents.ListToolsForMode(agents.ModeMCP) {
+		offered[td.Name] = td
+	}
+	for name, category := range map[string]string{"list_watches": "introspect", "get_watch": "introspect", "write_watch": "content"} {
+		td, ok := offered[name]
+		require.True(t, ok, name)
+		assert.Equal(t, category, td.Category, name)
+	}
+	assert.True(t, *toolDefToMCPTool(offered["list_watches"]).Annotations.ReadOnlyHint)
+	assert.True(t, *toolDefToMCPTool(offered["get_watch"]).Annotations.ReadOnlyHint)
+	w := toolDefToMCPTool(offered["write_watch"]).Annotations
+	assert.False(t, *w.ReadOnlyHint)
+	assert.False(t, *w.DestructiveHint)
+	assert.True(t, *w.IdempotentHint, "a replace needs the rev it read")
+	assert.False(t, *w.OpenWorldHint, "it writes one file in the workspace folder")
+	for name := range offered {
+		if strings.Contains(name, "watch") {
+			assert.Contains(t, []string{"list_watches", "get_watch", "write_watch"}, name, "no tool may check, run or read the history of a watch")
+		}
+	}
+
+	h := agents.NewHandler(&mockAccess{}, &mockEngine{}, &agents.SandboxConfig{Mode: agents.ModeReadOnly, MaxQueryRows: 100},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	resp := h.Handle(context.Background(), &agents.Request{JSONRPC: "2.0", ID: 1, Method: "write_watch", Params: map[string]any{
+		"name": "w", "question": map[string]any{"query": "q"}, "when": map[string]any{"rows": "any"}}})
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, agents.ErrPermission, resp.Error.Code)
 }

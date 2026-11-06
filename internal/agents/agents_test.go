@@ -18,6 +18,7 @@ import (
 	"github.com/SandwichLabs/slaw/internal/session"
 	"github.com/SandwichLabs/slaw/internal/session/sessiontest"
 	"github.com/SandwichLabs/slaw/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/watches"
 
 	_ "github.com/duckdb/duckdb-go/v2" // registers "duckdb"
 	"github.com/stretchr/testify/assert"
@@ -223,6 +224,26 @@ type mockAccess struct {
 	sem   semantics.Mock
 	props proposals.Mock
 	ars   artifacts.Store
+	wts   watches.Mock
+	whist watches.HistoryReader
+}
+
+func (m *mockAccess) Watches() watches.Store { return &m.wts }
+
+// WatchHistory is a history with nothing in it until a test sets whist.
+func (m *mockAccess) WatchHistory() watches.HistoryReader {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.whist == nil {
+		m.whist = emptyHistory{}
+	}
+	return m.whist
+}
+
+type emptyHistory struct{}
+
+func (emptyHistory) Entries(context.Context, string) ([]watches.Entry, error) {
+	return []watches.Entry{}, nil
 }
 
 func (m *mockAccess) Artifacts() artifacts.Store {
