@@ -284,6 +284,13 @@ with the shared number formatter.
   chosen from the span: seconds, minutes or hours
   (`14:00`, `14:00:05`), days (`Apr 3`), weeks (Mondays), months (`Apr '25`), quarters
   (`Q2 '25`) or years (`2025`). Any other label is a category, spaced evenly.
+  A `columnChart` keeps its evenly spaced columns (each is a band) but labels
+  its axis the same way when every column label is a date, the columns are in
+  strictly increasing date order and `sorted` is not set: the tick labels sit
+  under the column each tick date falls in, are thinned so none overlap or are
+  cut, and scroll with the columns. Hover and the text alternative keep the full
+  label. Unordered, sorted, mixed or single-column charts show every column's own
+  label.
 - **Reading values.** Hover a `lineChart` or `areaChart`, or focus it and use
   Left, Right, Home and End, to read the label and every series' value there (a
   tooltip, plus a live region for screen readers). Bars show their value beside

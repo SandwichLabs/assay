@@ -18,6 +18,7 @@ import { valueScale, frac as scaleFrac, formatTick } from './scale'
 import A2UIAnnotations from './A2UIAnnotations.vue'
 import { placeOnColumns, type Annotation } from './annotations'
 import { useAnnotations, useColumnGeometry } from './useAnnotations'
+import { buildColumnAxis } from './columnAxis'
 
 const props = defineProps<{ component: A2UIComponentT }>()
 const { loading, error, table } = useChartData(() => props.component)
@@ -74,6 +75,9 @@ const place = (items: Annotation[]) => {
 }
 const annot = useAnnotations(() => props.component, place, () => geom.value.width)
 watch(() => cols.value.map((c) => c.label).join('\0'), () => void nextTick(measure))
+// x labels: dated columns in order get time-granularity labels under the column each tick
+// falls in (columnAxis.ts); anything else keeps one label per column.
+const xaxis = computed(() => buildColumnAxis(cols.value.map((c) => c.label), !props.component.sorted, geom.value.centers, geom.value.width))
 const annotInset = { top: '0px', bottom: 'calc(24px + var(--a2ui-col-inset) + var(--a2ui-sbh))', left: '0px', right: '0px' }
 const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 'stacked'}, ${cols.value.length} columns of ${data.value.series.map((s) => s.name).join(', ')}${annot.ariaText.value}`)
 </script>
@@ -121,7 +125,10 @@ const ariaLabel = computed(() => `Column chart, ${grouped.value ? 'grouped' : 's
             ></div>
           </div>
         </div>
-        <span class="a2ui-columns__label" :title="c.label">{{ c.label }}</span>
+        <span
+          v-if="!xaxis.time" class="a2ui-columns__label" :title="c.label"
+        >{{ c.label }}</span>
+        <span v-else class="a2ui-columns__label a2ui-columns__label--tick" :title="xaxis.labels[ci] ? c.label : undefined" :aria-hidden="xaxis.labels[ci] ? undefined : 'true'" data-testid="a2ui-column-tick"><span>{{ xaxis.labels[ci] }}</span></span>
       </div>
     </div>
     <A2UIAnnotations v-if="annot.markers.value.length" :markers="annot.markers.value" :inset="annotInset" :scroll="scrollProp" />

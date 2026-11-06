@@ -8,6 +8,7 @@
 // it. Colours are the closed enum (a2ui--<token> classes), never a model string
 // in a style.
 import { parseTime } from './scale'
+import { columnAt, columnTimes } from './columnAxis'
 import type { XAxis } from './xaxis'
 
 export const MAX_ANNOTATIONS = 50
@@ -164,17 +165,15 @@ function onCategory(ann: Annotation, labels: string[], fracOf: (i: number) => nu
 export function placeOnColumns(items: Annotation[], labels: string[], buckets: boolean): Placement {
   const n = labels.length
   const centre = (i: number) => (i + 0.5) / n
-  const times = buckets ? labels.map((l) => parseTime(l)) : []
-  const dated = buckets && n > 1 && times.every((t, i) => t !== null && (i === 0 || t > (times[i - 1] as number)))
-  const reach = dated ? Math.max(...times.slice(1).map((t, i) => (t as number) - (times[i] as number))) : 0
+  const times = columnTimes(labels, buckets)
+  const reach = times ? Math.max(...times.slice(1).map((t, i) => t - times[i])) : 0
   const markers: PlacedMarker[] = []
   let outside = 0
   items.forEach((ann, key) => {
     let hit = onCategory(ann, labels, centre)
-    const t = dated && !hit ? parseTime(ann.at) : null
-    if (t !== null && t >= (times[0] as number) && t < (times[n - 1] as number) + reach) {
-      let i = 0
-      while (i + 1 < n && (times[i + 1] as number) <= t) i++
+    const t = times && !hit ? parseTime(ann.at) : null
+    if (times && t !== null && t >= times[0] && t < times[n - 1] + reach) {
+      const i = columnAt(times, t)
       hit = { frac: centre(i), bucket: i }
     }
     if (hit) markers.push({ key, ann, ...hit })
