@@ -5,10 +5,14 @@ type MockApp = Partial<Record<keyof AppApi, any>>
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-vi.mock('../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
+const handlers = vi.hoisted(() => ({} as Record<string, (p?: unknown) => void>))
+vi.mock('../wailsjs/runtime/runtime', () => ({
+  EventsOn: (name: string, cb: (p?: unknown) => void) => { handlers[name] = cb; return () => {} },
+}))
 
 import WatchesView from './WatchesView.vue'
-import { resolveConfirm } from '../composables/useConfirm'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { confirmMessage, confirmVisible, resolveConfirm } from '../composables/useConfirm'
 
 const when = (over: Partial<WatchSummary>): WatchSummary => ({
   name: 'w', question: {}, when: {}, ...over,
@@ -41,11 +45,12 @@ function makeApp(over: MockApp = {}) {
       { watch: 'volume', at: '2026-11-05T21:00:00Z', status: 'ok', value: 7, reason: 'order_count is 7', duration_ms: 3 },
     ]),
     DeleteWatch: vi.fn(async () => {}),
+    GetWatch: vi.fn(async (name: string) => ({ ...SUMMARIES.find((x) => x.name === name)!, text: '' })),
     CancelRun: vi.fn(),
     ListQueries: vi.fn(async () => [{ id: 'stuck', title: 'Stuck', engine: 'duckdb' }]),
     ListDefinitions: vi.fn(async () => ({ entities: [], metrics: [{ kind: 'metric', name: 'revenue', title: 'Revenue' }], joins: [], terms: [], open_proposals: 0 })),
     GetQuery: vi.fn(async () => ({ id: 'stuck', parameters: [] })),
-    PreviewWatch: vi.fn(async () => 'question:\n  query: stuck\nwhen:\n  rows: any\n'),
+    PreviewWatch: vi.fn(async (d: WatchDraft) => `name: ${d.name || 'new_watch'}\n${d.question.metric ? `metric: ${d.question.metric}` : `query: ${d.question.query ?? ''}`}\nwhen: ${JSON.stringify(d.when)}`),
     SaveWatch: vi.fn(async () => 'r9'),
     ...over,
   }
@@ -61,8 +66,8 @@ const mountView = async () => {
 }
 
 describe('WatchesView', () => {
-  beforeEach(() => { document.body.innerHTML = '' })
-  afterEach(() => { vi.useRealTimers() })
+  beforeEach(() => { document.body.innerHTML = ''; (window as any).runtime = {} })
+  afterEach(() => { vi.useRealTimers(); delete (window as any).runtime })
 
   it('lists each watch with its question, condition and last outcome, and an unreadable file with its error', async () => {
     makeApp()
@@ -102,6 +107,8 @@ describe('WatchesView', () => {
     expect(sample.text()).toContain('globex')
     expect(w.find('[data-testid="watch-reason-volume"]').text()).toContain('Binder Error')
     expect(w.find('[data-testid="watch-status-volume"]').text()).toContain('error')
+    expect(w.find('[data-testid="watch-run-status"]').text()).toBe('Checked 3 watches: 2 fired, 1 error.')
+    expect(w.find('[data-testid="watch-status-volume"] [role="status"]').exists()).toBe(false)
     w.unmount()
   })
 
@@ -121,15 +128,35 @@ describe('WatchesView', () => {
     await w.find('[data-testid="check-all"]').trigger('click')
     await flushPromises()
     expect(w.find('[data-testid="check-all"]').exists()).toBe(false)
-    expect(w.find('[data-testid="watch-status-volume"]').text()).toContain('checking')
+    expect(w.find('[data-testid="watch-status-volume"]').text()).toContain('queued')
     expect((w.find('[data-testid="check-volume"]').element as HTMLButtonElement).disabled).toBe(true)
+    // Progress updates rows as each watch finishes; only names and statuses travel.
+    handlers['watches:progress']({ name: 'revenue_cap', status: 'running' })
+    await flushPromises()
+    expect(w.find('[data-testid="watch-status-revenue_cap"]').text()).toContain('checking')
+    handlers['watches:progress']({ name: 'revenue_cap', status: 'ok' })
+    handlers['watches:progress']({ name: 'volume', status: 'running' })
+    await flushPromises()
+    expect(w.find('[data-testid="watch-status-revenue_cap"]').text()).toContain('ok')
+    expect(w.find('[data-testid="watch-status-revenue_cap"]').text()).not.toContain('revenue is 1,240')
+    expect(w.find('[data-testid="watch-status-volume"]').text()).toContain('checking')
+    expect(w.find('[data-testid="watch-status-stuck_orders"]').text()).toContain('queued')
+    // The seconds counter is not in the live region; the live region only changes at the start and the end.
+    expect(w.find('[data-testid="watch-run-status"]').text()).toBe('Checking all watches…')
+    expect(w.find('[data-testid="watch-elapsed"]').exists()).toBe(true)
+    expect(w.find('[data-testid="watch-run-status"]').element.contains(w.find('[data-testid="watch-elapsed"]').element)).toBe(false)
     await w.find('[data-testid="stop-checks"]').trigger('click')
     expect(app.CancelRun).toHaveBeenCalledWith('watches')
-    finish({ results: [result('revenue_cap', 'ok', 'revenue is 5')], cancelled: true })
+    finish({ results: [result('revenue_cap', 'ok', 'revenue is 5'), result('volume', 'error', 'the check was canceled', { interrupted: true })], cancelled: true })
     await flushPromises()
-    expect(w.find('[data-testid="watch-run-status"]').text()).toContain('Stopped')
+    expect(w.find('[data-testid="watch-run-status"]').text()).toBe('Stopped. Checked 1 watch: all ok.')
     expect(w.find('[data-testid="check-all"]').exists()).toBe(true)
     expect(w.find('[data-testid="watch-status-revenue_cap"]').text()).toContain('ok')
+    const stopped = w.find('[data-testid="watch-status-volume"]')
+    expect(stopped.text()).toContain('stopped')
+    expect(stopped.text()).toContain('not recorded')
+    expect(stopped.find('.badge').classes()).toContain('badge--info')
+    expect(w.find('[data-testid="alert-volume"]').exists()).toBe(false)
     w.unmount()
   })
 
@@ -144,8 +171,12 @@ describe('WatchesView', () => {
     expect(rows[0].text()).toContain('could not run: Binder Error')
     expect(rows[0].text()).toContain('1.5 s')
     expect(rows[1].text()).toContain('7')
+    expect(document.activeElement?.id).toBe('wh-h')
+    expect(rows[1].text()).toContain('7')
     await w.find('[data-testid="history-close"]').trigger('click')
+    await flushPromises()
     expect(w.find('[data-testid="watch-history"]').exists()).toBe(false)
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('history-volume')
     w.unmount()
   })
 
@@ -158,6 +189,77 @@ describe('WatchesView', () => {
     resolveConfirm(true)
     await flushPromises()
     expect(app.DeleteWatch).toHaveBeenCalledWith('volume', 'r3')
+    w.unmount()
+  })
+
+  it('saving a watch forgets what this window remembered of its old file', async () => {
+    const app = makeApp()
+    const w = await mountView()
+    await w.find('[data-testid="check-all"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="alert-reason-revenue_cap"]').text()).toBe('revenue is 1,300, above 1,000')
+    await w.find('[data-testid="edit-revenue_cap"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="watch-form"]').trigger('submit')
+    await flushPromises()
+    expect(app.SaveWatch).toHaveBeenCalledWith(expect.objectContaining({ name: 'revenue_cap', rev: 'r1', question: { metric: 'revenue' } }))
+    expect(w.find('[data-testid="alert-reason-revenue_cap"]').text()).toBe('revenue is 1,240, above 1,000')
+    w.unmount()
+  })
+
+  it('a watch whose saved query is gone shows it as missing in the form and will not save until another is picked', async () => {
+    const app = makeApp({ GetWatch: vi.fn(async () => ({ ...SUMMARIES[1], question: { query: 'deleted_query' }, text: '' })) })
+    const w = await mountView()
+    await w.find('[data-testid="edit-stuck_orders"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="wf-target"]').text()).toContain('deleted_query (missing)')
+    expect(w.find('[data-testid="wf-target-missing"]').text()).toContain('is not in this workspace')
+    expect((w.find('[data-testid="wf-save"]').element as HTMLButtonElement).disabled).toBe(true)
+    await w.find('[data-testid="wf-target"]').setValue('stuck')
+    await flushPromises()
+    expect(w.find('[data-testid="wf-target-missing"]').exists()).toBe(false)
+    expect((w.find('[data-testid="wf-save"]').element as HTMLButtonElement).disabled).toBe(false)
+    expect(app.SaveWatch).not.toHaveBeenCalled()
+    w.unmount()
+  })
+
+  it('Escape on the Keep yours confirm leaves the Edit form open', async () => {
+    const w = mount({ components: { WatchesView, ConfirmDialog }, template: '<div><WatchesView /><ConfirmDialog :visible="visible" :message="message" @confirm="ok(true)" @cancel="ok(false)" /></div>', setup: () => ({ visible: confirmVisible, message: confirmMessage, ok: resolveConfirm }) }, { attachTo: document.body, global: { stubs: { Icon: true } } })
+    makeApp({ SaveWatch: vi.fn().mockRejectedValue(new Error('conflict: watches/revenue_cap.yaml changed on disk')) })
+    await flushPromises()
+    await w.find('[data-testid="edit-revenue_cap"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="watch-form"]').trigger('submit')
+    await flushPromises()
+    await w.find('[data-testid="conflict-overwrite"]').trigger('click')
+    await flushPromises()
+    expect(confirmVisible.value).toBe(true)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }))
+    await flushPromises()
+    expect(confirmVisible.value).toBe(false)
+    expect(w.find('[data-testid="watch-form"]').exists()).toBe(true)
+    expect(w.find('[data-testid="conflict-banner"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('writes each parameter hint as one sentence, and a required one must be filled before Save', async () => {
+    makeApp({ GetQuery: vi.fn(async (id: string) => ({ id, parameters: [
+      { name: 'region', type: 'text', required: true },
+      { name: 'days', type: 'integer', required: false, default: '1' },
+    ] })) })
+    const w = await mountView()
+    await w.find('[data-testid="new-watch"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="wf-name"]').setValue('p')
+    await w.find('[data-testid="wf-target"]').setValue('stuck')
+    await flushPromises()
+    const hint = (n: string) => w.find(`#wf-p-${n}-h`).text()
+    expect(hint('region')).toBe('A text with no default: give it a value.')
+    expect(hint('days')).toBe('An integer. Leave it empty to use the default, 1.')
+    expect(w.find('[data-testid="watch-form"]').text()).not.toContain('..')
+    expect((w.find('[data-testid="wf-save"]').element as HTMLButtonElement).disabled).toBe(true)
+    await w.find('[data-testid="wf-param-region"]').setValue('east')
+    expect((w.find('[data-testid="wf-save"]').element as HTMLButtonElement).disabled).toBe(false)
     w.unmount()
   })
 
@@ -182,7 +284,7 @@ describe('WatchesView', () => {
     await w.find('[data-testid="wf-cond"]').setValue('above')
     await w.find('[data-testid="wf-a"]').setValue('1000')
     await flushPromises()
-    expect(w.find('[data-testid="wf-preview"]').text()).toContain('query: stuck')
+    await vi.waitFor(() => expect(w.find('[data-testid="wf-preview"]').text()).toBe('name: cap\nmetric: revenue\nwhen: {"above":"1000"}'))
     await w.find('[data-testid="watch-form"]').trigger('submit')
     await flushPromises()
     expect(app.SaveWatch).toHaveBeenCalledWith({ name: 'cap', description: undefined, question: { metric: 'revenue' }, when: { above: '1000' }, rev: '', overwrite: false })

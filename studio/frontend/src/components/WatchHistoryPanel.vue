@@ -3,16 +3,28 @@
 // outcome, what it read and why. The history is machine-local, keeps the newest
 // 200 checks per watch and never holds result rows; an error's reason is its
 // class only (a database error can quote a value).
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { durationText, readText, statusBadge, whenText } from '../lib/watchText'
 
-defineProps<{ name: string; entries: WatchEntry[]; loading: boolean; error: string }>()
+const props = defineProps<{ name: string; entries: WatchEntry[]; loading: boolean; error: string }>()
 defineEmits<{ close: [] }>()
+
+// Opening (or switching to another watch's history) brings the panel into view and
+// puts focus on its heading, so a keyboard or screen reader user lands on it.
+const heading = ref<HTMLElement | null>(null)
+async function land() {
+  await nextTick()
+  heading.value?.scrollIntoView?.({ block: 'nearest' })
+  heading.value?.focus()
+}
+onMounted(land)
+watch(() => props.name, land)
 </script>
 
 <template>
   <section class="hist" aria-labelledby="wh-h" data-testid="watch-history">
     <div class="hist__head">
-      <h3 id="wh-h" class="hist__title">History of <code>{{ name }}</code></h3>
+      <h3 id="wh-h" ref="heading" class="hist__title" tabindex="-1">History of <code>{{ name }}</code></h3>
       <button class="btn btn-sm" type="button" data-testid="history-close" @click="$emit('close')">Close</button>
     </div>
     <div v-if="loading" class="help">Reading the history…</div>

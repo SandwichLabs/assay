@@ -187,6 +187,9 @@ func saveWatch(ctx context.Context, st watches.Store, d WatchDraft) (string, err
 }
 
 func deleteWatch(ctx context.Context, st watches.Store, name, rev string) error {
+	if rev == "" { // an unconditional delete would remove a file nobody has seen
+		return errors.New("a watch is deleted against the revision that was shown; reload the list and try again")
+	}
 	return watchWriteErr(st.Delete(ctx, name, watches.WithRev(rev)))
 }
 
@@ -288,6 +291,7 @@ func getWatch(ctx context.Context, ws workspace.Workspace, name string) (*WatchD
 			d.WatchSummary = summarizeWatch(w, sum, last)
 		}
 	}
+	d.Rev = src.Rev // the text and its revision were read together; an unreadable file's too
 	return d, nil
 }
 
@@ -304,24 +308,32 @@ func watchHistory(ctx context.Context, ws workspace.Workspace, name string, limi
 	return entries, nil
 }
 
-// canceledReason is the reason of the one result a stopped check leaves
-// behind, which is never recorded.
-const canceledReason = "the check was canceled"
-
 // watchCheckRun turns CheckWatches' (results, error) into what the view gets.
 // A stop is a result with Cancelled set, not an error, so the alerts found
-// before it still show.
+// before it still show. The result a stop cut short is marked Interrupted by
+// the check itself; the view shows it as "stopped" for this window only.
 func watchCheckRun(ctx context.Context, results []workspace.WatchResult, err error) (*WatchCheckRun, error) {
 	if err != nil && ctx.Err() == nil {
 		return nil, err
 	}
-	run := &WatchCheckRun{Results: []workspace.WatchResult{}}
-	for _, r := range results {
-		if err != nil && r.Status == watches.StatusError && r.Reason == canceledReason {
-			continue
-		}
-		run.Results = append(run.Results, r)
+	if results == nil {
+		results = []workspace.WatchResult{}
 	}
-	run.Cancelled = err != nil
-	return run, nil
+	return &WatchCheckRun{Results: results, Cancelled: err != nil}, nil
+}
+
+// watchProgress tells the view how a check is going: "running" when a watch
+// starts, then its status ("ok", "alert", "error", or "stopped" for the one a
+// stop cut short). Only the name and the status are sent, never a row or a reason.
+func watchProgress(emit func(string, ...any)) workspace.WatchProgress {
+	return func(name string, done *workspace.WatchResult) {
+		status := "running"
+		if done != nil {
+			status = string(done.Status)
+			if done.Interrupted {
+				status = "stopped"
+			}
+		}
+		emit("watches:progress", map[string]any{"name": name, "status": status})
+	}
 }

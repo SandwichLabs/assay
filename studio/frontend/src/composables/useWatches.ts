@@ -37,7 +37,7 @@ export function useWatches() {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => { timer = undefined; if (!gone) void reload() }, RELOAD_COALESCE_MS)
     }
-    offs.push(EventsOn('workspace:changed-on-disk', (p?: { kind?: string }) => { if (p?.kind === 'watch') schedule() }))
+    offs.push(EventsOn('workspace:changed-on-disk', (p?: { kind?: string }) => { if (p?.kind === 'watch' || p?.kind === 'watch_history') schedule() }))
     offs.push(EventsOn('watches:checked', schedule))
     offs.push(EventsOn('data:changed', schedule))
   })

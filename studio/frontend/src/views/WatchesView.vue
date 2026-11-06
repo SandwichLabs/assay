@@ -6,7 +6,7 @@
 // A fired watch shows its reason and, for a "rows" check, the first rows it read.
 // State and actions live in useWatches, useWatchChecks, useWatchHistory and
 // useWatchForm; the nav badge is useWatchBadge.
-import { computed, reactive } from 'vue'
+import { computed, nextTick, reactive } from 'vue'
 import Icon from '../components/Icon.vue'
 import WatchRow from '../components/WatchRow.vue'
 import WatchAlerts from '../components/WatchAlerts.vue'
@@ -26,17 +26,28 @@ import { ref } from 'vue'
 const { list, loading, error, reload } = useWatches()
 const history = reactive(useWatchHistory())
 const checks = reactive(useWatchChecks(async () => { await reload(); await history.refresh(); await refreshWatchBadge() }))
-const form = reactive(useWatchForm(async () => { await reload(); await history.refresh() }))
+// A saved watch is a different question: what this window remembers of the old file's check goes.
+const form = reactive(useWatchForm(async (name) => { checks.forget(name); await reload(); await history.refresh() }))
 const readOnly = computed(() => !!workspaceInfo.value?.readOnly)
 const actionError = ref('')
 
 const watches = computed(() => list.value?.watches ?? [])
 // A watch whose newest check fired: this window's result wins over the history's.
-const fired = computed(() => watches.value.filter((w) => !w.error && (checks.results[w.name]?.status ?? w.last_status) === 'alert'))
+const fired = computed(() => watches.value.filter((w) => {
+  const r = checks.results[w.name]
+  return !w.error && (r && !r.interrupted ? r.status : w.last_status) === 'alert'
+}))
 const checkable = computed(() => watches.value.some((w) => !w.error))
 
+// Closing the history gives focus back to the button that opened it.
+async function closeHistory() {
+  const name = history.name
+  history.close()
+  await nextTick()
+  document.querySelector<HTMLElement>(`[data-testid="history-${name}"]`)?.focus()
+}
 function toggleHistory(name: string) {
-  if (history.name === name) history.close()
+  if (history.name === name) void closeHistory()
   else void history.open(name)
 }
 
@@ -75,9 +86,11 @@ async function remove(w: WatchSummary) {
       </div>
     </header>
 
-    <div class="live" role="status" aria-live="polite" data-testid="watch-run-status">
-      <template v-if="checks.busy">Checking {{ checks.checkingAll ? 'all watches' : 'a watch' }}… {{ checks.elapsed }} s</template>
-      <template v-else-if="checks.cancelled">Stopped. The watches checked before it keep their results.</template>
+    <!-- The live region changes twice per run (started, finished); the seconds counter beside it is not announced. -->
+    <div class="live">
+      <span role="status" aria-live="polite" data-testid="watch-run-status">{{ checks.busy ? `Checking ${checks.checkingAll ? 'all watches' : 'a watch'}…` : checks.summary }}</span>
+      <span v-if="checks.busy" class="live__elapsed" data-testid="watch-elapsed">{{ checks.elapsed }} s</span>
+      <span v-else-if="checks.cancelled" data-testid="watch-stopped-note">The watches checked before it keep their results.</span>
     </div>
     <div v-if="checks.error" class="note attn" role="alert" data-testid="watch-check-error"><Icon name="alert" :size="16" /><span>{{ checks.error }}</span></div>
     <div v-if="actionError" class="note attn" role="alert" data-testid="watch-action-error"><Icon name="alert" :size="16" /><span>{{ actionError }}</span></div>
@@ -95,12 +108,12 @@ async function remove(w: WatchSummary) {
       <WatchAlerts v-if="fired.length" :alerts="fired" :results="checks.results" />
       <ul class="watches__list" aria-label="Watches" data-testid="watch-list">
         <WatchRow
-          v-for="w in watches" :key="w.name" :watch="w" :result="checks.results[w.name]" :checking="checks.isChecking(w.name)" :busy="checks.busy"
+          v-for="w in watches" :key="w.name" :watch="w" :result="checks.results[w.name]" :phase="checks.phase(w.name)" :busy="checks.busy"
           :read-only="readOnly" :history-open="history.name === w.name"
           @check="checks.check([w.name])" @edit="form.openEdit(w.name)" @history="toggleHistory(w.name)" @remove="remove(w)"
         />
       </ul>
-      <WatchHistoryPanel v-if="history.name" :name="history.name" :entries="history.entries" :loading="history.loading" :error="history.error" @close="history.close()" />
+      <WatchHistoryPanel v-if="history.name" :name="history.name" :entries="history.entries" :loading="history.loading" :error="history.error" @close="closeHistory()" />
     </template>
 
     <WatchForm :form="form" />
@@ -115,5 +128,5 @@ async function remove(w: WatchSummary) {
 .watches__list { list-style: none; margin: 0; padding: 0; border-top: var(--sh-border-thin); }
 .watches__empty { max-width: 640px; margin: var(--sh-space-8) auto 0; color: var(--sh-graphite); gap: var(--sh-space-3); }
 .watches__empty h3 { color: var(--sh-ink); margin: 0; }
-.live { min-height: 1.4em; font-size: var(--sh-fs-sm); color: var(--sh-graphite); }
+.live { min-height: 1.4em; font-size: var(--sh-fs-sm); color: var(--sh-graphite); display: flex; gap: var(--sh-space-3); flex-wrap: wrap; }
 </style>

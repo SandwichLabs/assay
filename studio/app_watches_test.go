@@ -13,6 +13,7 @@ import (
 	"github.com/SandwichLabs/slaw/internal/bundle"
 	"github.com/SandwichLabs/slaw/internal/queries"
 	"github.com/SandwichLabs/slaw/internal/watches"
+	"github.com/SandwichLabs/slaw/internal/workspace"
 )
 
 func addQuery(t *testing.T, app *App, id, sql string, params ...queries.Param) {
@@ -213,8 +214,11 @@ func TestCheckWatches_StopKeepsWhatWasChecked(t *testing.T) {
 	case o := <-done:
 		require.NoError(t, o.err)
 		assert.True(t, o.run.Cancelled)
-		require.Len(t, o.run.Results, 1, "the interrupted watch is left out")
+		require.Len(t, o.run.Results, 2)
 		assert.Equal(t, "a_fast", o.run.Results[0].Watch)
+		assert.False(t, o.run.Results[0].Interrupted)
+		assert.Equal(t, "b_slow", o.run.Results[1].Watch)
+		assert.True(t, o.run.Results[1].Interrupted, "the cut-short watch is marked, not matched by its text")
 	case <-time.After(20 * time.Second):
 		t.Fatal("Stop did not end the check")
 	}
@@ -244,4 +248,95 @@ func TestExportBundle_OffersAndWritesWatches(t *testing.T) {
 	res, err := app.ExportBundle(BundleExportRequest{Path: path, Selection: bundle.Selection{Watches: []string{"stuck"}}})
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Watches)
+}
+
+func TestDeleteWatch_RefusesNoRevision(t *testing.T) {
+	app := appWithWatches(t)
+	_, err := app.SaveWatch(draftQuery("stuck", "pending_orders", WatchWhen{Rows: "any"}))
+	require.NoError(t, err)
+	err = app.DeleteWatch("stuck", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "revision")
+	_, err = app.GetWatch("stuck")
+	require.NoError(t, err, "the file is still there")
+}
+
+func TestUnreadableWatch_IsReplacedAndDeletedAgainstItsRevision(t *testing.T) {
+	app := appWithWatches(t)
+	path := filepath.Join(app.ws.Root(), "watches", "broken.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("question: {query: order_count}\nwen: {above: 1}\n"), 0o600))
+
+	l, err := app.ListWatches()
+	require.NoError(t, err)
+	require.Len(t, l.Watches, 1)
+	require.NotEmpty(t, l.Watches[0].Error)
+	require.NotEmpty(t, l.Watches[0].Rev, "the list carries the revision of the bytes it could not read")
+	d, err := app.GetWatch("broken")
+	require.NoError(t, err)
+	assert.NotEmpty(t, d.Error)
+	assert.Equal(t, l.Watches[0].Rev, d.Rev)
+	assert.Contains(t, d.Text, "wen")
+
+	// A blind replace, or one against another revision, is refused as a conflict.
+	fix := draftQuery("broken", "order_count", WatchWhen{Above: "1"})
+	_, err = app.SaveWatch(fix)
+	require.Error(t, err)
+	fix.Rev = "stale"
+	_, err = app.SaveWatch(fix)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not be read")
+	// Changed meanwhile: the shown revision no longer matches.
+	require.NoError(t, os.WriteFile(path, []byte("question: {query: order_count}\nwen: {above: 2}\n"), 0o600))
+	fix.Rev = d.Rev
+	_, err = app.SaveWatch(fix)
+	require.Error(t, err, "a replace is a compare-and-write on the revision that was shown")
+	require.Error(t, app.DeleteWatch("broken", d.Rev))
+
+	d, err = app.GetWatch("broken")
+	require.NoError(t, err)
+	fix.Rev = d.Rev
+	_, err = app.SaveWatch(fix)
+	require.NoError(t, err)
+	d, err = app.GetWatch("broken")
+	require.NoError(t, err)
+	assert.Empty(t, d.Error)
+
+	require.NoError(t, os.WriteFile(path, []byte("nope: ["), 0o600))
+	d, err = app.GetWatch("broken")
+	require.NoError(t, err)
+	require.NoError(t, app.DeleteWatch("broken", d.Rev))
+}
+
+func TestCheckWatches_AWriteIsRefusedEvenOnAWritableConnection(t *testing.T) {
+	app := appWithWatches(t)
+	addQuery(t, app, "sneaky_insert", "INSERT INTO orders VALUES (99, 'mallory', 'pending')")
+	_, err := app.SaveWatch(draftQuery("sneaky", "sneaky_insert", WatchWhen{Rows: "any"}))
+	require.NoError(t, err)
+	run, err := app.CheckWatches([]string{"sneaky"})
+	require.NoError(t, err)
+	require.Len(t, run.Results, 1)
+	assert.Equal(t, "error", string(run.Results[0].Status))
+	assert.Contains(t, run.Results[0].Reason, "refused", "the tightest tier refuses a write whatever the connection allows")
+	var n int
+	require.NoError(t, app.sess.DB().QueryRow("SELECT count(*) FROM orders").Scan(&n))
+	assert.Equal(t, 3, n, "nothing was written")
+}
+
+func TestWatchProgress_SendsOnlyNameAndStatus(t *testing.T) {
+	var got []map[string]any
+	emit := func(event string, data ...any) {
+		require.Equal(t, "watches:progress", event)
+		require.Len(t, data, 1)
+		m, ok := data[0].(map[string]any)
+		require.True(t, ok)
+		got = append(got, m)
+	}
+	p := watchProgress(emit)
+	p("a", nil)
+	p("a", &workspace.WatchResult{Entry: watches.Entry{Status: watches.StatusAlert, Reason: "secret customer"}, Sample: &workspace.WatchSample{Rows: [][]string{{"x"}}}})
+	p("b", &workspace.WatchResult{Entry: watches.Entry{Status: watches.StatusError}, Interrupted: true})
+	assert.Equal(t, []map[string]any{
+		{"name": "a", "status": "running"}, {"name": "a", "status": "alert"}, {"name": "b", "status": "stopped"},
+	}, got)
 }

@@ -196,11 +196,19 @@ func TestStore_AnUnreadableFileIsListedWithItsError(t *testing.T) {
 		assert.ErrorIs(t, err, ErrNotFound)
 
 		// It is not replaced by a save unless the caller says so.
+		assert.Equal(t, src.Rev, byName["broken"].Rev, "the listing's stub carries the revision of the bytes it could not read")
+		assert.Empty(t, byName["Upper"].Rev, "a name that is not valid has no readable file to pin")
 		fix := &Watch{Name: "broken", Question: Question{Query: "q"}, When: Condition{Rows: RowsAny}}
-		fix.Rev = src.Rev
-		err = fx.store.Put(ctx, fix)
+		err = fx.store.Put(ctx, fix) // no revision: a blind write
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "could not be read")
+		fix.Rev = "not-the-revision"
+		require.Error(t, fx.store.Put(ctx, fix), "a revision that is not the file's is not enough")
+		// The revision the listing showed lets it be replaced, as a compare-and-write.
+		fix.Rev = byName["broken"].Rev
+		require.NoError(t, fx.store.Put(ctx, fix))
+		fx.plant("broken", []byte("question: {query: q}\n"))
+		fix.Rev = src.Rev
 		require.NoError(t, fx.store.Put(ctx, fix, WithOverwrite()))
 		_, err = fx.store.Get(ctx, "broken")
 		assert.NoError(t, err)

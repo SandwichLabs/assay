@@ -83,19 +83,54 @@ describe('useWatchForm', () => {
     expect(f.canSave.value).toBe(true)
   })
 
-  it('previews through Go and shows its refusal as the reason, with a placeholder name while empty', async () => {
+  it('previews what the draft says, through Go, and shows its refusal as the reason', async () => {
     vi.useFakeTimers()
     try {
-      const preview = vi.fn().mockResolvedValueOnce('yaml\n').mockRejectedValueOnce(new Error('failed to x: a threshold must be a plain decimal number'))
+      // The mock answers from the draft it is given, so a stale or ignored draft cannot pass.
+      const preview = vi.fn(async (d: WatchDraft) => {
+        if (d.when.above === '1e3') throw new Error('failed to x: a threshold must be a plain decimal number')
+        return `name: ${d.name}\ntarget: ${d.question.query ?? d.question.metric}\nwhen: ${JSON.stringify(d.when)}\n`
+      })
       makeApp({ PreviewWatch: preview })
       const f = useWatchForm(vi.fn())
       await f.openNew()
       expect(preview).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'new_watch' }))
-      expect(f.preview.value).toBe('yaml\n')
+      expect(f.preview.value).toContain('name: new_watch')
+      f.name.value = 'cap'
       f.pickTarget('order_count')
+      f.cond.value = 'above'
+      f.a.value = '100'
+      await vi.advanceTimersByTimeAsync(300)
+      expect(f.preview.value).toBe('name: cap\ntarget: order_count\nwhen: {"above":"100"}\n')
+      f.a.value = '1e3'
       await vi.advanceTimersByTimeAsync(300)
       expect(f.previewError.value).toBe('a threshold must be a plain decimal number')
       expect(f.preview.value).toBe('')
+      f.a.value = '7'
+      await vi.advanceTimersByTimeAsync(300)
+      expect(f.previewError.value).toBe('')
+      expect(f.preview.value).toContain('"above":"7"')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a slow preview of an older draft never replaces the newer one', async () => {
+    vi.useFakeTimers()
+    try {
+      const resolvers: Array<(t: string) => void> = []
+      makeApp({ PreviewWatch: vi.fn(() => new Promise<string>((r) => { resolvers.push(r) })) })
+      const f = useWatchForm(vi.fn())
+      const opened = f.openNew()
+      await vi.advanceTimersByTimeAsync(0)
+      await opened
+      f.name.value = 'a'
+      await vi.advanceTimersByTimeAsync(300)
+      resolvers[resolvers.length - 1]('newest')
+      await vi.advanceTimersByTimeAsync(0)
+      resolvers[0]('oldest')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(f.preview.value).toBe('newest')
     } finally {
       vi.useRealTimers()
     }
@@ -187,13 +222,69 @@ describe('useWatchForm', () => {
     expect(saved).toHaveBeenCalled()
   })
 
-  it('an unreadable file opens empty and saving replaces it', async () => {
-    const app = makeApp({ GetWatch: vi.fn(async () => detail({ error: 'line 3: unknown field', question: {}, when: {} })) })
+  it('an unreadable file opens empty and saving replaces it against the revision shown, not blindly', async () => {
+    const app = makeApp({ GetWatch: vi.fn(async () => detail({ rev: 'broken-rev', error: 'line 3: unknown field', question: {}, when: {} })) })
     const f = useWatchForm(vi.fn())
     await f.openEdit('stuck')
     expect(f.replacing.value).toContain('unknown field')
+    expect(f.canSave.value).toBe(false) // no question picked yet
+    f.pickTarget('order_count')
+    expect(f.canSave.value).toBe(true)
+    await f.save()
+    expect(app.SaveWatch).toHaveBeenCalledWith(expect.objectContaining({ name: 'stuck', rev: 'broken-rev', overwrite: false }))
+  })
+
+  it('a changed unreadable file is the conflict banner, not a silent overwrite', async () => {
+    makeApp({
+      GetWatch: vi.fn(async () => detail({ rev: 'broken-rev', error: 'line 3: unknown field', question: {}, when: {} })),
+      SaveWatch: vi.fn().mockRejectedValue(new Error('conflict: watches/stuck.yaml changed on disk')),
+    })
+    const f = useWatchForm(vi.fn())
+    await f.openEdit('stuck')
     f.pickTarget('order_count')
     await f.save()
-    expect(app.SaveWatch).toHaveBeenCalledWith(expect.objectContaining({ name: 'stuck', overwrite: true }))
+    expect(f.conflict.conflict.value).not.toBeNull()
+    expect(f.open.value).toBe(true)
+  })
+
+  it('a watch whose saved query is gone keeps the name, flags it missing and refuses Save until another is picked', async () => {
+    const app = makeApp({ GetWatch: vi.fn(async () => detail({ question: { query: 'no_such_query' } })) })
+    const f = useWatchForm(vi.fn())
+    await f.openEdit('stuck')
+    expect(f.target.value).toBe('no_such_query')
+    expect(f.targetMissing.value).toBe(true)
+    expect(f.canSave.value).toBe(false)
+    await f.save()
+    expect(app.SaveWatch).not.toHaveBeenCalled()
+    f.pickTarget('order_count')
+    expect(f.targetMissing.value).toBe(false)
+    expect(f.canSave.value).toBe(true)
+  })
+
+  it('a metric that is gone, or cannot be read, is missing too', async () => {
+    makeApp({ GetWatch: vi.fn(async () => detail({ question: { metric: 'bad' }, when: { below: '1' } })) })
+    const f = useWatchForm(vi.fn())
+    await f.openEdit('stuck')
+    expect(f.kind.value).toBe('metric')
+    expect(f.targetMissing.value).toBe(true)
+    expect(f.canSave.value).toBe(false)
+    f.pickTarget('revenue')
+    expect(f.canSave.value).toBe(true)
+  })
+
+  it('a declared parameter with no default must be given a value', async () => {
+    makeApp({ GetQuery: vi.fn(async (id: string) => ({ id, parameters: [{ name: 'region', type: 'text', required: true }, { name: 'days', type: 'integer', required: false, default: '1' }] })) })
+    const f = useWatchForm(vi.fn())
+    await f.openNew()
+    f.name.value = 'w'
+    f.pickTarget('stuck_orders')
+    await vi.waitFor(() => expect(f.paramNames.value).toEqual(['region', 'days']))
+    expect(f.requiredParam('region')).toBe(true)
+    expect(f.requiredParam('days')).toBe(false)
+    expect(f.canSave.value).toBe(false)
+    f.setParam('region', ' ')
+    expect(f.canSave.value).toBe(false)
+    f.setParam('region', 'east')
+    expect(f.canSave.value).toBe(true)
   })
 })

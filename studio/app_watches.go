@@ -66,7 +66,7 @@ func (a *App) CheckWatches(names []string) (*WatchCheckRun, error) {
 	ctx, end := a.runs.begin(a.ctxOrBackground(), runKeyWatches)
 	defer end()
 	before := session.StatusSnapshot(h.sess)
-	results, err := workspace.CheckWatches(ctx, h.ws, names, h, time.Now())
+	results, err := workspace.CheckWatchesProgress(ctx, h.ws, names, h, time.Now(), watchProgress(a.emitEvent))
 	a.afterReadOnlyRun(h.sess, before)
 	a.emitEvent("watches:checked")
 	return watchCheckRun(ctx, results, err)

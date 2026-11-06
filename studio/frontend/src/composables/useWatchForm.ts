@@ -31,7 +31,8 @@ export function useWatchForm(onSaved: (name: string) => void | Promise<void>) {
   const a = ref('')
   const b = ref('')
   const rev = ref('')
-  // The file on disk could not be read: the form starts empty and saving replaces it.
+  // The file on disk could not be read: the form starts empty and saving replaces it, against
+  // the revision of those bytes (a file changed since is the usual conflict).
   const replacing = ref('')
   const queries = ref<QuerySummary[]>([])
   const metrics = ref<DefinitionSummary[]>([])
@@ -70,9 +71,21 @@ export function useWatchForm(onSaved: (name: string) => void | Promise<void>) {
   })
   const specOf = (n: string) => specs.value.find((p) => p.name === n)
 
+  /** The saved query or metric the file names is not in the workspace (deleted, renamed, or unreadable). */
+  const targetMissing = computed(() => {
+    if (loading.value || !target.value) return false
+    return kind.value === 'query' ? !queries.value.some((q) => q.id === target.value) : !metrics.value.some((m) => m.name === target.value)
+  })
+  /** A declared parameter with no default must be given a value: the check would refuse it. */
+  const requiredParam = (n: string) => {
+    const p = specOf(n)
+    return !!p && p.required && !p.default
+  }
+  const paramMissing = computed(() => paramNames.value.some((n) => requiredParam(n) && !(params.value[n] ?? '').trim()))
+
   // Only the fields that cannot be empty; everything else is Go's to refuse.
   const canSave = computed(() => {
-    if (!name.value.trim() || !target.value) return false
+    if (!name.value.trim() || !target.value || targetMissing.value || paramMissing.value) return false
     if (cond.value === 'above' || cond.value === 'below') return a.value.trim() !== ''
     if (cond.value === 'outside') return a.value.trim() !== '' && b.value.trim() !== ''
     return true
@@ -191,7 +204,7 @@ export function useWatchForm(onSaved: (name: string) => void | Promise<void>) {
     busy.value = true
     error.value = ''
     try {
-      const saved = await App.SaveWatch({ ...draft.value, overwrite: overwrite || !!replacing.value })
+      const saved = await App.SaveWatch({ ...draft.value, overwrite })
       rev.value = saved
       conflict.clear()
       open.value = false
@@ -235,7 +248,7 @@ export function useWatchForm(onSaved: (name: string) => void | Promise<void>) {
 
   return {
     open, mode, loading, busy, name, description, kind, target, params, cond, a, b, rev, replacing,
-    queries, metrics, specs, paramNames, specOf, preview, previewError, error, conflict, canSave, draft,
+    queries, metrics, specs, paramNames, specOf, requiredParam, targetMissing, preview, previewError, error, conflict, canSave, draft,
     openNew, openEdit, close, save, pickKind, pickTarget, setParam, reloadFromDisk, keepMine,
   }
 }

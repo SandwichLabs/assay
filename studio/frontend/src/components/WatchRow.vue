@@ -9,7 +9,9 @@ import { readText, statusBadge, statusLabel, whenText } from '../lib/watchText'
 const props = defineProps<{
   watch: WatchSummary
   result?: WatchResult
-  checking: boolean
+  // Where it is in the check in flight: "queued", "running", a finished status as it came
+  // in (the reason arrives with the whole result), or '' when it is not part of a run.
+  phase: string
   // A check is running (the others' Check buttons wait for it).
   busy: boolean
   readOnly: boolean
@@ -17,14 +19,30 @@ const props = defineProps<{
 }>()
 defineEmits<{ check: []; edit: []; history: []; remove: [] }>()
 
-const status = computed(() => (props.watch.error ? 'error' : props.result?.status ?? props.watch.last_status))
-const reason = computed(() => props.watch.error || props.result?.reason || props.watch.last?.reason || '')
-const read = computed(() => (props.result ? readText(props.result) : props.watch.last ? readText(props.watch.last) : ''))
-const checkedAt = computed(() => whenText(props.result?.at ?? props.watch.last_checked))
+// A result a stop cut short says nothing about the watch: it shows as "stopped", this window only.
+const stopped = computed(() => !!props.result?.interrupted)
+const live = computed(() => (props.phase === 'running' || props.phase === 'queued' ? props.phase : ''))
+const status = computed(() => {
+  if (props.watch.error) return 'error'
+  if (live.value) return live.value
+  if (props.phase) return props.phase // finished in the run in flight
+  if (stopped.value) return 'stopped'
+  return props.result?.status ?? props.watch.last_status
+})
+const reason = computed(() => {
+  if (props.watch.error) return props.watch.error
+  if (live.value || props.phase) return ''
+  if (stopped.value) return 'Stopped before it finished. This check was not recorded.'
+  return props.result?.reason || props.watch.last?.reason || ''
+})
+// What the last check read: this window's result unless it was cut short.
+const last = computed(() => (props.result && !stopped.value ? props.result : props.watch.last))
+const read = computed(() => (last.value ? readText(last.value) : ''))
+const checkedAt = computed(() => whenText((props.result && !stopped.value ? props.result.at : undefined) ?? props.watch.last_checked))
 </script>
 
 <template>
-  <li class="wrow" :class="{ 'wrow--alert': status === 'alert' && !watch.error, 'wrow--error': status === 'error' }" :data-testid="`watch-${watch.name}`">
+  <li class="wrow" :class="{ 'wrow--alert': status === 'alert' && !watch.error && !phase, 'wrow--error': status === 'error' }" :data-testid="`watch-${watch.name}`">
     <div class="wrow__main">
       <b class="wrow__name">{{ watch.name }}</b>
       <span v-if="watch.error" class="wrow__q">This file cannot be read</span>
@@ -32,9 +50,8 @@ const checkedAt = computed(() => whenText(props.result?.at ?? props.watch.last_c
       <span v-if="watch.description" class="wrow__desc">{{ watch.description }}</span>
     </div>
     <div class="wrow__status" :data-testid="`watch-status-${watch.name}`">
-      <span v-if="checking" class="badge badge--info" role="status"><span class="dot"></span>checking…</span>
-      <span v-else class="badge" :class="statusBadge(status)"><span class="dot"></span>{{ statusLabel(status) }}</span>
-      <span v-if="reason && !checking" class="wrow__reason" :data-testid="`watch-reason-${watch.name}`">{{ reason }}</span>
+      <span class="badge" :class="statusBadge(status)"><span class="dot"></span>{{ status === 'running' ? 'checking…' : statusLabel(status) }}</span>
+      <span v-if="reason" class="wrow__reason" :data-testid="`watch-reason-${watch.name}`">{{ reason }}</span>
       <span class="wrow__meta">
         <template v-if="!watch.error">Checked {{ checkedAt }}<template v-if="read"> · read {{ read }}</template> · </template>last fired {{ whenText(watch.last_fired) }}
       </span>

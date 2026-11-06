@@ -22,10 +22,13 @@ const CONDITIONS: Array<{ value: string; label: string }> = [
   { value: 'below', label: 'The value is below' },
   { value: 'outside', label: 'The value is outside' },
 ]
+// One whole sentence per parameter, so nothing is glued to it.
 const paramHint = (n: string) => {
   const p = props.form.specOf(n)
-  if (!p) return 'Not declared by this query; the check will refuse it.'
-  return `${p.type}${p.required && !p.default ? ', required' : ''}${p.default ? `, default ${p.default}` : ''}`
+  if (!p) return 'This query does not declare it, so a check will refuse it. Clear it.'
+  const a = /^[aeiou]/.test(p.type) ? 'An' : 'A'
+  if (props.form.requiredParam(n)) return `${a} ${p.type} with no default: give it a value.`
+  return p.default ? `${a} ${p.type}. Leave it empty to use the default, ${p.default}.` : `${a} ${p.type}. Leave it empty to leave it unset.`
 }
 </script>
 
@@ -72,6 +75,7 @@ const paramHint = (n: string) => {
             <label for="wf-target">{{ form.kind === 'query' ? 'Saved query' : 'Metric' }}</label>
             <select id="wf-target" class="field-input" :value="form.target" data-testid="wf-target" @change="form.pickTarget(($event.target as HTMLSelectElement).value)">
               <option value="" disabled>Choose…</option>
+              <option v-if="form.targetMissing" :value="form.target" disabled>{{ form.target }} (missing)</option>
               <template v-if="form.kind === 'query'">
                 <option v-for="q in form.queries" :key="q.id" :value="q.id">{{ q.title || q.id }} ({{ q.id }})</option>
               </template>
@@ -79,16 +83,19 @@ const paramHint = (n: string) => {
                 <option v-for="m in form.metrics" :key="m.name" :value="m.name">{{ m.title || m.name }}</option>
               </template>
             </select>
-            <div v-if="form.kind === 'metric'" class="help">A metric is asked at its total, with no breakdown.</div>
+            <div v-if="form.targetMissing" class="help" role="alert" data-testid="wf-target-missing">
+              {{ form.kind === 'query' ? 'The saved query' : 'The metric' }} <code>{{ form.target }}</code> is not in this workspace (it was deleted or renamed, or its file cannot be read). Pick another to save.
+            </div>
+            <div v-else-if="form.kind === 'metric'" class="help">A metric is asked at its total, with no breakdown.</div>
             <div v-else-if="!form.queries.length" class="help">There are no saved queries yet. Save one from the Queries view first.</div>
           </div>
           <div v-for="n in form.paramNames" :key="n" class="field">
             <label :for="`wf-p-${n}`">Parameter <code>${{ n }}</code></label>
             <input
-              :id="`wf-p-${n}`" class="field-input" type="text" autocomplete="off" :value="form.params[n] ?? ''" :aria-describedby="`wf-p-${n}-h`"
+              :id="`wf-p-${n}`" class="field-input" type="text" autocomplete="off" :required="form.requiredParam(n)" :value="form.params[n] ?? ''" :aria-describedby="`wf-p-${n}-h`"
               :placeholder="form.specOf(n)?.default ?? ''" :data-testid="`wf-param-${n}`" @input="form.setParam(n, ($event.target as HTMLInputElement).value)"
             />
-            <div :id="`wf-p-${n}-h`" class="help">{{ paramHint(n) }}. Left empty, the default is used.</div>
+            <div :id="`wf-p-${n}-h`" class="help">{{ paramHint(n) }}</div>
           </div>
         </fieldset>
 

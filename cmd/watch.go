@@ -293,7 +293,11 @@ func printWatchReport(out io.Writer, results []workspace.WatchResult) {
 		default:
 			errs++
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", r.Status, esc(r.Watch), esc(r.Reason))
+		status := string(r.Status)
+		if r.Interrupted {
+			status = "stopped" // cut short by Ctrl-C and not recorded; still counted as an error below
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", status, esc(r.Watch), esc(r.Reason))
 	}
 	_ = tw.Flush()
 	fmt.Fprintf(out, "\n%d ok, %d alert%s, %d error%s\n", ok, alert, plural(alert), errs, plural(errs))

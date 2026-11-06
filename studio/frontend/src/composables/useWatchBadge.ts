@@ -35,7 +35,7 @@ export function startWatchBadge(): () => void {
   const offs = [
     EventsOn('watches:checked', refreshSoon),
     EventsOn('data:changed', refreshSoon),
-    EventsOn('workspace:changed-on-disk', (p?: { kind?: string }) => { if (p?.kind === 'watch') refreshSoon() }),
+    EventsOn('workspace:changed-on-disk', (p?: { kind?: string }) => { if (p?.kind === 'watch' || p?.kind === 'watch_history') refreshSoon() }),
   ]
   return () => { if (timer) clearTimeout(timer); for (const off of offs) off() }
 }

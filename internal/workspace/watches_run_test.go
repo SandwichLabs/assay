@@ -420,6 +420,26 @@ func TestCheckWatches_EachStatementIsBounded(t *testing.T) {
 	assert.Contains(t, res[0].Reason, "did not finish within")
 }
 
+func TestCheckWatchesProgress_ReportsEachStartAndEnd(t *testing.T) {
+	ws := watchWorkspace(t)
+	putWatch(t, ws, "a_one", "question: {query: stuck}\nwhen: {rows: any}\n")
+	putWatch(t, ws, "b_two", "question: {query: stuck}\nwhen: {rows: none}\n")
+	r := &scriptedRunner{onRun: func(context.Context, string, string, map[string]any, int) (*engine.ResultSet, bool, error) {
+		return rowsOf(1), false, nil
+	}}
+	var seen []string
+	res, err := CheckWatchesProgress(context.Background(), ws, nil, r, time.Now(), func(name string, done *WatchResult) {
+		if done == nil {
+			seen = append(seen, name+":start")
+			return
+		}
+		seen = append(seen, name+":"+string(done.Status))
+	})
+	require.NoError(t, err)
+	require.Len(t, res, 2)
+	assert.Equal(t, []string{"a_one:start", "a_one:alert", "b_two:start", "b_two:ok"}, seen)
+}
+
 func TestCheckWatches_CancelStopsAndRecordsNothingForTheInterruptedWatch(t *testing.T) {
 	ws := watchWorkspace(t)
 	putWatch(t, ws, "a_done", "question: {query: stuck}\nwhen: {rows: any}\n")
@@ -444,6 +464,8 @@ func TestCheckWatches_CancelStopsAndRecordsNothingForTheInterruptedWatch(t *test
 	assert.Equal(t, watches.StatusOK, res[0].Status)
 	assert.Equal(t, watches.StatusError, res[1].Status)
 	assert.Contains(t, res[1].Reason, "canceled")
+	assert.False(t, res[0].Interrupted, "a recorded result is not interrupted")
+	assert.True(t, res[1].Interrupted, "the cut-short result is marked, so no surface matches its text")
 	all, herr := ws.WatchHistory().Entries(context.Background(), "")
 	require.NoError(t, herr)
 	require.Len(t, all, 1, "an interrupted check says nothing about the watch")

@@ -744,7 +744,7 @@ interface WatchDetail extends WatchSummary { text: string }
 // check. It exists in the result of the check only; nothing stores it.
 interface WatchSample { columns: string[]; rows: string[][]; capped?: boolean }
 // WatchResult mirrors workspace.WatchResult: a check's outcome plus the sample.
-interface WatchResult extends WatchEntry { question: string; condition: string; sample?: WatchSample; history_error?: string }
+interface WatchResult extends WatchEntry { question: string; condition: string; sample?: WatchSample; history_error?: string; interrupted?: boolean }
 interface WatchCheckRun { results: WatchResult[]; cancelled?: boolean }
 
 interface PageSummary {

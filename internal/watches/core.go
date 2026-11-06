@@ -99,7 +99,13 @@ func (c *core) listOne(fn fileName, stem string) (Watch, bool) {
 			return Watch{}, false // vanished between the listing and the read
 		}
 		c.logger.Warn("unreadable watch file", "name", stem, "error", err)
-		return stub(stem, errorText(err)), true
+		st := stub(stem, errorText(err))
+		// The stub carries the revision of the bytes that could not be read, so a
+		// surface can replace or delete exactly that file and nothing newer.
+		if _, rev, rerr := c.b.read(rel(stem)); rerr == nil {
+			st.Rev = rev
+		}
+		return st, true
 	}
 	return *w, true
 }
@@ -159,13 +165,18 @@ func (c *core) checkCaseVariant(name string) error {
 	return nil
 }
 
-// refuseUnreadable keeps a store from replacing a file it could not parse.
-func (c *core) refuseUnreadable(name string, w writeOpts) error {
+// refuseUnreadable keeps a store from replacing a file it could not parse. A
+// caller that names the revision of that very file (the one a listing showed
+// with its error) may replace it: the write is still compare-and-write.
+func (c *core) refuseUnreadable(name string, w writeOpts, expect string) error {
 	if w.overwrite {
 		return nil
 	}
-	cur, _, err := c.b.read(rel(name))
+	cur, curRev, err := c.b.read(rel(name))
 	if err != nil {
+		return nil
+	}
+	if expect != "" && expect == curRev {
 		return nil
 	}
 	if _, derr := Decode(name, cur); derr != nil {
@@ -184,7 +195,7 @@ func (c *core) Put(_ context.Context, w *Watch, opts ...WriteOption) error {
 	if err := c.checkCaseVariant(w.Name); err != nil {
 		return fmt.Errorf("failed to write watch %q: %w", w.Name, err)
 	}
-	if err := c.refuseUnreadable(w.Name, wo); err != nil {
+	if err := c.refuseUnreadable(w.Name, wo, wo.expect(w.Rev)); err != nil {
 		return err
 	}
 	rev, err := c.b.write(rel(w.Name), data, wo.expect(w.Rev), wo.overwrite)
@@ -204,7 +215,7 @@ func (c *core) PutSource(_ context.Context, name string, data []byte, opts ...Wr
 	if err := c.checkCaseVariant(name); err != nil {
 		return "", fmt.Errorf("failed to write watch %q: %w", name, err)
 	}
-	if err := c.refuseUnreadable(name, wo); err != nil {
+	if err := c.refuseUnreadable(name, wo, wo.expect("")); err != nil {
 		return "", err
 	}
 	rev, err := c.b.write(rel(name), data, wo.expect(""), wo.overwrite)

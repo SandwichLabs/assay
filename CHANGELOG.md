@@ -18,6 +18,7 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
   - Each watch has a history panel, and the nav entry shows a badge counting the watches whose newest check fired.
   - New watch and Edit: a form that picks a saved query (with its declared parameters) or a metric and a condition, previews the file and saves it with a conflict check. A watch file changed outside Studio appears in the view.
   - The Export dialog offers watches.
+  - Rows show `queued`, `checking…` and their result live while Check all runs; a stopped check shows as `stopped` and is never recorded; a check run by `slaw watch check` refreshes a running Studio's list and badge.
 
 ## [0.6.4] - 2026-11-06
 

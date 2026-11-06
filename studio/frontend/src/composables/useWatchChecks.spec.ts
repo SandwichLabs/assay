@@ -3,6 +3,13 @@
 // cancelled rather than failed, and runs one at a time.
 type MockApp = Partial<Record<keyof AppApi, any>>
 import { describe, expect, it, vi } from 'vitest'
+
+const handlers = vi.hoisted(() => ({} as Record<string, (p?: unknown) => void>))
+const offs = vi.hoisted(() => ({ n: 0 }))
+vi.mock('../wailsjs/runtime/runtime', () => ({
+  EventsOn: (name: string, cb: (p?: unknown) => void) => { handlers[name] = cb; return () => { offs.n += 1 } },
+}))
+
 import { useWatchChecks } from './useWatchChecks'
 
 const res = (watch: string, status: WatchResult['status'], over: Partial<WatchResult> = {}): WatchResult => ({
@@ -77,14 +84,54 @@ describe('useWatchChecks', () => {
     expect(c.results.value.a.status).toBe('ok')
   })
 
-  it('a failed check reports its error; a cancelled error is neutral', async () => {
-    install({ CheckWatches: vi.fn().mockRejectedValueOnce(new Error('watch "nope" not found')).mockRejectedValueOnce(new Error('cancelled')) })
+  it('a failed check reports its error and clears it on the next run', async () => {
+    install({ CheckWatches: vi.fn().mockRejectedValueOnce(new Error('watch "nope" not found')).mockResolvedValueOnce({ results: [] }) })
     const c = useWatchChecks()
     await c.check(['nope'])
     expect(c.error.value).toBe('watch "nope" not found')
+    expect(c.busy.value).toBe(false)
     await c.check()
     expect(c.error.value).toBe('')
-    expect(c.cancelled.value).toBe(true)
+  })
+
+  it('rows read queued until their progress arrives, then running, then the status they finished with', async () => {
+    ;(window as any).runtime = {}
+    let finish: (v: WatchCheckRun) => void = () => {}
+    install({ CheckWatches: () => new Promise<WatchCheckRun>((r) => { finish = r }) })
+    offs.n = 0
+    const c = useWatchChecks()
+    const run = c.check()
+    expect(c.phase('a')).toBe('queued')
+    handlers['watches:progress']({ name: 'a', status: 'running' })
+    expect(c.phase('a')).toBe('running')
+    expect(c.phase('b')).toBe('queued')
+    handlers['watches:progress']({ name: 'a', status: 'alert' })
+    expect(c.phase('a')).toBe('alert')
+    finish({ results: [res('a', 'alert'), res('b', 'ok')] })
+    await run
+    expect(c.phase('a')).toBe('')
+    expect(c.summary.value).toBe('Checked 2 watches: 1 fired.')
+    expect(offs.n).toBe(1)
+    delete (window as any).runtime
+  })
+
+  it('a named check puts only that watch in the run', async () => {
+    let finish: (v: WatchCheckRun) => void = () => {}
+    install({ CheckWatches: () => new Promise<WatchCheckRun>((r) => { finish = r }) })
+    const c = useWatchChecks()
+    const run = c.check(['a'])
+    expect(c.phase('a')).toBe('queued')
+    expect(c.phase('b')).toBe('')
+    finish({ results: [] })
+    await run
+  })
+
+  it('a stopped run is summarised as stopped and keeps the interrupted result marked', async () => {
+    install({ CheckWatches: vi.fn(async () => ({ results: [res('a', 'ok'), res('b', 'error', { interrupted: true })], cancelled: true })) })
+    const c = useWatchChecks()
+    await c.check()
+    expect(c.results.value.b.interrupted).toBe(true)
+    expect(c.summary.value).toBe('Stopped. Checked 1 watch: all ok.')
   })
 
   it('forgets a deleted watch', async () => {
