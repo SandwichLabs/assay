@@ -90,12 +90,10 @@ func moveMCP(p *Preferences, oldPath, newRoot string) {
 // workspace at root with this id. A workspace never switched on (or off), or a
 // different workspace at the same path, reads false.
 func (r *Recents) MCPOn(root, id string) bool {
-	if r == nil || r.store == nil {
+	if !r.has() {
 		return false
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	p, _ := r.loadLocked()
+	p := r.load()
 	for _, e := range mcpFrom(p) {
 		if e.ID == id && SamePath(e.Path, root) {
 			return true
@@ -107,24 +105,19 @@ func (r *Recents) MCPOn(root, id string) bool {
 // SetMCPOn remembers the on/off choice for the workspace at root. Off removes
 // the entry, so the list holds only workspaces that come back on.
 func (r *Recents) SetMCPOn(root, id string, on bool) error {
-	if r == nil || r.store == nil {
-		return fmt.Errorf("preferences are unavailable: no user config directory")
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	p, _ := r.loadLocked()
-	if _, ok := p.Extra[MCPKey]; !ok {
-		if err := setMCP(&p, nil); err != nil {
-			return err
+	err := r.modify(func(p *Preferences) error {
+		if _, ok := p.Extra[MCPKey]; !ok {
+			if err := setMCP(p, nil); err != nil {
+				return err
+			}
 		}
-	}
-	dropMCP(&p, root)
-	if on {
-		if err := setMCP(&p, append(mcpFrom(p), MCPEntry{Path: root, ID: id})); err != nil {
-			return err
+		dropMCP(p, root)
+		if on {
+			return setMCP(p, append(mcpFrom(*p), MCPEntry{Path: root, ID: id}))
 		}
-	}
-	if err := r.store.Save(p); err != nil {
+		return nil
+	})
+	if err != nil {
 		return fmt.Errorf("failed to save the MCP choice: %w", err)
 	}
 	return nil

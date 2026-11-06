@@ -44,35 +44,31 @@ func updatesFrom(p Preferences) UpdateSettings {
 
 // UpdateSettings returns the saved update-check settings (zero value when none).
 func (r *Recents) UpdateSettings() UpdateSettings {
-	if r == nil || r.store == nil {
+	if !r.has() {
 		return UpdateSettings{}
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	p, _ := r.loadLocked()
+	p := r.load()
 	return updatesFrom(p)
 }
 
-// ModifyUpdateSettings applies fn to the saved settings and writes them back under the same
-// lock as every other read-modify-write of the document, so a stale copy never rolls them back.
+// ModifyUpdateSettings applies fn to the saved settings and writes them back
+// through Store.Modify, so a stale copy never rolls back another key or another
+// process's change.
 func (r *Recents) ModifyUpdateSettings(fn func(*UpdateSettings)) error {
-	if r == nil || r.store == nil {
-		return fmt.Errorf("preferences are unavailable: no user config directory")
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	p, _ := r.loadLocked()
-	s := updatesFrom(p)
-	fn(&s)
-	raw, err := json.Marshal(s.Normalize())
+	err := r.modify(func(p *Preferences) error {
+		s := updatesFrom(*p)
+		fn(&s)
+		raw, err := json.Marshal(s.Normalize())
+		if err != nil {
+			return fmt.Errorf("failed to encode update settings: %w", err)
+		}
+		if p.Extra == nil {
+			p.Extra = map[string]json.RawMessage{}
+		}
+		p.Extra[UpdatesKey] = raw
+		return nil
+	})
 	if err != nil {
-		return err
-	}
-	if p.Extra == nil {
-		p.Extra = map[string]json.RawMessage{}
-	}
-	p.Extra[UpdatesKey] = raw
-	if err := r.store.Save(p); err != nil {
 		return fmt.Errorf("failed to save update settings: %w", err)
 	}
 	return nil

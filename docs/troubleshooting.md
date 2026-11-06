@@ -103,6 +103,12 @@ Since 0.1.4 Slaw never reads your shell's `AWS_*` variables, `AWS_REGION` includ
 
 Slaw expands `*` and `**` itself on s3, gcs and r2 (0.1.4). `?` and `[...]` are refused in a pattern, one statement expands to at most 10,000 objects, a pattern with no match is an error, and the pattern must start with the scope of a ready storage connection. Narrow the prefix, or connect the storage connection first.
 
+## My settings were reset to defaults
+
+Studio showed a banner saying your settings file could not be read. `settings.json` in the per-user config directory (`~/.config/slaw` on Linux, `~/Library/Application Support/slaw` on macOS) did not parse, usually after a stray hand edit or a half-written file from another tool. Slaw never overwrites a file it cannot read: the next change (opening a workspace, changing the theme) moved the bad file to `settings.json.corrupt-<UTC time>` in the same folder, started from the defaults, and the banner names that copy. To get your old values back, fix the JSON in that copy and move it over `settings.json` while Slaw is closed (theme, UI scale, recent workspaces, update choice and the per-workspace MCP switch all live there). It is safe to delete once you no longer need it.
+
+If a change fails with "preferences are being written by another Slaw process", a second Slaw (another Studio window or `slaw update`) held the settings lock for more than five seconds; retry once it finishes. The lock file `settings.lock` beside `settings.json` is removed when the write ends.
+
 ## Where the logs are
 
 Slaw writes no log file. The command line and Studio log structured JSON lines to **stderr**, and `slaw mcp serve` prints plain-text notices there. The command line and Studio log through the same secret redactor: it scrubs every secret value they have seen and credential-shaped text such as `password=…` or the password in `user:pass@host`. It cannot know every value, so read the log before you share it. Run Studio from a terminal (`slaw studio --gui` or `slaw-studio`) to see them; add `--verbose` to the CLI for more. Settings live in `~/.slaw.yaml` and the per-user config directory (`~/.config/slaw` on Linux, `~/Library/Application Support/slaw` on macOS); set `SLAW_CONFIG_DIR` to use a different one, for example when testing. Per-workspace local state is in `.slaw-local/` inside the workspace folder (git-ignored).

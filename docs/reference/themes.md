@@ -51,6 +51,15 @@ without restarting.
 `theme` is a theme id or `"system"`. Unknown keys are preserved, so a newer
 Studio's settings survive an older one saving the file.
 
+Every change to the file (theme, recent workspaces, update choice, the MCP
+switch) reads it, changes one thing and replaces it atomically under a lock file
+(`settings.lock`, present only while a write is in progress), so two Slaw
+processes never drop each other's change. If `settings.json` does not parse,
+Slaw never overwrites it: the next change moves it to
+`settings.json.corrupt-<UTC time>` beside it (private, 0600), starts from the
+defaults and shows a notice naming that copy. See
+[Troubleshooting](../troubleshooting.md#my-settings-were-reset-to-defaults).
+
 ## Writing a theme
 
 A theme file is a JSON object. The **id** is the filename without `.json`,

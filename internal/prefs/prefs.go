@@ -22,6 +22,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/SandwichLabs/slaw/internal/filelock"
 )
 
 // ThemeSystem is the Preferences.Theme value meaning "follow the OS light/dark
@@ -150,10 +153,29 @@ type ThemeFile struct {
 const MaxThemeFileBytes = 256 * 1024
 
 // Store reads and writes the preferences document and lists user themes.
+//
+// Every write goes through Modify: one in-process mutex plus a cross-process
+// lock file in the config dir around read, change and atomic replace, so two
+// Studio windows, or Studio and `slaw update`, never drop each other's change.
 type Store struct {
-	mu  sync.Mutex
-	dir string
+	mu          sync.Mutex
+	dir         string
+	lockTimeout time.Duration // 0 = defaultLockTimeout
+	notice      string        // set when a corrupt file was moved aside; see TakeNotice
+	logger      *slog.Logger  // nil = silent
 }
+
+// ErrCorrupt is wrapped by the error Load returns when settings.json exists but
+// is not valid preferences JSON.
+var ErrCorrupt = errors.New("preferences file is corrupt")
+
+// lockName is the cross-process lock file inside the config dir. It exists
+// only while a write is in progress.
+const lockName = "settings.lock"
+
+// defaultLockTimeout bounds how long Modify waits for another process's write.
+// A write is a few KB, so waiting longer means something is wedged.
+const defaultLockTimeout = 5 * time.Second
 
 // DefaultDir returns the per-user config directory Slaw uses:
 // $SLAW_CONFIG_DIR if set to an absolute path (a relative one is ignored with
@@ -183,6 +205,13 @@ func NewStore(dir string) *Store {
 	return &Store{dir: dir}
 }
 
+// WithLogger makes the store log a warning when it moves a corrupt settings
+// file aside (so a CLI run with no UI still leaves a trace). It returns s.
+func (s *Store) WithLogger(l *slog.Logger) *Store {
+	s.logger = l
+	return s
+}
+
 // Dir returns the store's root directory.
 func (s *Store) Dir() string { return s.dir }
 
@@ -193,12 +222,19 @@ func (s *Store) SettingsPath() string { return filepath.Join(s.dir, "settings.js
 func (s *Store) ThemesDir() string { return filepath.Join(s.dir, "themes") }
 
 // Load reads the preferences. A missing file yields Defaults(); a corrupt file
-// yields Defaults() plus the parse error so the caller can surface it without
-// the UI failing to start.
+// yields Defaults() plus an error wrapping ErrCorrupt so the caller can surface
+// it without the UI failing to start. Load never writes: a caller that wants to
+// change the document uses Modify, which moves a corrupt file aside first
+// instead of overwriting it.
 func (s *Store) Load() (Preferences, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.read()
+}
 
+// read is Load without the mutex. The document is replaced by rename, so a
+// reader without the file lock sees the old or the new file, never a torn one.
+func (s *Store) read() (Preferences, error) {
 	data, err := os.ReadFile(s.SettingsPath())
 	if errors.Is(err, fs.ErrNotExist) {
 		return Defaults(), nil
@@ -208,20 +244,125 @@ func (s *Store) Load() (Preferences, error) {
 	}
 	var p Preferences
 	if err := json.Unmarshal(data, &p); err != nil {
-		return Defaults(), fmt.Errorf("failed to parse %s: %w", s.SettingsPath(), err)
+		return Defaults(), fmt.Errorf("failed to parse %s: %w: %w", s.SettingsPath(), ErrCorrupt, err)
 	}
 	return p.Normalize(), nil
 }
 
-// Save writes the preferences atomically (temp file + rename) with 0600 perms.
+// Save replaces the whole document with p (under the same locks as Modify).
+// Callers that change one part of the document should use Modify instead, so
+// the parts they did not read are not rolled back.
 func (s *Store) Save(p Preferences) error {
+	return s.Modify(func(cur *Preferences) error {
+		*cur = p
+		return nil
+	})
+}
+
+// TakeNotice returns, once, a plain-words message when a write moved a corrupt
+// settings.json aside (naming where it went), and "" otherwise or after it was
+// taken. It is per Store, so it covers writes made by this process only.
+func (s *Store) TakeNotice() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.notice
+	s.notice = ""
+	return n
+}
+
+// Modify is the one read-modify-write of the document. It takes the in-process
+// mutex and the cross-process lock file, reads the current document, applies fn
+// and writes the result atomically (temp file + rename, 0600). If fn returns an
+// error nothing is written. fn must not call back into the Store.
+//
+// A settings.json that does not parse is never overwritten silently: it is
+// moved to settings.json.corrupt-<UTC time> (0600, same directory), fn starts
+// from Defaults(), and TakeNotice reports where the old file went. A file that
+// cannot be read at all (permissions, I/O) refuses the write.
+func (s *Store) Modify(fn func(*Preferences) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	p = p.Normalize()
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return fmt.Errorf("failed to create config dir: %w", err)
 	}
+	release, err := s.lock()
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	p, err := s.read()
+	if err != nil {
+		if !errors.Is(err, ErrCorrupt) {
+			return fmt.Errorf("refusing to change preferences: %w", err)
+		}
+		moved, mvErr := s.moveAside()
+		if mvErr != nil {
+			return fmt.Errorf("refusing to overwrite a corrupt preferences file: %w", mvErr)
+		}
+		s.notice = fmt.Sprintf("Your settings file could not be read, so it was moved to %s and settings were reset to defaults. Fix or delete that copy; it is not used.", moved)
+		if s.logger != nil {
+			s.logger.Warn(s.notice)
+		}
+	}
+	if err := fn(&p); err != nil {
+		return err
+	}
+	return s.write(p.Normalize())
+}
+
+// lock takes the cross-process lock file, waiting up to the timeout for another
+// process's write to finish, and returns its release func.
+func (s *Store) lock() (func(), error) {
+	dir, err := os.Open(s.dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open config dir: %w", err)
+	}
+	timeout := s.lockTimeout
+	if timeout <= 0 {
+		timeout = defaultLockTimeout
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		l, err := filelock.AcquireAt(dir, lockName, []byte(fmt.Sprintf("%d\n", os.Getpid())))
+		if err == nil {
+			return func() { _ = l.Release(); _ = dir.Close() }, nil
+		}
+		var held *filelock.HeldError
+		if !errors.As(err, &held) {
+			_ = dir.Close()
+			return nil, fmt.Errorf("failed to lock preferences: %w", err)
+		}
+		if time.Now().After(deadline) {
+			_ = dir.Close()
+			return nil, fmt.Errorf("preferences are being written by another Slaw process (waited %s): %w", timeout, err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// moveAside renames settings.json to a fresh settings.json.corrupt-<UTC time>
+// beside it, keeping the person's bytes, and returns the new path.
+func (s *Store) moveAside() (string, error) {
+	stamp := time.Now().UTC().Format("20060102T150405Z")
+	dst := s.SettingsPath() + ".corrupt-" + stamp
+	for i := 2; ; i++ {
+		if _, err := os.Lstat(dst); errors.Is(err, fs.ErrNotExist) {
+			break
+		}
+		dst = fmt.Sprintf("%s.corrupt-%s-%d", s.SettingsPath(), stamp, i)
+	}
+	if err := os.Rename(s.SettingsPath(), dst); err != nil {
+		return "", fmt.Errorf("failed to move the corrupt file aside: %w", err)
+	}
+	_ = os.Chmod(dst, 0o600) // best-effort: the bytes are the person's, keep them private
+	return dst, nil
+}
+
+// write replaces the document atomically (temp file + rename) with 0600 perms.
+// The caller holds the locks.
+func (s *Store) write(p Preferences) error {
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to encode preferences: %w", err)
@@ -243,6 +384,11 @@ func (s *Store) Save(p Preferences) error {
 		_ = tmp.Close()
 		cleanup()
 		return fmt.Errorf("failed to set preferences permissions: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("failed to sync preferences file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
 		cleanup()

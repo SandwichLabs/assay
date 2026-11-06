@@ -24,7 +24,7 @@ var newUpdateService = func() (*selfupdate.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	rec := prefs.NewRecents(prefs.NewStore(dir), logger)
+	rec := prefs.NewRecents(prefs.NewStore(dir).WithLogger(logger), logger)
 	return selfupdate.NewService(selfupdate.New(version), rec, logger), nil
 }
 

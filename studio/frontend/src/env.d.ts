@@ -18,6 +18,7 @@ interface AppApi {
   GetThirdPartyNotices(): Promise<string>
   GetPreferences(): Promise<{ theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }>
   SetPreferences(p: { theme: string; systemLight: string; systemDark: string; reduceMotion: boolean; uiScale: number }): Promise<void>
+  TakePreferencesNotice(): Promise<string>
   ListUserThemes(): Promise<{ themes: { path: string; filename: string; json: string }[] | null; problems: string[] | null; dir: string }>
   OpenThemesDir(): Promise<string>
   // Updates (Settings > About > Updates, the first-run prompt)

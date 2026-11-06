@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -27,14 +26,14 @@ type Recent struct {
 }
 
 // Recents is the launcher's list of recently opened workspaces, kept in the
-// preferences document beside the theme. One mutex serialises every
-// read-modify-write of that document (the list and SavePreferences), so a stale
-// copy round-tripped by the frontend can never roll the list back.
+// preferences document beside the theme. Every
+// change goes through Store.Modify (an in-process mutex plus a cross-process
+// file lock), so a stale copy round-tripped by the frontend, or another Slaw
+// process, can never roll the list back.
 //
 // A nil *Recents, or one over a nil store, remembers nothing and lists nothing:
 // preferences are optional (no user config dir).
 type Recents struct {
-	mu     sync.Mutex
 	store  *Store
 	logger *slog.Logger
 }
@@ -61,14 +60,36 @@ func SamePath(a, b string) bool {
 
 func now() string { return time.Now().UTC().Format(time.RFC3339Nano) }
 
-func (r *Recents) loadLocked() (Preferences, []Recent) {
-	if r == nil || r.store == nil {
-		return Defaults(), nil
+var errNoStore = fmt.Errorf("preferences are unavailable: no user config directory")
+
+// has reports whether r can read and write preferences.
+func (r *Recents) has() bool { return r != nil && r.store != nil }
+
+// load reads the preferences for a read-only caller; a corrupt or unreadable
+// file reads as the defaults and is logged. Writers use modify, never load.
+func (r *Recents) load() Preferences {
+	if !r.has() {
+		return Defaults()
 	}
 	p, err := r.store.Load()
 	if err != nil {
-		r.logger.Warn("recent workspaces: preferences unreadable", "error", err)
+		r.logger.Warn("preferences unreadable, using defaults", "error", err)
 	}
+	return p
+}
+
+// modify is the only way Recents writes: Store.Modify, which holds the in-process
+// and cross-process locks around read, change and write, and moves a corrupt
+// file aside instead of overwriting it (TakeNotice says so).
+func (r *Recents) modify(fn func(*Preferences) error) error {
+	if !r.has() {
+		return errNoStore
+	}
+	return r.store.Modify(fn)
+}
+
+// recentsFrom decodes the list from p; an undecodable list reads as empty.
+func (r *Recents) recentsFrom(p *Preferences) []Recent {
 	var recs []Recent
 	if raw, ok := p.Extra[RecentsKey]; ok {
 		if err := json.Unmarshal(raw, &recs); err != nil {
@@ -76,27 +97,25 @@ func (r *Recents) loadLocked() (Preferences, []Recent) {
 			recs = nil
 		}
 	}
-	return p, recs
+	return recs
 }
 
-func (r *Recents) saveLocked(p Preferences, recs []Recent) error {
-	if r == nil || r.store == nil {
-		return nil
-	}
+// setRecents sorts, caps and stores recs in p.
+func setRecents(p *Preferences, recs []Recent) error {
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].LastOpened > recs[j].LastOpened })
 	if len(recs) > MaxRecents {
 		recs = recs[:MaxRecents]
-		pruneMCP(&p, recs) // a workspace that fell off the list does not keep serving
+		pruneMCP(p, recs) // a workspace that fell off the list does not keep serving
 	}
 	raw, err := json.Marshal(recs)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to encode the recent list: %w", err)
 	}
 	if p.Extra == nil {
 		p.Extra = map[string]json.RawMessage{}
 	}
 	p.Extra[RecentsKey] = raw
-	return r.store.Save(p)
+	return nil
 }
 
 // List returns the list, most recent first. It only reads the preferences file.
@@ -104,33 +123,33 @@ func (r *Recents) List() []Recent {
 	if r == nil {
 		return nil
 	}
-	r.mu.Lock()
-	_, recs := r.loadLocked()
-	r.mu.Unlock()
+	p := r.load()
+	recs := r.recentsFrom(&p)
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].LastOpened > recs[j].LastOpened })
 	return recs
 }
 
 // Record puts the workspace at root at the top of the list.
 func (r *Recents) Record(root, id, name string) {
-	if r == nil {
+	if !r.has() {
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	p, recs := r.loadLocked()
-	stamp := now()
-	found := false
-	for i := range recs {
-		if SamePath(recs[i].Path, root) {
-			recs[i].Path, recs[i].ID, recs[i].Name, recs[i].LastOpened = root, id, name, stamp
-			found = true
+	err := r.modify(func(p *Preferences) error {
+		recs := r.recentsFrom(p)
+		stamp := now()
+		found := false
+		for i := range recs {
+			if SamePath(recs[i].Path, root) {
+				recs[i].Path, recs[i].ID, recs[i].Name, recs[i].LastOpened = root, id, name, stamp
+				found = true
+			}
 		}
-	}
-	if !found {
-		recs = append(recs, Recent{Path: root, ID: id, Name: name, LastOpened: stamp})
-	}
-	if err := r.saveLocked(p, recs); err != nil {
+		if !found {
+			recs = append(recs, Recent{Path: root, ID: id, Name: name, LastOpened: stamp})
+		}
+		return setRecents(p, recs)
+	})
+	if err != nil {
 		r.logger.Warn("failed to remember the workspace", "error", err)
 	}
 }
@@ -138,26 +157,28 @@ func (r *Recents) Record(root, id, name string) {
 // Remove drops path from the list (never touching files) and returns the entry
 // so the caller can offer Undo. nil when path was not listed.
 func (r *Recents) Remove(path string) (*Recent, error) {
-	if r == nil {
+	if !r.has() {
 		return nil, nil
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	p, recs := r.loadLocked()
 	var removed *Recent
-	kept := recs[:0:0]
-	for _, e := range recs {
-		if SamePath(e.Path, path) && removed == nil {
-			e := e
-			removed = &e
-			continue
+	err := r.modify(func(p *Preferences) error {
+		removed = nil
+		recs := r.recentsFrom(p)
+		kept := recs[:0:0]
+		for _, e := range recs {
+			if SamePath(e.Path, path) && removed == nil {
+				e := e
+				removed = &e
+				continue
+			}
+			kept = append(kept, e)
 		}
-		kept = append(kept, e)
-	}
-	if removed != nil {
-		dropMCP(&p, path) // a forgotten workspace must not start serving again
-	}
-	if err := r.saveLocked(p, kept); err != nil {
+		if removed != nil {
+			dropMCP(p, path) // a forgotten workspace must not start serving again
+		}
+		return setRecents(p, kept)
+	})
+	if err != nil {
 		return nil, fmt.Errorf("failed to update the list: %w", err)
 	}
 	return removed, nil
@@ -169,38 +190,38 @@ func (r *Recents) Restore(rec Recent) error {
 	if strings.TrimSpace(rec.Path) == "" {
 		return fmt.Errorf("nothing to restore")
 	}
-	if r == nil {
+	if !r.has() {
 		return nil
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	p, recs := r.loadLocked()
-	for _, e := range recs {
-		if SamePath(e.Path, rec.Path) {
-			return nil
+	return r.modify(func(p *Preferences) error {
+		recs := r.recentsFrom(p)
+		for _, e := range recs {
+			if SamePath(e.Path, rec.Path) {
+				return nil
+			}
 		}
-	}
-	if rec.LastOpened == "" {
-		rec.LastOpened = now()
-	}
-	return r.saveLocked(p, append(recs, rec))
+		if rec.LastOpened == "" {
+			rec.LastOpened = now()
+		}
+		return setRecents(p, append(recs, rec))
+	})
 }
 
 // Relocate re-points the entry at oldPath at newRoot.
 func (r *Recents) Relocate(oldPath, newRoot string) error {
-	if r == nil {
+	if !r.has() {
 		return nil
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	p, recs := r.loadLocked()
-	for i := range recs {
-		if SamePath(recs[i].Path, oldPath) || recs[i].Path == oldPath {
-			recs[i].Path = newRoot
+	return r.modify(func(p *Preferences) error {
+		recs := r.recentsFrom(p)
+		for i := range recs {
+			if SamePath(recs[i].Path, oldPath) || recs[i].Path == oldPath {
+				recs[i].Path = newRoot
+			}
 		}
-	}
-	moveMCP(&p, oldPath, newRoot)
-	return r.saveLocked(p, recs)
+		moveMCP(p, oldPath, newRoot)
+		return setRecents(p, recs)
+	})
 }
 
 // IDs maps every remembered folder to its workspace id (entries without one are
@@ -215,31 +236,28 @@ func (r *Recents) IDs() map[string]string {
 	return out
 }
 
-// SavePreferences saves p, but takes the recents list from the file on disk
-// instead of p: the frontend round-trips only the fields it knows, and a stale
-// copy of the list must never roll it back. The error is "unavailable" when
-// there is no store.
+// SavePreferences saves p, but takes the recents list (and the other keys the
+// frontend does not round-trip) from the file on disk instead of p: the frontend
+// round-trips only the fields it knows, and a stale copy of the list must never
+// roll it back. The error is "unavailable" when there is no store.
 func (r *Recents) SavePreferences(p Preferences) error {
-	if r == nil || r.store == nil {
-		return fmt.Errorf("preferences are unavailable: no user config directory")
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	cur, _ := r.store.Load()
-	extra := map[string]json.RawMessage{}
-	for k, v := range p.Extra {
-		extra[k] = v
-	}
-	// Keys the frontend does not round-trip come from disk, never from p.
-	for _, key := range []string{RecentsKey, UpdatesKey, MCPKey} {
-		if raw, ok := cur.Extra[key]; ok {
-			extra[key] = raw
-		} else {
-			delete(extra, key)
+	err := r.modify(func(cur *Preferences) error {
+		extra := map[string]json.RawMessage{}
+		for k, v := range p.Extra {
+			extra[k] = v
 		}
-	}
-	p.Extra = extra
-	if err := r.store.Save(p); err != nil {
+		for _, key := range []string{RecentsKey, UpdatesKey, MCPKey} {
+			if raw, ok := cur.Extra[key]; ok {
+				extra[key] = raw
+			} else {
+				delete(extra, key)
+			}
+		}
+		p.Extra = extra
+		*cur = p
+		return nil
+	})
+	if err != nil {
 		return fmt.Errorf("failed to save preferences: %w", err)
 	}
 	return nil

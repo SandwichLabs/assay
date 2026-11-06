@@ -70,6 +70,12 @@ onMounted(async () => {
   // After the launcher or a workspace is up: the one-time question (needsConsent) and, if the
   // person chose weekly, the quiet startup check. Never blocks, never throws.
   void refreshUpdateState().then(startupUpdateCheck)
+  // A corrupt settings.json that a write moved aside (opening a workspace records it in the
+  // recent list): say where the old copy went, once.
+  try {
+    const notice = await App.TakePreferencesNotice()
+    if (notice) appNotice.value = notice
+  } catch { /* no binding (browser dev), or nothing to say */ }
 })
 
 onUnmounted(() => {
