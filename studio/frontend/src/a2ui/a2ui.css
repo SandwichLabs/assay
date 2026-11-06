@@ -665,6 +665,14 @@
   white-space: nowrap;
 }
 
+/* Dated columns: a tick label is centred on its column and may be wider than the
+   column (they are thinned so none overlap); it scrolls with the column. */
+.a2ui-page .a2ui-columns__label--tick { display: flex; justify-content: center; width: 0; max-width: none; overflow: visible; text-overflow: clip; }
+.a2ui-page .a2ui-columns__label--tick > span { flex: none; pointer-events: none; }
+/* the first and last label hug the ends of the plot: a box as wide as the column, text from its edge */
+.a2ui-page .a2ui-columns__label--tick[data-anchor="start"] { width: 100%; justify-content: flex-start; }
+.a2ui-page .a2ui-columns__label--tick[data-anchor="end"] { width: 100%; justify-content: flex-end; }
+
 /* radarChart */
 .a2ui-page .a2ui-radar { position: relative; width: 100%; max-width: 360px; margin: 0 auto; padding: 0 48px; box-sizing: border-box; }
 .a2ui-page .a2ui-radar__svg { width: 100%; height: auto; display: block; overflow: visible; }
