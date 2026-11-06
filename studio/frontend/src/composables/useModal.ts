@@ -34,6 +34,13 @@ export function useModalKeys(open: Ref<boolean>, close: () => void, root?: Ref<H
   // Tab and Shift+Tab wrap inside the modal root so focus never reaches the page behind it.
   // A modal stacked above this one holds the focus itself, so only act when focus is in
   // this root or in no modal at all.
+  // True when focus sits in a different modal (stacked above this one, or nested inside this root):
+  // that modal's keys are its own, so this one must not act on them.
+  function focusInOtherModal(el: HTMLElement): boolean {
+    const theirs = (document.activeElement as HTMLElement | null)?.closest('[aria-modal="true"]') ?? null
+    return !!theirs && theirs !== el.closest('[aria-modal="true"]')
+  }
+
   function trapTab(e: KeyboardEvent) {
     const el = root?.value
     if (!el) return
@@ -55,6 +62,8 @@ export function useModalKeys(open: Ref<boolean>, close: () => void, root?: Ref<H
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Tab' && open.value) { trapTab(e); return }
     if (e.key === 'Escape' && open.value) {
+      // Escape on a confirm opened over this modal closes the confirm only.
+      if (root?.value && focusInOtherModal(root.value)) return
       e.preventDefault()
       e.stopPropagation()
       close()

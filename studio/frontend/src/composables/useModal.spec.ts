@@ -64,6 +64,32 @@ describe('useModalKeys', () => {
     wrapper.unmount()
   })
 
+  it('Escape with focus in a modal stacked above leaves this modal open (the confirm closes alone)', async () => {
+    const open = ref(true)
+    const close = vi.fn()
+    const root = ref<HTMLElement | null>(null)
+    const Comp = defineComponent({
+      setup() {
+        useModalKeys(open, close, root)
+        return () => h('div', [
+          h('div', { ref: root, role: 'dialog', 'aria-modal': 'true' }, [h('input', { id: 'mine' })]),
+          h('div', { role: 'dialog', 'aria-modal': 'true' }, [h('button', { id: 'confirm' })]),
+        ])
+      },
+    })
+    const w = mount(Comp, { attachTo: document.body })
+    await nextTick()
+    document.getElementById('confirm')!.focus()
+    const esc = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    document.dispatchEvent(esc)
+    expect(close).not.toHaveBeenCalled()
+    expect(esc.defaultPrevented).toBe(false)
+    document.getElementById('mine')!.focus()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }))
+    expect(close).toHaveBeenCalledTimes(1)
+    w.unmount()
+  })
+
   it('stops listening once unmounted', async () => {
     const { wrapper, open, close } = harness()
     open.value = true

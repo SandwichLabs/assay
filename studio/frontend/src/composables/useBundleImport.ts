@@ -11,10 +11,10 @@ import { workspaceInfo, flushOrConfirm } from './useWorkspace'
 import { useNewWorkspaceFields } from './useNewWorkspaceFields'
 import { errorText } from '../lib/errors'
 
-export const KIND_LABEL: Record<string, string> = { notebook: 'Notebook', query: 'Query', skill: 'Skill', artifact: 'Data artifact', semantics: 'Semantic definition' }
+export const KIND_LABEL: Record<string, string> = { notebook: 'Notebook', query: 'Query', skill: 'Skill', artifact: 'Data artifact', semantics: 'Semantic definition', watch: 'Watch' }
 
-/** The Keep both option's wording: a semantic definition gets `_2`, the rest `-2`. */
-export const keepBothLabel = (kind: string) => `Keep both (add ${kind === 'semantics' ? '_2' : '-2'})`
+/** The Keep both option's wording: a semantic definition or watch gets `_2`, the rest `-2`. */
+export const keepBothLabel = (kind: string) => `Keep both (add ${kind === 'semantics' || kind === 'watch' ? '_2' : '-2'})`
 
 export function useBundleImport(passEl: Ref<HTMLInputElement | null>) {
   const open = computed(() => bundleImportRequest.value !== null)

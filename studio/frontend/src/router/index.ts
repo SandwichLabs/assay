@@ -7,6 +7,7 @@ import QueryEditorView from '../views/QueryEditorView.vue'
 import ArtifactView from '../views/ArtifactView.vue'
 import SkillsView from '../views/SkillsView.vue'
 import SemanticsView from '../views/SemanticsView.vue'
+import WatchesView from '../views/WatchesView.vue'
 import ImportView from '../views/ImportView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import AgentView from '../views/AgentView.vue'
@@ -55,6 +56,8 @@ const routes = [
   { path: '/skills', name: 'skills', component: SkillsView },
   // The semantic layer (E4): entities, metrics, joins, glossary and the proposals inbox.
   { path: '/semantics', name: 'semantics', component: SemanticsView },
+  // Watches (E7): standing questions with a condition, checked on demand.
+  { path: '/watches', name: 'watches', component: WatchesView },
   // Dedicated Agent wizard page (W0.5).
   { path: '/agent', name: 'agent', component: AgentView },
   { path: '/import', name: 'import', component: ImportView },

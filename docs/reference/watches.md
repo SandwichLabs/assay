@@ -12,7 +12,7 @@ watches/
 
 The folder is created by whatever writes the first file; `slaw workspace init` does not make an empty one.
 
-> **What exists today.** A watch is checked only when you ask: `slaw watch check`. There is no scheduler, no background service, no notification and no delivery; a fired watch is reported where the check ran, and recorded in a local [history](#history). Studio's Watches view and agent tools for watches are later steps of the same plan ([`docs/plans/watches.md`](../plans/watches.md)). Because nothing runs by itself, a cloned workspace's watches need no enabling step yet; that gate arrives with scheduling, when a watch first runs without a person asking.
+> **What exists today.** A watch is checked only when you ask: `slaw watch check`, or Check in Studio's [Watches view](#studio). There is no scheduler, no background service, no notification and no delivery; a fired watch is reported where the check ran, and recorded in a local [history](#history). Agent tools for watches are a later step of the same plan ([`docs/plans/watches.md`](../plans/watches.md)). Because nothing runs by itself, a cloned workspace's watches need no enabling step yet; that gate arrives with scheduling, when a watch first runs without a person asking.
 
 ## The file: `watches/<name>.yaml`
 
@@ -53,7 +53,7 @@ The file is read as strictly as a [semantics file](semantics.md#rules-every-yaml
 - The **name** is the file name without `.yaml` and follows the connection-name rule: `^[a-z_][a-z0-9_]{0,62}$`. A Windows device name (`con`, `nul`) is refused.
 - **Thresholds are plain decimals**, at most **40 characters**: `0`, `-5`, `99.5`, `100000000000000000000`. A quoted `"100"`, `1e3`, `0x10`, `+5`, `.5`, `.inf` and `.nan` are refused, not coerced.
 - At most **500** files: the first 500 (by name) are listed, followed by one entry named `(truncated)` that says how many were left out.
-- A file that fails any of this is **not hidden**. `slaw watch list` shows it with its error (a reserved name such as `nul.yaml` says why), `slaw watch check` reports it as an `error`, and Slaw never overwrites it unless you choose to. A symbolic link is listed as "is a symbolic link; it is not read".
+- A file that fails any of this is **not hidden**. `slaw watch list` shows it with its error (a reserved name such as `nul.yaml` says why), `slaw watch check` reports it as an `error`, and Slaw never overwrites it unless you choose to: a write over it needs the revision of the very bytes that were shown (or an explicit overwrite), so a file that changed meanwhile is a conflict. A symbolic link is listed as "is a symbolic link; it is not read".
 
 ## How a check runs
 
@@ -62,6 +62,7 @@ The file is read as strictly as a [semantics file](semantics.md#rules-every-yaml
 - The question goes through the **agent policy's read-only path in the tightest tier**, whatever the sandbox setting is. A watch file or saved query from a cloned repository cannot do more than read: a `COPY ... TO`, a `read_text` of a file outside `data/`, a `DROP` or an `ATTACH` is refused by the policy (see [agent-policy.md](agent-policy.md)), and the watch is an `error` that says `refused: a watch may only read (no writes, COPY, ATTACH or SET; files only inside data/)`. A statement that merely fails to bind (an unknown column, a typo) is not a refusal: it is an `error` showing the database's message (`could not run: Binder Error: ...`).
 - A **saved query** is bound with the same binder as `slaw query --saved` and the agent's `run_saved_query`: the statement is the query's own text, and a `params` value is typed by the query's declared parameters and travels as a bound parameter. A value that is not valid for the declared type (`days: lots` for an integer) is an `error` before anything runs. A declared parameter you do not give takes its default; a required one with no default is an `error` telling you to add `question.params.<name>`. A saved query on a connection the workspace does not define is an `error` that says so (`slaw conn list`).
 - A **metric** runs as `SELECT * FROM metric('<name>')` through the one metric expander, the same statement as the Semantics view's "Try it" with no dimensions.
+- **While Studio (or `slaw mcp serve`) has the workspace open** it owns the local DuckDB files, so a check here could only report that it cannot connect. `slaw watch check` therefore refuses first, before anything runs and with nothing recorded: `Slaw Studio (pid 4242) has this workspace open; check its watches from there. Nothing was checked or recorded.` The exit status is 2. Check from Studio instead, or close it.
 - Each statement is bounded by a **2 minute** timeout and by Ctrl-C. A threshold check reads at most **5** rows; a `rows` check reads at most **1,001**.
 
 ### The value a threshold reads
@@ -124,6 +125,26 @@ stuck_orders: first 2 rows (id, customer)
   1 | acme
   2 | globex
 ```
+
+## Studio
+
+The **Watches** view (nav entry beside Semantics) is the same surface as `slaw watch`, drawn for the desktop app. It adds no rule of its own: the file format is the decoder's, a check is `workspace.CheckWatches`, and a save is the store's compare-and-write.
+
+- **The list.** Every file under `watches/`, with its question, its condition, the outcome and reason of its last check, when it was last checked and when it last fired. The last outcome is the newest check: the one you ran in this window, unless the [history](#history) holds a newer one (a check run by the command line), so a row, its alert card and the badge always agree. The sample rows appear only when this window's result is the newest. A file that cannot be read is listed with its error and the revision of the bytes that could not be read, and cannot be checked. Edit opens an empty form over it, and saving replaces it only if the file is still exactly that revision (a file that changed since is the conflict banner, never a silent overwrite). Delete is the same compare-and-delete.
+- **Check, Check all and Stop.** Each row has a Check button and the header has Check all. A check runs one watch at a time through the same read-only path as `slaw watch check`, and every outcome is recorded in the history. While it runs, each row says `queued`, `checking…` or the status it finished with (Studio sends only the watch's name and status as it goes, never rows), and the result of a run is announced once as a sentence ("Checked 9 watches: 3 fired, 4 errors."). **Stop** ends the run: the watches checked before it keep their results, and the one that was running shows as `stopped` in this window only. It was cut short, so it says nothing about the watch and is never recorded in the history (the check marks such a result `interrupted`; `slaw watch check --json` carries the same flag and its table says `stopped`). Leaving the view also stops a check in flight.
+- **Alerts.** Every watch whose newest check fired is listed with its reason. For a `rows` check run in this window the panel also shows the first rows it read as a small table. Those rows exist only in the result of that check in this window; they are never written to the history, so after a restart the panel asks you to check again to see them.
+- **Errors.** A watch that could not run shows `error` and its reason in its row: the database's message for a check run in this window, the error class alone when read back from the history.
+- **History.** A row's History button opens its recorded checks, newest first (the newest 50 are shown): when, outcome, what it read, reason and duration.
+- **The badge.** The nav entry shows how many watches' newest check fired. It is read from the history, so it is the same on every start, and it is updated when a check finishes, when a watch is saved or deleted, and when a watch file changes on disk.
+- **New watch and Edit.** A form with a name (the file name; fixed once saved), an optional description, a saved query (with an input for each parameter it declares) or a metric, and a condition: any rows, no rows, above, below, or outside two numbers. The form shows the file it will write, drawn by the same encoder a save uses, and every refusal (a threshold that is not a plain decimal, a bad name) is the decoder's. Saving is against the revision the form loaded:
+  - a name that already exists is refused with a message, not replaced;
+  - a file that changed on disk while you edited it (an editor, `git pull`) shows the conflict banner with **Reload from disk** and **Keep mine**; a file deleted meanwhile offers to close the form.
+- **Missing questions.** A watch whose saved query or metric no longer exists (deleted, renamed, or a metric file that cannot be read) opens in the form with that name marked `(missing)` and a note; Save stays off until another is picked, so the old name is never written back by accident. A saved query's parameter that has no default must be given a value before Save.
+- **Delete** removes the file, against the revision on screen, and is refused without one. Its history stays on this computer.
+- **Outside edits.** The folder watcher reports a change under `watches/` as a `watch` event, so a file saved by an editor or arriving with `git pull` appears in a running Studio, and the badge follows. It also reports an append to the check history (`.slaw-local/watches/history.jsonl`) as a `watch_history` event, so a check run by `slaw watch check` in a terminal updates a running Studio's list and badge. That event carries no content; Studio reads the history again.
+- **Export.** The Export dialog lists the workspace's watches (all ticked, like the other content) and writes them to the bundle. The history is not offered, because it is never bundled.
+
+Nothing in Studio can check, save or delete a watch for an agent: these are the person's actions, and no agent tool or MCP method reaches them.
 
 ## Sharing
 

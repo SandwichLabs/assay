@@ -25,8 +25,8 @@ func TestClassify_Watches(t *testing.T) {
 		"watches/stuck_orders.txt",
 		"watches/a/b.yaml",
 		"watches/history.jsonl",
-		".slaw-local/watches/history.jsonl",
 		".slaw-local/watches/history.lock",
+		".slaw-local/watches/.history.jsonl.tmp",
 	} {
 		_, _, ok := classify(rel)
 		assert.False(t, ok, rel+" is not a watch")
@@ -57,9 +57,19 @@ func TestWatcher_WatchesAreReportedAndOwnWritesAreNot(t *testing.T) {
 	assert.Equal(t, Change{Kind: KindWatch, Op: OpDeleted, ID: "other", Path: "watches/other.yaml"}, next(t, w))
 }
 
-func TestWatcher_TheHistoryIsNotAWatchChange(t *testing.T) {
-	ws, _ := newWorkspace(t)
+func TestWatcher_TheHistoryIsReportedAsItsOwnKind(t *testing.T) {
+	assert.Equal(t, watches.HistoryPath, watchHistoryDir+"/history.jsonl")
+	k, id, ok := classify(watches.HistoryPath)
+	assert.True(t, ok)
+	assert.Equal(t, KindWatchHistory, k)
+	assert.Equal(t, "history", id)
+
+	ws, root := newWorkspace(t)
 	w := startWatcher(t, ws)
-	require.NoError(t, ws.WatchHistory().Append(context.Background(), watches.Entry{Watch: "w", Status: watches.StatusOK, Reason: "ok"}))
-	expectQuiet(t, w)
+	// A check in another process appends to the history; the folder may not exist yet.
+	other := watches.NewFileHistory(root)
+	require.NoError(t, other.Append(context.Background(), watches.Entry{Watch: "w", Status: watches.StatusOK, Reason: "ok"}))
+	assert.Equal(t, Change{Kind: KindWatchHistory, Op: OpCreated, ID: "history", Path: watches.HistoryPath}, next(t, w))
+	require.NoError(t, other.Append(context.Background(), watches.Entry{Watch: "w", Status: watches.StatusAlert, Reason: "again"}))
+	assert.Equal(t, Change{Kind: KindWatchHistory, Op: OpChanged, ID: "history", Path: watches.HistoryPath}, next(t, w))
 }

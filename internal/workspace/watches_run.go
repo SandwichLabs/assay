@@ -75,6 +75,10 @@ type WatchResult struct {
 	// HistoryError says the outcome could not be recorded; the check itself
 	// stands.
 	HistoryError string `json:"history_error,omitempty"`
+	// Interrupted says the check was cut short by a cancel: its outcome says
+	// nothing about the watch and it was never recorded in the history. Every
+	// other result of a run was recorded (or carries HistoryError).
+	Interrupted bool `json:"interrupted,omitempty"`
 	// StoredReason, when set, is what the history keeps in place of Reason. A
 	// database error can quote a value of a row, so the report shows the
 	// message and the history keeps only its class.
@@ -85,9 +89,20 @@ type WatchResult struct {
 // time, and appends each outcome to the workspace's history. A watch that
 // cannot be read, planned or run is an error result and the others still run.
 // A name that matches no watch is an error before anything runs. If ctx is
-// canceled the results so far come back (the interrupted watch as an error that
-// is not recorded) with the context's error.
+// canceled the results so far come back (the interrupted watch as an error
+// result marked Interrupted, which is not recorded) with the context's error.
 func CheckWatches(ctx context.Context, ws Workspace, names []string, runner ReadOnlyRunner, now time.Time) ([]WatchResult, error) {
+	return CheckWatchesProgress(ctx, ws, names, runner, now, nil)
+}
+
+// WatchProgress is told when a watch starts (done is nil) and when it ends. It
+// is how a surface shows a long run as it goes. The result it is given is the
+// one CheckWatches returns, sample rows included, so a listener that must not
+// hold rows keeps only the name and status.
+type WatchProgress func(name string, done *WatchResult)
+
+// CheckWatchesProgress is CheckWatches that reports each watch's start and end.
+func CheckWatchesProgress(ctx context.Context, ws Workspace, names []string, runner ReadOnlyRunner, now time.Time, progress WatchProgress) ([]WatchResult, error) {
 	list, err := selectWatches(ctx, ws.Watches(), names)
 	if err != nil {
 		return nil, err
@@ -97,9 +112,17 @@ func CheckWatches(ctx context.Context, ws Workspace, names []string, runner Read
 		if err := ctx.Err(); err != nil {
 			return out, fmt.Errorf("the check was canceled: %w", err)
 		}
+		if progress != nil {
+			progress(list[i].Name, nil)
+		}
 		res := checkWatch(ctx, ws, &list[i], runner, now)
-		if ctx.Err() == nil { // a canceled check says nothing about the watch
+		if ctx.Err() == nil {
 			recordWatch(ctx, ws.WatchHistory(), &res)
+		} else { // a canceled check says nothing about the watch
+			res.Interrupted = true
+		}
+		if progress != nil {
+			progress(list[i].Name, &res)
 		}
 		out = append(out, res)
 	}

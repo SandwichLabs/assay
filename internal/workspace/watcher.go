@@ -51,7 +51,12 @@ const (
 	// the workspace's own store, which the watcher does not report; Studio
 	// announces those itself. This kind is for another process or an editor.
 	KindProposal ChangeKind = "proposal"
-	KindConfig   ChangeKind = "config"
+	// KindWatchHistory is the machine-local check history of watches
+	// (.slaw-local/watches/history.jsonl; ID is "history"). A check appends to it
+	// from any process (Studio, `slaw watch check`), so a running Studio learns of
+	// a check run elsewhere. The change carries no content: read the history.
+	KindWatchHistory ChangeKind = "watch_history"
+	KindConfig       ChangeKind = "config"
 	// KindDotEnv is the workspace's .env. The change carries no content; ask
 	// Workspace.DotEnv for the new state (an allowed file becomes "changed").
 	KindDotEnv ChangeKind = "dotenv"
@@ -258,7 +263,11 @@ func (w *Watcher) addSemanticsSubdirs() {
 func (w *Watcher) addProposalsDir() {
 	w.addDir(filepath.Join(w.root, LocalDir))
 	w.addDir(filepath.Join(w.root, proposals.Dir))
+	w.addDir(filepath.Join(w.root, filepath.FromSlash(watchHistoryDir)))
 }
+
+// watchHistoryDir is the folder of the watches' check history under the root.
+const watchHistoryDir = LocalDir + "/watches"
 
 // addSubdirs registers each real subfolder of a content folder (skills/<name>/,
 // artifacts/<name>/).
@@ -294,6 +303,7 @@ func (w *Watcher) relevant() []string {
 			add(watches.Dir + "/" + n)
 		}
 	}
+	add(watches.HistoryPath)
 	add(semantics.Dir + "/" + semantics.GlossaryFile)
 	for _, sub := range semanticsSubdirs {
 		if names, err := filestore.ListDir(w.root, semantics.Dir+"/"+sub, semantics.Extension); err == nil {
@@ -364,6 +374,8 @@ func classify(rel string) (ChangeKind, string, bool) {
 		return KindQuery, strings.TrimSuffix(parts[1], queries.Extension), true
 	case len(parts) == 2 && parts[0] == watches.Dir && strings.HasSuffix(parts[1], watches.Extension) && !filestore.IsTemp(parts[1]):
 		return KindWatch, strings.TrimSuffix(parts[1], watches.Extension), true
+	case rel == watches.HistoryPath:
+		return KindWatchHistory, "history", true
 	case len(parts) == 2 && parts[0] == semantics.Dir && parts[1] == semantics.GlossaryFile:
 		return KindSemantics, "glossary", true
 	case len(parts) == 3 && parts[0] == semantics.Dir && isSemanticsSubdir(parts[1]) && strings.HasSuffix(parts[2], semantics.Extension) && !filestore.IsTemp(parts[2]):
@@ -541,6 +553,7 @@ func (w *Watcher) handleNewDir(abs, rel string) bool {
 	isWatchedDir := (len(parts) == 1 && (parts[0] == notebooks.Dir || parts[0] == queries.Dir || parts[0] == skills.Dir || parts[0] == artifacts.Dir || parts[0] == semantics.Dir || parts[0] == watches.Dir)) ||
 		(len(parts) == 1 && parts[0] == LocalDir) ||
 		rel == proposals.Dir ||
+		rel == watchHistoryDir ||
 		(len(parts) == 2 && parts[0] == semantics.Dir && isSemanticsSubdir(parts[1])) ||
 		(len(parts) == 2 && (parts[0] == skills.Dir || parts[0] == artifacts.Dir) && !filestore.IsTemp(parts[1])) ||
 		isArtifactHTMLDir(parts)

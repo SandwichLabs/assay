@@ -241,6 +241,12 @@ func runWatchCheck(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer o.Close()
+	// A process that owns the workspace's database (Studio, `slaw mcp serve`) keeps its
+	// local DuckDB files locked, so every check here would only report that it could
+	// not connect, and record that as the watch's outcome. Refuse before anything runs.
+	if o.Holder != nil {
+		return fmt.Errorf("%s has this workspace open; check its watches from there. Nothing was checked or recorded", o.Holder.String())
+	}
 	// Ctrl-C stops the check in flight; the results so far are still printed.
 	ctx, stop := signal.NotifyContext(cmdCtx(cmd), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -293,7 +299,11 @@ func printWatchReport(out io.Writer, results []workspace.WatchResult) {
 		default:
 			errs++
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", r.Status, esc(r.Watch), esc(r.Reason))
+		status := string(r.Status)
+		if r.Interrupted {
+			status = "stopped" // cut short by Ctrl-C and not recorded; still counted as an error below
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", status, esc(r.Watch), esc(r.Reason))
 	}
 	_ = tw.Flush()
 	fmt.Fprintf(out, "\n%d ok, %d alert%s, %d error%s\n", ok, alert, plural(alert), errs, plural(errs))

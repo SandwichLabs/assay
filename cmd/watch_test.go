@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SandwichLabs/slaw/internal/bundle"
+	"github.com/SandwichLabs/slaw/internal/hub"
 	"github.com/SandwichLabs/slaw/internal/queries"
 	"github.com/SandwichLabs/slaw/internal/workspace"
 )
@@ -754,4 +755,27 @@ func TestWatchCheck_AHugeIntegerIsKeptExactly(t *testing.T) {
 	hist, err := os.ReadFile(filepath.Join(root, ".slaw-local", "watches", "history.jsonl"))
 	require.NoError(t, err)
 	assert.Contains(t, string(hist), `"value":123456789012345678901234567890,`)
+}
+
+// A process that owns the workspace's database makes every check a connection
+// failure: the command refuses first, runs nothing and records nothing.
+func TestWatchCheck_RefusesWhileAnotherProcessOwnsTheWorkspace(t *testing.T) {
+	root := watchWorkspaceCLI(t)
+	writeIn(t, root, "watches/quiet.yaml", "question: {query: order_count}\nwhen: {above: 10}\n")
+	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	defer ws.Close() //nolint:errcheck
+	hold, err := hub.AcquireHub(ws, "Slaw Studio")
+	require.NoError(t, err)
+	defer hold.Release() //nolint:errcheck
+
+	out, _, err := runSlaw("watch", "check", "--workspace", root)
+	require.Error(t, err)
+	assert.Equal(t, 2, exitStatus(err))
+	assert.Contains(t, err.Error(), "Slaw Studio (pid ")
+	assert.Contains(t, err.Error(), "has this workspace open")
+	assert.NotContains(t, out, "quiet")
+	hist, _, herr := runSlaw("watch", "history", "--workspace", root)
+	require.NoError(t, herr)
+	assert.Contains(t, hist, "No checks recorded")
 }
