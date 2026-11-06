@@ -163,7 +163,8 @@ type Store struct {
 	lockTimeout time.Duration // 0 = defaultLockTimeout
 	notice      string        // set when a corrupt file was moved aside; see TakeNotice
 	logger      *slog.Logger  // nil = silent
-	notify      func(string)  // called (with s.mu held; must not call the Store) when a notice is raised
+	notify      func(string)  // called, with no lock held, after a notice is raised
+	pending     []string      // notices raised under s.mu, not yet passed to notify
 	warned      bool          // the "unreadable, using defaults" notice was raised
 }
 
@@ -216,20 +217,34 @@ func (s *Store) WithLogger(l *slog.Logger) *Store {
 
 // WithNotify registers fn to be called whenever a notice is raised (a corrupt
 // file found at startup, or moved aside by a write), so a UI can show it at
-// once. fn runs with the Store's mutex held and must not call back into it.
+// once. fn runs after the Store has released every lock, so a slow fn never
+// stalls a writer.
 func (s *Store) WithNotify(fn func(string)) *Store {
 	s.notify = fn
 	return s
 }
 
-// raise records a notice for TakeNotice and tells the notify hook. s.mu is held.
+// raise records a notice for TakeNotice and queues it for notify. s.mu is held;
+// flush delivers the queue once it is not.
 func (s *Store) raise(msg string) {
 	s.notice = msg
 	if s.logger != nil {
 		s.logger.Warn(msg)
 	}
-	if s.notify != nil {
-		s.notify(msg)
+	s.pending = append(s.pending, msg)
+}
+
+// flush hands the queued notices to notify. s.mu is not held.
+func (s *Store) flush() {
+	s.mu.Lock()
+	msgs, fn := s.pending, s.notify
+	s.pending = nil
+	s.mu.Unlock()
+	if fn == nil {
+		return
+	}
+	for _, m := range msgs {
+		fn(m)
 	}
 }
 
@@ -241,6 +256,7 @@ func (s *Store) NoteUnreadable(err error) {
 	if !errors.Is(err, ErrCorrupt) {
 		return
 	}
+	defer s.flush()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.warned {
@@ -316,6 +332,11 @@ func (s *Store) TakeNotice() string {
 // from Defaults(), and TakeNotice reports where the old file went. A file that
 // cannot be read at all (permissions, I/O) refuses the write.
 func (s *Store) Modify(fn func(*Preferences) error) error {
+	defer s.flush() // runs after modify has released the file lock and s.mu
+	return s.modify(fn)
+}
+
+func (s *Store) modify(fn func(*Preferences) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -371,7 +392,11 @@ func (s *Store) lock() (func(), error) {
 		}
 		if time.Now().After(deadline) {
 			_ = dir.Close()
-			return nil, fmt.Errorf("preferences are being written by another Slaw process (waited %s): %w", timeout, err)
+			var held *filelock.HeldError
+			if errors.As(err, &held) {
+				return nil, fmt.Errorf("preferences are being written by another Slaw process (waited %s): %w", timeout, err)
+			}
+			return nil, fmt.Errorf("failed to lock preferences (gave up after %s): %w", timeout, err)
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
