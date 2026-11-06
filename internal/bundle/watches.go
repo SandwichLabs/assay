@@ -126,6 +126,9 @@ func (r *itemImporter) rewriteWatchRefs(it item) item {
 		}
 	}
 	if m := w.Question.Metric; m != "" {
+		if r.skipped[KindSemantics]["metrics/"+m] {
+			r.notes = append(r.notes, fmt.Sprintf("watch %s asks the metric %q, which was skipped because the workspace already has one by that name: it now asks the workspace's %q, which may be a different metric", it.ID, m, m))
+		}
 		if final, ok := r.renamed[KindSemantics]["metrics/"+m]; ok {
 			_, newM := splitSemanticsID(final)
 			r.notes = append(r.notes, fmt.Sprintf("watch %s now asks the metric %q imported with it (the workspace's own %q was kept)", it.ID, newM, m))

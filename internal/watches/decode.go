@@ -91,6 +91,9 @@ func ValidateName(name string) error {
 // says what to change. It does not read the workspace: whether the saved query
 // or the metric exists is found when the watch is checked.
 func Validate(w *Watch) error {
+	if w.Version != 0 && w.Version != Version {
+		return invalid("version %d needs a newer Slaw (this one reads version %d)", w.Version, Version)
+	}
 	if err := checkLine("description", w.Description, MaxDescription); err != nil {
 		return err
 	}
@@ -131,18 +134,12 @@ func validateQuestion(q *Question) error {
 	if len(q.Params) > 0 {
 		return invalid("question.params applies to a saved query; a metric takes none")
 	}
-	if q.Connection != "" && !connname.Valid(q.Connection) {
-		return invalid("question.connection %q is not a valid connection name", q.Connection)
-	}
 	return nil
 }
 
 func validateQueryQuestion(q *Question) error {
 	if !filestore.ValidID(q.Query) {
 		return invalid("question.query %q is not a valid saved query id", q.Query)
-	}
-	if q.Connection != "" {
-		return invalid("question.connection applies to a metric; a saved query runs on its own connection")
 	}
 	if len(q.Params) > MaxParams {
 		return invalid("question.params has %d entries, over the limit of %d", len(q.Params), MaxParams)

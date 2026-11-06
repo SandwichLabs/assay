@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
 	"slices"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -233,14 +236,17 @@ func runWatchShow(cmd *cobra.Command, args []string) error {
 
 func runWatchCheck(cmd *cobra.Command, args []string) error {
 	asJSON, _ := cmd.Flags().GetBool("json")
-	o, r, err := openSemanticsRun(cmd, "slaw watch check")
+	o, r, err := openReadOnlyRun(cmd, "slaw watch check")
 	if err != nil {
 		return err
 	}
 	defer o.Close()
-	results, runErr := workspace.CheckWatches(cmdCtx(cmd), o.WS, args, r, time.Now())
-	if runErr != nil && results == nil {
-		return runErr // an unknown name: nothing ran
+	// Ctrl-C stops the check in flight; the results so far are still printed.
+	ctx, stop := signal.NotifyContext(cmdCtx(cmd), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	results, runErr := workspace.CheckWatches(ctx, o.WS, args, r, time.Now())
+	if runErr != nil && len(results) == 0 {
+		return runErr // an unknown name or an immediate cancel: nothing ran
 	}
 	out := cmd.OutOrStdout()
 	if asJSON {

@@ -416,7 +416,16 @@ func (sc *SandboxConfig) checkSQLClass(class sqlClass, reason string) error {
 // a denial: the render-time gate is read-only in every tier, so the reason the
 // classifier gave (which can name a tier requirement) would be false for a
 // full-tier caller. Callers log the reason themselves.
-var ErrReadOnlyBindingDenied = errors.New("live bindings are read-only queries over this workspace's connections (no writes, and files only inside data/)")
+var ErrReadOnlyBindingDenied error = &policyRefusal{msg: "live bindings are read-only queries over this workspace's connections (no writes, and files only inside data/)"}
+
+// policyRefusal is the policy's own "no": a statement that is not a plain read.
+// PolicyRefused lets a caller that cannot import agents (the watch check) tell
+// it from a database or connection failure, as ConnectFailure does for the
+// connection.
+type policyRefusal struct{ msg string }
+
+func (e *policyRefusal) Error() string       { return e.msg }
+func (e *policyRefusal) PolicyRefused() bool { return true }
 
 // checkSQLClassReadOnly is the render-time gate for a live A2UI binding or a
 // notebook cell: sqlClassRead regardless of the tier, because the statement

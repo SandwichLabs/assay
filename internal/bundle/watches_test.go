@@ -228,3 +228,24 @@ func TestWatches_OverwriteIsAgainstTheRevisionJustRead(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(got), "query: edited", "the newer edit was not clobbered")
 }
+
+func TestWatches_ASkippedMetricIsSaidToBeTheWorkspacesOwn(t *testing.T) {
+	ctx := context.Background()
+	src, _ := newWS(t)
+	writeSem(t, src, map[string]string{"semantics/metrics/net_revenue.yaml": semMetric})
+	writeWatches(t, src, map[string]string{"watches/revenue_cap.yaml": watchRevenue})
+	res, err := Export(ctx, src, ExportOptions{Selection: all()})
+	require.NoError(t, err)
+
+	dst, _ := newWS(t)
+	writeSem(t, dst, map[string]string{"semantics/metrics/net_revenue.yaml": semMetric + "# mine\n"})
+	pkg, err := Open(res.Data, "")
+	require.NoError(t, err)
+	out, err := pkg.Import(ctx, dst, ImportOptions{OnConflict: ActionSkip})
+	require.NoError(t, err)
+	require.Zero(t, out.Failed(), "%+v", out.Outcomes)
+	assert.Contains(t, strings.Join(out.Warnings, "\n"), `watch revenue_cap asks the metric "net_revenue", which was skipped`)
+	got, err := os.ReadFile(filepath.Join(dst.Root(), "watches", "revenue_cap.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, watchRevenue, string(got), "the watch itself is imported as it was")
+}

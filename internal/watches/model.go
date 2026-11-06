@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"regexp"
 	"strconv"
 	"strings"
@@ -85,8 +86,14 @@ type Meta struct {
 	Error string `yaml:"-" json:"error,omitempty"`
 }
 
+// Version is the only document version there is. A file without a version
+// field is version 1.
+const Version = 1
+
 // Watch is one standing question with a condition. Its name is the file name.
 type Watch struct {
+	// Version is optional: absent means 1; any other value is refused.
+	Version int `yaml:"version,omitempty" json:"version,omitempty"`
 	// Name is the file stem; it is not a field of the document.
 	Name        string    `yaml:"-" json:"name"`
 	Description string    `yaml:"description,omitempty" json:"description,omitempty"`
@@ -97,7 +104,8 @@ type Watch struct {
 }
 
 // Question is what a watch asks: exactly one of a saved query (by id, with
-// parameter values bound by name) or a metric (run at its grain total).
+// parameter values bound by name) or a metric (run at its grain total, on the
+// connection of its saved query).
 type Question struct {
 	// Query is a saved query id (queries/<id>.sql).
 	Query string `yaml:"query,omitempty" json:"query,omitempty"`
@@ -107,9 +115,6 @@ type Question struct {
 	Params map[string]string `yaml:"params,omitempty" json:"params,omitempty"`
 	// Metric is a metric name (semantics/metrics/<name>.yaml).
 	Metric string `yaml:"metric,omitempty" json:"metric,omitempty"`
-	// Connection is the connection a metric runs on; a saved query runs on
-	// its own. Empty is the metric's own (its saved query's) connection.
-	Connection string `yaml:"connection,omitempty" json:"connection,omitempty"`
 }
 
 // Target is the saved query id or metric name the question asks.
@@ -163,14 +168,28 @@ type Threshold struct {
 	val  float64
 }
 
-var thresholdRE = regexp.MustCompile(`^-?(0|[1-9][0-9]{0,14})(\.[0-9]{1,15})?$`)
+var thresholdRE = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?$`)
 
 const thresholdHint = "a threshold must be a plain decimal number such as 0, -5 or 99.5, not quoted and without an exponent"
+
+// MaxThresholdDigits is how many significant digits a threshold may have, so
+// the float64 it is compared as is exact.
+const MaxThresholdDigits = 15
+
+// sigDigits counts a plain decimal's digits without its sign, point and
+// leading zeros.
+func sigDigits(text string) int {
+	s := strings.ReplaceAll(strings.TrimPrefix(text, "-"), ".", "")
+	return len(strings.TrimLeft(s, "0"))
+}
 
 // ParseThreshold reads a threshold written as a plain decimal.
 func ParseThreshold(text string) (Threshold, error) {
 	if !thresholdRE.MatchString(text) {
 		return Threshold{}, fmt.Errorf("%s (got %q)", thresholdHint, text)
+	}
+	if sigDigits(text) > MaxThresholdDigits {
+		return Threshold{}, fmt.Errorf("a threshold has at most %d significant digits (got %q)", MaxThresholdDigits, text)
 	}
 	f, err := strconv.ParseFloat(text, 64)
 	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
@@ -180,6 +199,16 @@ func ParseThreshold(text string) (Threshold, error) {
 		text = strings.TrimPrefix(text, "-") // -0 is 0
 	}
 	return Threshold{text: text, val: f}, nil
+}
+
+// Rat is the threshold exactly, for comparing with an integer or decimal
+// value too big for a float64.
+func (t Threshold) Rat() *big.Rat {
+	r, ok := new(big.Rat).SetString(t.text)
+	if !ok {
+		return new(big.Rat)
+	}
+	return r
 }
 
 // Float is the threshold as a float64.
@@ -234,12 +263,32 @@ func (r Range) MarshalYAML() (any, error) {
 }
 
 // FormatNumber writes f for a person: thousands separators, no exponent, at
-// most six decimals with trailing zeros dropped.
+// most six decimals with trailing zeros dropped. A non-zero number is never
+// shown as 0: one too small for six decimals is written in full.
 func FormatNumber(f float64) string {
 	s := strconv.FormatFloat(f, 'f', 6, 64)
 	if strings.Contains(s, ".") {
 		s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
 	}
+	if (s == "0" || s == "-0") && f != 0 {
+		s = strconv.FormatFloat(f, 'f', -1, 64)
+	}
+	return groupDecimal(s)
+}
+
+// FormatRat writes an exact integer in full with thousands separators and
+// anything else as FormatNumber does.
+func FormatRat(r *big.Rat) string {
+	if r.IsInt() {
+		return groupDecimal(r.Num().String())
+	}
+	f, _ := r.Float64()
+	return FormatNumber(f)
+}
+
+// groupDecimal puts thousands separators in the integer part of a plain
+// decimal ("-1234567.5" is "-1,234,567.5") and writes "-0" as "0".
+func groupDecimal(s string) string {
 	neg := strings.HasPrefix(s, "-")
 	s = strings.TrimPrefix(s, "-")
 	intPart, frac, hasFrac := strings.Cut(s, ".")

@@ -271,7 +271,7 @@ func (r *itemImporter) noteRename(it item, final string) {
 // the metrics and joins of the same bundle that refer to it can say they now
 // use the workspace's own.
 func (r *itemImporter) noteSkip(it item) {
-	if folder, _ := splitSemanticsID(it.ID); it.Kind != KindQuery && !(it.Kind == KindSemantics && folder == semantics.EntitiesDir) {
+	if folder, _ := splitSemanticsID(it.ID); it.Kind != KindQuery && !(it.Kind == KindSemantics && (folder == semantics.EntitiesDir || folder == semantics.MetricsDir)) {
 		return
 	}
 	if r.skipped == nil {

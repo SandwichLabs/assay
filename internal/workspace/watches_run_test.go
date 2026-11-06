@@ -79,6 +79,7 @@ func watchWorkspace(t *testing.T) Workspace {
 	t.Helper()
 	ws, _ := newWorkspace(t)
 	ctx := context.Background()
+	require.NoError(t, ws.AddConnection(ScopeShared, ConnectionDef{Name: "warehouse", Type: "duckdb", Path: "data/warehouse.duckdb"}))
 	require.NoError(t, ws.Queries().Create(ctx, &queries.Query{ID: "stuck", Title: "Stuck", SQL: "SELECT id, who FROM orders WHERE age > $days",
 		Parameters: []queries.Param{{Name: "days", Type: "integer", Default: "1"}}}))
 	require.NoError(t, ws.Queries().Create(ctx, &queries.Query{ID: "remote_q", Title: "Remote", SQL: "SELECT 1", Connection: "warehouse"}))
@@ -161,7 +162,7 @@ func TestCheckWatches_ThresholdShapesAreErrors(t *testing.T) {
 			require.Len(t, res, 1)
 			assert.Equal(t, c.status, res[0].Status, res[0].Reason)
 			assert.Contains(t, res[0].Reason, c.reason)
-			if c.status == watches.StatusError {
+			if c.status == watches.StatusError && c.reason != `column "n" is NULL` {
 				assert.Contains(t, res[0].Reason, "one row and one numeric column", "the error names the shape it wanted")
 				assert.Nil(t, res[0].Value, "a wrong shape is never an alert")
 			}
@@ -303,13 +304,16 @@ func TestCheckWatches_ASavedQueryOnAnotherConnection(t *testing.T) {
 func TestCheckWatches_AMetricRunsAtItsTotalOnItsQueriesConnection(t *testing.T) {
 	ws := watchWorkspace(t)
 	putWatch(t, ws, "w", "question: {metric: revenue}\nwhen: {above: 5}\n")
-	putWatch(t, ws, "w2", "question: {metric: revenue, connection: other}\nwhen: {above: 5}\n")
 	r := &scriptedRunner{rs: scalar("revenue", "BIGINT", int64(1))}
-	check(t, ws, r, "w", "w2")
-	require.Len(t, r.calls, 2)
+	check(t, ws, r, "w")
+	require.Len(t, r.calls, 1)
 	assert.Equal(t, "SELECT * FROM metric('revenue')", r.calls[0].sql, "the grain total, written by MetricQuery")
-	assert.Equal(t, "warehouse", r.calls[0].connection)
-	assert.Equal(t, "other", r.calls[1].connection, "the watch may name the connection")
+	assert.Equal(t, "warehouse", r.calls[0].connection, "the metric's own connection: the expander refuses any other")
+
+	// A metric cannot be pointed at another connection: the field is gone.
+	_, err := ws.Watches().PutSource(context.Background(), "w2", []byte("question: {metric: revenue, connection: other}\nwhen: {above: 5}\n"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "field connection not found")
 }
 
 func TestCheckWatches_ADownConnectionIsAnErrorNamingIt(t *testing.T) {
@@ -360,7 +364,7 @@ func TestCheckWatches_OneBadWatchDoesNotStopTheOthers(t *testing.T) {
 	assert.Equal(t, watches.StatusError, by["c_missing_metric"].Status)
 	assert.Equal(t, watches.StatusAlert, by["d_fires"].Status, "a watch after the failures still ran")
 	assert.Equal(t, watches.StatusError, by["e_broken"].Status)
-	assert.Contains(t, by["e_broken"].Reason, "the file cannot be read")
+	assert.Contains(t, by["e_broken"].Reason, "the file is not valid")
 	assert.Contains(t, by["e_broken"].Reason, "when needs exactly one condition")
 
 	// Every outcome, including the errors, is in the history.

@@ -6,7 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strconv"
+	"math/big"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -69,6 +70,10 @@ type WatchResult struct {
 	// HistoryError says the outcome could not be recorded; the check itself
 	// stands.
 	HistoryError string `json:"history_error,omitempty"`
+	// StoredReason, when set, is what the history keeps in place of Reason. A
+	// database error can quote a value of a row, so the report shows the
+	// message and the history keeps only its class.
+	StoredReason string `json:"-"`
 }
 
 // CheckWatches checks the named watches (none named is every watch), one at a
@@ -92,6 +97,9 @@ func CheckWatches(ctx context.Context, ws Workspace, names []string, runner Read
 			recordWatch(ctx, ws.WatchHistory(), &res)
 		}
 		out = append(out, res)
+	}
+	if err := ctx.Err(); err != nil { // a cancel that landed in the last watch
+		return out, fmt.Errorf("the check was canceled: %w", err)
 	}
 	return out, nil
 }
@@ -131,7 +139,11 @@ func recordWatch(ctx context.Context, h watches.History, res *WatchResult) {
 	if h == nil || !connname.Valid(res.Watch) {
 		return
 	}
-	if err := h.Append(ctx, res.Entry); err != nil {
+	e := res.Entry
+	if res.StoredReason != "" {
+		e.Reason = res.StoredReason
+	}
+	if err := h.Append(ctx, e); err != nil {
 		res.HistoryError = reasonText(err.Error())
 	}
 }
@@ -152,7 +164,7 @@ func checkWatch(ctx context.Context, ws Workspace, w *watches.Watch, runner Read
 	defer func() { res.DurationMS = time.Since(start).Milliseconds() }()
 
 	if w.Error != "" {
-		return res.fail("the file cannot be read: " + w.Error)
+		return res.fail("the file is not valid: " + w.Error)
 	}
 	plan, err := planWatch(ctx, ws, w, now)
 	if err != nil {
@@ -160,7 +172,7 @@ func checkWatch(ctx context.Context, ws Workspace, w *watches.Watch, runner Read
 	}
 	rs, truncated, err := runWatchPlan(ctx, runner, plan)
 	if err != nil {
-		return res.fail(runFailure(ctx, plan, err))
+		return res.failRun(runFailure(ctx, plan, err))
 	}
 	if w.When.IsThreshold() {
 		res.evalThreshold(w, rs, truncated)
@@ -185,6 +197,14 @@ func newWatchResult(w *watches.Watch, now time.Time) WatchResult {
 // fail makes the result an error outcome.
 func (r WatchResult) fail(reason string) WatchResult {
 	r.Status, r.Reason = watches.StatusError, reasonText(reason)
+	return r
+}
+
+// failRun makes the result an error outcome whose stored reason differs from
+// the shown one.
+func (r WatchResult) failRun(f runFailed) WatchResult {
+	r = r.fail(f.shown)
+	r.StoredReason = reasonText(f.stored)
 	return r
 }
 
@@ -246,6 +266,14 @@ func planSavedQueryWatch(ctx context.Context, ws Workspace, w *watches.Watch, no
 	if q.Error != "" {
 		return watchPlan{}, fmt.Errorf("saved query %q cannot be run: %s", id, q.Error)
 	}
+	if err := checkConnectionDefined(ws, q.Connection, fmt.Sprintf("saved query %q", id)); err != nil {
+		return watchPlan{}, err
+	}
+	for _, p := range q.Parameters {
+		if _, given := w.Question.Params[p.Name]; !given && p.Required && p.Default == "" {
+			return watchPlan{}, fmt.Errorf("saved query %q needs a value for parameter %q: add question.params.%s to the watch", id, p.Name, p.Name)
+		}
+	}
 	values, err := queries.ParseValues(q, w.Question.Params)
 	if err != nil {
 		return watchPlan{}, fmt.Errorf("saved query %q: %w", id, err)
@@ -265,10 +293,22 @@ func planMetricWatch(ctx context.Context, ws Workspace, w *watches.Watch) (watch
 	if err != nil {
 		return watchPlan{}, err
 	}
-	if w.Question.Connection != "" {
-		conn = w.Question.Connection
+	if err := checkConnectionDefined(ws, conn, fmt.Sprintf("the saved query behind metric %q", w.Question.Metric)); err != nil {
+		return watchPlan{}, err
 	}
 	return watchPlan{sql: sql, connection: conn}, nil
+}
+
+// checkConnectionDefined says plainly that a query names a connection this
+// workspace does not define, rather than leaving the engine's "not attached".
+func checkConnectionDefined(ws Workspace, name, what string) error {
+	if name == "" {
+		return nil
+	}
+	if _, ok := ws.Connection(name); !ok {
+		return fmt.Errorf("%s runs on connection %q, which this workspace does not define (slaw conn list)", what, name)
+	}
+	return nil
 }
 
 // --- running -----------------------------------------------------------------
@@ -281,18 +321,33 @@ func runWatchPlan(ctx context.Context, runner ReadOnlyRunner, p watchPlan) (*eng
 	return runner.RunReadOnlySQLIn(ctx, p.connection, p.sql, p.params, p.maxRows)
 }
 
-// runFailure says why a run failed, as the reason of an error outcome.
-func runFailure(parent context.Context, p watchPlan, err error) string {
+// runFailed is why a run failed: shown in the report, and the part of it the
+// history may keep.
+type runFailed struct{ shown, stored string }
+
+// policyRefusedText is the watch's wording for a statement the policy refuses.
+const policyRefusedText = "refused: a watch may only read (no writes, COPY, ATTACH or SET; files only inside data/)"
+
+// runFailure says why a run failed. A database's own message can quote a row's
+// value, so it is shown but never stored: the history gets its error class.
+func runFailure(parent context.Context, p watchPlan, err error) runFailed {
 	var cf interface{ ConnectFailure() bool }
+	var pr interface{ PolicyRefused() bool }
 	switch {
 	case parent.Err() != nil:
-		return "the check was canceled"
+		return runFailed{"the check was canceled", "the check was canceled"}
 	case errors.Is(err, context.DeadlineExceeded):
-		return fmt.Sprintf("the statement did not finish within %s", CheckStatementTimeout)
+		t := fmt.Sprintf("the statement did not finish within %s", CheckStatementTimeout)
+		return runFailed{t, t}
 	case errors.As(err, &cf) && cf.ConnectFailure():
-		return fmt.Sprintf("could not connect to %s: %s", p.label, err)
+		return runFailed{
+			fmt.Sprintf("could not connect to %s: %s", p.label, watches.CleanDBError(err.Error())),
+			fmt.Sprintf("could not connect to %s", p.label),
+		}
+	case errors.As(err, &pr) && pr.PolicyRefused():
+		return runFailed{policyRefusedText, policyRefusedText}
 	}
-	return "could not run: " + err.Error()
+	return runFailed{"could not run: " + watches.CleanDBError(err.Error()), "could not run: " + watches.ErrorClass(err.Error())}
 }
 
 // --- judging -----------------------------------------------------------------
@@ -304,31 +359,70 @@ func (r *WatchResult) evalThreshold(w *watches.Watch, rs *engine.ResultSet, trun
 		*r = r.fail(err.Error())
 		return
 	}
-	r.Value = &v
+	f := v.float()
+	r.Value = &f
 	target := w.Question.Target()
 	if why, fired := crossed(w.When, v); fired {
 		r.Status = watches.StatusAlert
-		r.Reason = reasonText(fmt.Sprintf("%s is %s, %s", target, watches.FormatNumber(v), why))
+		r.Reason = reasonText(fmt.Sprintf("%s is %s, %s", target, v.text(), why))
 		return
 	}
 	r.Status = watches.StatusOK
-	r.Reason = reasonText(fmt.Sprintf("%s is %s; alerts %s", target, watches.FormatNumber(v), w.When.Describe()))
+	r.Reason = reasonText(fmt.Sprintf("%s is %s; alerts %s", target, v.text(), w.When.Describe()))
+}
+
+// numVal is a number read from a result. An integer or decimal is kept exact
+// (a BIGINT or DECIMAL beyond a double's safe range would otherwise compare
+// wrongly); a DOUBLE is compared as a double.
+type numVal struct {
+	rat *big.Rat // nil for a float
+	f   float64
+}
+
+// cmp compares the value with a threshold: -1, 0 or 1.
+func (v numVal) cmp(t watches.Threshold) int {
+	if v.rat != nil {
+		return v.rat.Cmp(t.Rat())
+	}
+	switch tf := t.Float(); {
+	case v.f < tf:
+		return -1
+	case v.f > tf:
+		return 1
+	}
+	return 0
+}
+
+func (v numVal) float() float64 {
+	if v.rat != nil {
+		f, _ := v.rat.Float64()
+		return f
+	}
+	return v.f
+}
+
+// text is the value as a reason shows it.
+func (v numVal) text() string {
+	if v.rat != nil {
+		return watches.FormatRat(v.rat)
+	}
+	return watches.FormatNumber(v.f)
 }
 
 // crossed says whether v is on the alerting side, and how, as a phrase that
 // follows "is 1,240, ".
-func crossed(c watches.Condition, v float64) (string, bool) {
+func crossed(c watches.Condition, v numVal) (string, bool) {
 	switch {
 	case c.Above != nil:
-		return "above " + c.Above.Display(), v > c.Above.Float()
+		return "above " + c.Above.Display(), v.cmp(*c.Above) > 0
 	case c.Below != nil:
-		return "below " + c.Below.Display(), v < c.Below.Float()
+		return "below " + c.Below.Display(), v.cmp(*c.Below) < 0
 	case len(c.Outside) == 2:
 		lo, hi := c.Outside[0], c.Outside[1]
-		if v < lo.Float() {
+		if v.cmp(lo) < 0 {
 			return "below " + lo.Display(), true
 		}
-		if v > hi.Float() {
+		if v.cmp(hi) > 0 {
 			return "above " + hi.Display(), true
 		}
 	}
@@ -339,53 +433,55 @@ const thresholdShape = "a threshold check needs exactly one row and one numeric 
 
 // thresholdValue is the one number a threshold result holds. Any other shape
 // is an error that names the shape it got.
-func thresholdValue(rs *engine.ResultSet, truncated bool) (float64, error) {
+func thresholdValue(rs *engine.ResultSet, truncated bool) (numVal, error) {
 	switch {
 	case rs == nil || len(rs.Rows) == 0:
-		return 0, fmt.Errorf("the question returned no rows; %s", thresholdShape)
+		return numVal{}, fmt.Errorf("the question returned no rows; %s", thresholdShape)
 	case len(rs.Rows) > 1 || truncated:
 		more := fmt.Sprint(len(rs.Rows))
 		if truncated {
 			more = "more than " + more
 		}
-		return 0, fmt.Errorf("the question returned %s rows; %s", more, thresholdShape)
+		return numVal{}, fmt.Errorf("the question returned %s rows; %s", more, thresholdShape)
 	}
 	idx, err := valueColumn(rs.Columns)
 	if err != nil {
-		return 0, err
+		return numVal{}, err
 	}
 	col := rs.Columns[idx]
 	cell := rs.Value(0, idx)
 	if cell == nil {
-		return 0, fmt.Errorf("column %q is NULL; %s", columnText(col.Name), thresholdShape)
+		return numVal{}, fmt.Errorf("column %q is NULL", columnText(col.Name))
 	}
-	f, ok := asFloat(cell)
+	v, ok := asNum(cell)
 	if !ok {
-		return 0, fmt.Errorf("column %q is not a finite number; %s", columnText(col.Name), thresholdShape)
+		return numVal{}, fmt.Errorf("column %q is not a finite number; %s", columnText(col.Name), thresholdShape)
 	}
-	return f, nil
+	return v, nil
 }
 
 // valueColumn picks the column a threshold reads: the only one, or the one
 // named value, and it must be numeric.
 func valueColumn(cols []engine.Column) (int, error) {
-	idx := -1
-	switch {
-	case len(cols) == 1:
+	idx, named := -1, 0
+	if len(cols) == 1 {
 		idx = 0
-	default:
+	} else {
 		for i, c := range cols {
 			if strings.EqualFold(c.Name, "value") {
 				idx = i
-				break
+				named++
 			}
 		}
 	}
-	if idx < 0 {
-		names := make([]string, len(cols))
-		for i, c := range cols {
-			names[i] = columnText(c.Name)
-		}
+	names := make([]string, len(cols))
+	for i, c := range cols {
+		names[i] = columnText(c.Name)
+	}
+	switch {
+	case named > 1:
+		return 0, fmt.Errorf("the question returned %d columns named value (%s); %s", named, strings.Join(names, ", "), thresholdShape)
+	case idx < 0:
 		return 0, fmt.Errorf("the question returned %d columns (%s); %s", len(cols), strings.Join(names, ", "), thresholdShape)
 	}
 	if t := cols[idx].Type; t != "" && !numericType(t) {
@@ -415,44 +511,52 @@ func numericType(t string) bool {
 	return numericTypes[base]
 }
 
-// asFloat reads a number as the engine delivers it: a JSON-safe int or float,
-// or exact text for a decimal or an integer too big for a double.
-func asFloat(v any) (float64, bool) {
-	var f float64
+// plainDecimalRE is the exact text the engine gives for a decimal or an integer
+// too big for a double: digits, a point, no exponent (so no unbounded Rat).
+var plainDecimalRE = regexp.MustCompile(`^-?[0-9]{1,100}(\.[0-9]{1,100})?$`)
+
+// asNum reads a number as the engine delivers it: a JSON-safe int or float, or
+// exact text for a decimal or an integer too big for a double.
+func asNum(v any) (numVal, bool) {
 	switch x := v.(type) {
 	case int64:
-		f = float64(x)
+		return numVal{rat: new(big.Rat).SetInt64(x)}, true
 	case int:
-		f = float64(x)
+		return numVal{rat: new(big.Rat).SetInt64(int64(x))}, true
 	case int32:
-		f = float64(x)
+		return numVal{rat: new(big.Rat).SetInt64(int64(x))}, true
 	case uint64:
-		f = float64(x)
+		return numVal{rat: new(big.Rat).SetInt(new(big.Int).SetUint64(x))}, true
 	case uint32:
-		f = float64(x)
+		return numVal{rat: new(big.Rat).SetInt64(int64(x))}, true
 	case float64:
-		f = x
+		return finiteFloat(x)
 	case float32:
-		f = float64(x)
+		return finiteFloat(float64(x))
 	case json.Number:
-		p, err := strconv.ParseFloat(x.String(), 64)
-		if err != nil {
-			return 0, false
-		}
-		f = p
+		return exactNum(x.String())
 	case string:
-		p, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
-		if err != nil {
-			return 0, false
-		}
-		f = p
-	default:
-		return 0, false
+		return exactNum(strings.TrimSpace(x))
 	}
+	return numVal{}, false
+}
+
+func finiteFloat(f float64) (numVal, bool) {
 	if math.IsNaN(f) || math.IsInf(f, 0) {
-		return 0, false
+		return numVal{}, false
 	}
-	return f, true
+	return numVal{f: f}, true
+}
+
+func exactNum(text string) (numVal, bool) {
+	if !plainDecimalRE.MatchString(text) {
+		return numVal{}, false
+	}
+	r, ok := new(big.Rat).SetString(text)
+	if !ok {
+		return numVal{}, false
+	}
+	return numVal{rat: r}, true
 }
 
 // evalRows counts the rows a rows check read and judges the count.

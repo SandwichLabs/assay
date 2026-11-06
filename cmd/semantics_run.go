@@ -102,13 +102,13 @@ func init() {
 	semanticsCmd.AddCommand(semanticsCheckCmd, semanticsProfileCmd)
 }
 
-// openSemanticsRun opens the workspace for a run of what its definitions
-// declare: read-only (no hub lock, every connection attached read-only), with
+// openReadOnlyRun opens the workspace for a run of what its definitions or
+// watches declare: read-only (no hub lock, every connection attached read-only), with
 // the agent policy's read-only runner. Every statement goes through that
 // runner, so the open is policy-gated (hub.OpenOptions.PolicyGatedRuns): a
 // connection that cannot be attached read-only at all (MotherDuck) is attached
 // as defined instead of being unreachable (#302).
-func openSemanticsRun(cmd *cobra.Command, app string) (*openedWorkspace, workspace.ReadOnlyRunner, error) {
+func openReadOnlyRun(cmd *cobra.Command, app string) (*openedWorkspace, workspace.ReadOnlyRunner, error) {
 	dir, _ := cmd.Flags().GetString("workspace")
 	o, err := cliOpenWith(cmdCtx(cmd), dir, semanticsRunOpenOptions(app), false, cmd.ErrOrStderr())
 	if err != nil {
@@ -122,7 +122,7 @@ func openSemanticsRun(cmd *cobra.Command, app string) (*openedWorkspace, workspa
 	return o, r, nil
 }
 
-// semanticsRunOpenOptions is the open openSemanticsRun asks for.
+// semanticsRunOpenOptions is the open openReadOnlyRun asks for.
 func semanticsRunOpenOptions(app string) hub.OpenOptions {
 	return hub.OpenOptions{App: app, Mode: hub.ModeReadOnly, PolicyGatedRuns: true}
 }
@@ -137,7 +137,7 @@ func runSemanticsCheck(cmd *cobra.Command, args []string) error {
 		name = args[1]
 	}
 	compileOnly, _ := cmd.Flags().GetBool("compile")
-	o, r, err := openSemanticsRun(cmd, "slaw semantics check")
+	o, r, err := openReadOnlyRun(cmd, "slaw semantics check")
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func checkExit(rows []assert.Row) error {
 
 func runSemanticsProfile(cmd *cobra.Command, args []string) error {
 	asJSON, _ := cmd.Flags().GetBool("json")
-	o, r, err := openSemanticsRun(cmd, "slaw semantics profile")
+	o, r, err := openReadOnlyRun(cmd, "slaw semantics profile")
 	if err != nil {
 		return err
 	}

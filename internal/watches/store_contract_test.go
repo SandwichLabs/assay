@@ -167,6 +167,7 @@ func TestStore_AnUnreadableFileIsListedWithItsError(t *testing.T) {
 		fx.plant("broken", []byte("question: {query: q}\n"))
 		fx.plant("typo", []byte("question: {query: q}\nwhen: {rows: any}\nbogus: 1\n"))
 		fx.plant("Upper", []byte(docA))
+		fx.plant("nul", []byte(docA))
 
 		list, err := fx.store.List(ctx)
 		require.NoError(t, err)
@@ -174,11 +175,12 @@ func TestStore_AnUnreadableFileIsListedWithItsError(t *testing.T) {
 		for _, w := range list {
 			byName[w.Name] = w
 		}
-		require.Len(t, byName, 4, "nothing is hidden")
+		require.Len(t, byName, 5, "nothing is hidden")
 		assert.Empty(t, byName["good"].Error)
 		assert.Contains(t, byName["broken"].Error, "when needs exactly one condition")
 		assert.Contains(t, byName["typo"].Error, "field bogus not found")
-		assert.Contains(t, byName["Upper"].Error, "not a valid watch name")
+		assert.Contains(t, byName["Upper"].Error, "must start with a lower-case letter")
+		assert.Contains(t, byName["nul"].Error, `watch name "nul" is a reserved file name`, "the name rule's own text is passed through")
 
 		_, err = fx.store.Get(ctx, "broken")
 		require.Error(t, err)

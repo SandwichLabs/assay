@@ -91,7 +91,7 @@ func (c *core) listOne(fn fileName, stem string) (Watch, bool) {
 		return stub(stem, fn.name+" is a symbolic link; it is not read"), true
 	}
 	if err := ValidateName(stem); err != nil {
-		return stub(stem, "the file name is not a valid watch name: use lower-case letters, digits and _"), true
+		return stub(stem, errorText(err)), true
 	}
 	w, err := c.load(stem)
 	if err != nil {

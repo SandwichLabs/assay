@@ -198,7 +198,8 @@ func TestWatchCheck_AHostileCloneIsRefusedByThePolicy(t *testing.T) {
 	assert.Equal(t, 1, exitStatus(err), "the clean watch fired; the hostile ones are errors")
 	assert.NotContains(t, out+stderr, "TOP-SECRET-VALUE")
 	for _, n := range []string{"copy_out", "read_file", "drop_it", "attach_it", "set_it"} {
-		assert.Regexp(t, `error\s+`+n+`\s+could not run`, out, n)
+		assert.Regexp(t, `error\s+`+n+`\s+refused: a watch may only read \(no writes, COPY, ATTACH or SET; files only inside data/\)`, out, n)
+		assert.NotContains(t, out, "live bindings", "the artifact wording is not shown")
 	}
 	assert.Regexp(t, `alert\s+fine\s`, out, "one bad watch does not stop the others")
 	assert.NoFileExists(t, exfil, "the COPY never ran")
@@ -637,4 +638,52 @@ func writeBundleZip(t *testing.T, to string, names []string, contents map[string
 	}
 	require.NoError(t, zw.Close())
 	require.NoError(t, os.WriteFile(to, buf.Bytes(), 0o644))
+}
+
+// A watch over a cast of a text column fails with a database error that quotes
+// a row's value. The report shows it; the history keeps only the class.
+func TestWatchCheck_ADatabaseErrorQuotingARowNeverReachesTheHistory(t *testing.T) {
+	root := watchWorkspaceCLI(t)
+	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	require.NoError(t, ws.Queries().Create(context.Background(), &queries.Query{ID: "cast_names", Title: "Cast", SQL: "SELECT sum(CAST(customer AS INTEGER)) AS n FROM orders"}))
+	require.NoError(t, ws.Close())
+	writeIn(t, root, "watches/cast_names.yaml", "question: {query: cast_names}\nwhen: {above: 1}\n")
+
+	got, code, stderr := checkJSON(t, root)
+	assert.Equal(t, 2, code, stderr)
+	r := got["cast_names"]
+	assert.Equal(t, "error", r.Status)
+	assert.Contains(t, r.Reason, "Conversion Error", "the report shows the database's message")
+	assert.Regexp(t, `'(acme|globex|initech|umbrella)'`, r.Reason, "which quotes a value of a row")
+	assert.NotContains(t, r.Reason, "query execution failed", "without the wrapper chain")
+	assert.NotContains(t, r.Reason, "LINE 1", "or the statement excerpt")
+
+	hist, err := os.ReadFile(filepath.Join(root, ".slaw-local", "watches", "history.jsonl"))
+	require.NoError(t, err)
+	for _, v := range []string{"acme", "globex", "initech", "umbrella", "CAST", "LINE"} {
+		assert.NotContains(t, string(hist), v)
+	}
+	assert.Contains(t, string(hist), "could not run: Conversion Error")
+	out, _, err := runSlaw("watch", "history", "--workspace", root)
+	require.NoError(t, err)
+	assert.Contains(t, out, "could not run: Conversion Error")
+	assert.NotContains(t, out, "acme")
+}
+
+// Ctrl-C reaches the check as a canceled context: nothing is hidden behind a
+// "No watches" line and the exit status is 2.
+func TestWatchCheck_ACanceledCheckSaysSoAndExits2(t *testing.T) {
+	root := watchWorkspaceCLI(t)
+	writeIn(t, root, "watches/quiet.yaml", "question: {query: order_count}\nwhen: {above: 10}\n")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	out, _, err := runSlawCtx(ctx, "watch", "check", "--workspace", root)
+	require.Error(t, err)
+	assert.Equal(t, 2, exitStatus(err))
+	assert.Contains(t, err.Error(), "canceled")
+	assert.NotContains(t, out, "No watches")
+	hist, _, herr := runSlaw("watch", "history", "--workspace", root)
+	require.NoError(t, herr)
+	assert.Contains(t, hist, "No checks recorded", "a canceled check records nothing")
 }

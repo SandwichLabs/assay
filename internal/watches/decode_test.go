@@ -26,10 +26,9 @@ func TestDecode_AcceptedShapes(t *testing.T) {
 			},
 		},
 		"metric above": {
-			doc: "question:\n  metric: revenue\n  connection: warehouse\nwhen:\n  above: 1000\n",
+			doc: "question:\n  metric: revenue\nwhen:\n  above: 1000\n",
 			want: func(t *testing.T, w *Watch) {
 				assert.Equal(t, "revenue", w.Question.Metric)
-				assert.Equal(t, "warehouse", w.Question.Connection)
 				require.NotNil(t, w.When.Above)
 				assert.InDelta(t, 1000, w.When.Above.Float(), 0)
 				assert.True(t, w.When.IsThreshold())
@@ -66,6 +65,24 @@ func TestDecode_AcceptedShapes(t *testing.T) {
 			doc: "question: {query: q}\nwhen: {above: -0}\n",
 			want: func(t *testing.T, w *Watch) {
 				assert.Equal(t, "above 0", w.When.Describe())
+			},
+		},
+		"explicit version 1": {
+			doc: "version: 1\nquestion: {query: q}\nwhen: {rows: any}\n",
+			want: func(t *testing.T, w *Watch) {
+				assert.Equal(t, 1, w.Version)
+			},
+		},
+		"absent version is 1": {
+			doc: "question: {query: q}\nwhen: {rows: any}\n",
+			want: func(t *testing.T, w *Watch) {
+				assert.Equal(t, 0, w.Version)
+			},
+		},
+		"fifteen significant digits": {
+			doc: "question: {query: q}\nwhen: {outside: [-0.00000000000001, 123456789012345]}\n",
+			want: func(t *testing.T, w *Watch) {
+				assert.Equal(t, "outside -0.00000000000001 to 123,456,789,012,345", w.When.Describe())
 			},
 		},
 		"comments are fine": {
@@ -118,10 +135,16 @@ func TestDecode_Refusals(t *testing.T) {
 		"unknown nested field":     {"question: {query: q, limit: 5}\nwhen: {rows: any}\n", "field limit not found"},
 		"unknown condition":        {"question: {query: q}\nwhen: {equals: 5}\n", "field equals not found"},
 		"params on a metric":       {"question: {metric: m, params: {a: 1}}\nwhen: {rows: any}\n", "a metric takes none"},
-		"connection on a query":    {"question: {query: q, connection: c}\nwhen: {rows: any}\n", "a saved query runs on its own connection"},
+		"connection on a query":    {"question: {query: q, connection: c}\nwhen: {rows: any}\n", "field connection not found"},
+		"connection on a metric":   {"question: {metric: m, connection: c}\nwhen: {rows: any}\n", "field connection not found"},
+		"version 2":                {"version: 2\nquestion: {query: q}\nwhen: {rows: any}\n", "version 2 needs a newer Slaw"},
+		"version negative":         {"version: -1\nquestion: {query: q}\nwhen: {rows: any}\n", "needs a newer Slaw"},
+		"version text":             {"version: one\nquestion: {query: q}\nwhen: {rows: any}\n", "cannot unmarshal"},
+		"sixteen digits":           {"question: {query: q}\nwhen: {above: 1234567890123456}\n", "at most 15 significant digits"},
+		"sixteen digits fraction":  {"question: {query: q}\nwhen: {above: 0.1234567890123456}\n", "at most 15 significant digits"},
+		"sixteen digits negative":  {"question: {query: q}\nwhen: {below: -1234567.123456789}\n", "at most 15 significant digits"},
 		"bad query id":             {"question: {query: ../etc}\nwhen: {rows: any}\n", "not a valid saved query id"},
 		"bad metric name":          {"question: {metric: Revenue}\nwhen: {rows: any}\n", "not a valid metric name"},
-		"bad connection":           {"question: {metric: m, connection: \"a b\"}\nwhen: {rows: any}\n", "not a valid connection name"},
 		"bad param name":           {"question: {query: q, params: {\"1x\": 1}}\nwhen: {rows: any}\n", "not a valid parameter name"},
 		"param with newline":       {"question: {query: q, params: {a: \"x\\ny\"}}\nwhen: {rows: any}\n", "must be one line"},
 		"param with control char":  {"question: {query: q, params: {a: \"x\\u0007\"}}\nwhen: {rows: any}\n", "control or invisible"},
@@ -140,7 +163,7 @@ func TestDecode_Refusals(t *testing.T) {
 		"over the byte cap":        {"description: x\n" + strings.Repeat("# pad\n", MaxYAMLBytes/6+10), "byte limit"},
 		"threshold as a sequence":  {"question: {query: q}\nwhen: {above: [1]}\n", "plain decimal"},
 		"threshold with units":     {"question: {query: q}\nwhen: {above: 5%}\n", "plain decimal"},
-		"threshold in a long form": {"question: {query: q}\nwhen: {above: 1234567890123456789}\n", "plain decimal"},
+		"threshold in a long form": {"question: {query: q}\nwhen: {above: 1234567890123456789}\n", "15 significant digits"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -188,7 +211,8 @@ func TestEncode_RoundTripsAndKeepsThresholdsPlain(t *testing.T) {
 func TestFormatNumber(t *testing.T) {
 	for in, want := range map[float64]string{
 		0: "0", 1240: "1,240", 1000: "1,000", 999: "999", 1234567.5: "1,234,567.5", -1500: "-1,500",
-		0.95: "0.95", 0.1 + 0.2: "0.3", 100: "100", -0.0000001: "0",
+		0.95: "0.95", 0.1 + 0.2: "0.3", 100: "100",
+		-0.0000001: "-0.0000001", 0.0000004: "0.0000004", 1e-9: "0.000000001", 1234.0000001: "1,234",
 	} {
 		assert.Equal(t, want, FormatNumber(in), "%v", in)
 	}
