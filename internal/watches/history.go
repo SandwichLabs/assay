@@ -39,8 +39,10 @@ type Entry struct {
 	Rev    string    `json:"rev,omitempty"`
 	At     time.Time `json:"at"`
 	Status Status    `json:"status"`
-	// Value is the number a threshold check read.
-	Value *float64 `json:"value,omitempty"`
+	// Value is the number a threshold check read, exactly as a JSON number: an
+	// integer or decimal in full however large, a double in its shortest form.
+	// Empty when the check read none.
+	Value json.Number `json:"value,omitempty"`
 	// Rows is the row count a rows check read (at most 1,001).
 	Rows *int `json:"rows,omitempty"`
 	// RowsCapped says the count stopped at the read limit.
@@ -53,6 +55,9 @@ type Entry struct {
 // MaxReasonRunes caps a reason, so an error message that quotes a value cannot
 // grow the history.
 const MaxReasonRunes = 300
+
+// MaxValueLen caps the text of an entry's Value.
+const MaxValueLen = 100
 
 // History limits.
 const (
@@ -163,6 +168,9 @@ func (e Entry) clean() (Entry, error) {
 	}
 	if !e.Status.Valid() {
 		return e, fmt.Errorf("%q is not an outcome", e.Status)
+	}
+	if e.Value != "" && (len(e.Value) > MaxValueLen || !json.Valid([]byte(e.Value))) {
+		return e, fmt.Errorf("%q is not a number a check could have read", e.Value)
 	}
 	e.Reason = oneLine(e.Reason, MaxReasonRunes)
 	return e, nil

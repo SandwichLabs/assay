@@ -68,13 +68,13 @@ func watchWorkspaceCLI(t *testing.T) string {
 }
 
 type jsonResult struct {
-	Watch     string   `json:"watch"`
-	Status    string   `json:"status"`
-	Value     *float64 `json:"value"`
-	Rows      *int     `json:"rows"`
-	Reason    string   `json:"reason"`
-	Question  string   `json:"question"`
-	Condition string   `json:"condition"`
+	Watch     string      `json:"watch"`
+	Status    string      `json:"status"`
+	Value     json.Number `json:"value"`
+	Rows      *int        `json:"rows"`
+	Reason    string      `json:"reason"`
+	Question  string      `json:"question"`
+	Condition string      `json:"condition"`
 	Sample    *struct {
 		Columns []string   `json:"columns"`
 		Rows    [][]string `json:"rows"`
@@ -114,8 +114,7 @@ func TestWatchCheck_ThresholdsOnARealDatabase(t *testing.T) {
 	for name, status := range want {
 		assert.Equal(t, status, got[name].Status, name+": "+got[name].Reason)
 	}
-	require.NotNil(t, got["volume_low"].Value)
-	assert.EqualValues(t, 4, *got["volume_low"].Value)
+	assert.Equal(t, json.Number("4"), got["volume_low"].Value)
 	assert.Equal(t, "order_count is 4, below 10", got["volume_low"].Reason)
 	assert.Equal(t, "query order_count", got["volume_low"].Question)
 	assert.Equal(t, "below 10", got["volume_low"].Condition)
@@ -165,7 +164,7 @@ func TestWatchCheck_WrongShapeIsAnErrorNotAnAlert(t *testing.T) {
 	assert.Equal(t, "error", got["two_columns"].Status)
 	assert.Contains(t, got["two_columns"].Reason, "2 columns (id, customer)")
 	for _, r := range got {
-		assert.Nil(t, r.Value)
+		assert.Empty(t, r.Value)
 	}
 }
 
@@ -226,7 +225,7 @@ func TestWatchCheck_ADownConnectionIsAnErrorNamingIt(t *testing.T) {
 	assert.Equal(t, 2, code)
 	assert.Equal(t, "error", got["remote"].Status, "never an alert")
 	assert.Contains(t, got["remote"].Reason, "broken", "the connection is named")
-	assert.Nil(t, got["remote"].Value)
+	assert.Empty(t, got["remote"].Value)
 }
 
 func TestWatchCheck_OneBadWatchDoesNotStopTheOthers(t *testing.T) {
@@ -735,4 +734,24 @@ func TestWatchCheck_AnUnknownColumnIsNotReportedAsRefused(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(hist), "could not run: Binder Error")
 	assert.NotContains(t, string(hist), "nosuchcol")
+}
+
+// A HUGEINT above 2^64 survives --json and the history exactly.
+func TestWatchCheck_AHugeIntegerIsKeptExactly(t *testing.T) {
+	root := watchWorkspaceCLI(t)
+	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	require.NoError(t, ws.Queries().Create(context.Background(), &queries.Query{ID: "huge", Title: "Huge", SQL: "SELECT CAST('123456789012345678901234567890' AS HUGEINT) AS n"}))
+	require.NoError(t, ws.Close())
+	writeIn(t, root, "watches/huge.yaml", "question: {query: huge}\nwhen: {above: 1}\n")
+
+	out, _, err := runSlaw("watch", "check", "--json", "--workspace", root)
+	assert.Equal(t, 1, exitStatus(err))
+	assert.Contains(t, out, `"value": 123456789012345678901234567890,`)
+	out, _, err = runSlaw("watch", "history", "--json", "--workspace", root)
+	require.NoError(t, err)
+	assert.Contains(t, out, `"value": 123456789012345678901234567890,`)
+	hist, err := os.ReadFile(filepath.Join(root, ".slaw-local", "watches", "history.jsonl"))
+	require.NoError(t, err)
+	assert.Contains(t, string(hist), `"value":123456789012345678901234567890,`)
 }

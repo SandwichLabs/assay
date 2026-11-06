@@ -88,7 +88,7 @@ A database error can quote a value of the row it choked on (`Could not convert s
 
 ## History
 
-Every check is appended to **`.slaw-local/watches/history.jsonl`**: one JSON line with the watch name, the file's revision, the time, the outcome, the value or row count, the reason and the duration. It never holds result rows, and never a value a database error quoted: an error outcome's reason is stored as its class only (see above).
+Every check is appended to **`.slaw-local/watches/history.jsonl`**: one JSON line with the watch name, the file's revision, the time, the outcome, the value or row count, the reason and the duration. It never holds result rows, and never a value a database error quoted: an error outcome's reason is stored as its class only (see above). The `value` is a JSON number kept exactly: an integer or decimal in full however large, a double in its shortest form.
 
 - The newest **200** entries of each watch are kept, and the file is at most **5 MB**; the oldest are dropped first.
 - Appends and the pruning run under a cross-process file lock (`.slaw-local/watches/history.lock`), so Studio and a CLI check cannot interleave.

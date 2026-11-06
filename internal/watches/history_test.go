@@ -37,8 +37,8 @@ func TestFileHistory_AppendAndRead(t *testing.T) {
 	_, statErr := os.Stat(filepath.Join(root, ".slaw-local"))
 	assert.True(t, os.IsNotExist(statErr), "reading creates nothing")
 
-	v, n := 1240.0, 3
-	require.NoError(t, h.Append(ctx, Entry{Watch: "a", Rev: "r1", At: t0, Status: StatusAlert, Value: &v, Reason: "a is 1,240, above 1,000", DurationMS: 12}))
+	v, n := json.Number("1240"), 3
+	require.NoError(t, h.Append(ctx, Entry{Watch: "a", Rev: "r1", At: t0, Status: StatusAlert, Value: v, Reason: "a is 1,240, above 1,000", DurationMS: 12}))
 	require.NoError(t, h.Append(ctx, Entry{Watch: "b", At: t0.Add(time.Minute), Status: StatusOK, Rows: &n, RowsCapped: true, Reason: "b returned 1,000+ rows"}))
 	require.NoError(t, h.Append(ctx, entry("a", 2, StatusError)))
 
@@ -46,8 +46,7 @@ func TestFileHistory_AppendAndRead(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 3)
 	assert.Equal(t, []string{"a", "b", "a"}, []string{all[0].Watch, all[1].Watch, all[2].Watch}, "oldest first")
-	require.NotNil(t, all[0].Value)
-	assert.InDelta(t, 1240, *all[0].Value, 0)
+	assert.Equal(t, json.Number("1240"), all[0].Value)
 	require.NotNil(t, all[1].Rows)
 	assert.Equal(t, 3, *all[1].Rows)
 	assert.True(t, all[1].RowsCapped)
@@ -287,4 +286,35 @@ func TestFileHistory_AppendWaitsForTheFileLock(t *testing.T) {
 	got, err := h.Entries(ctx, "")
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
+}
+
+func TestFileHistory_ValueIsExactAndBounded(t *testing.T) {
+	root := t.TempDir()
+	h := NewFileHistory(root)
+	ctx := context.Background()
+	const huge = "123456789012345678901234567890" // above 2^64
+	e := entry("w", 0, StatusAlert)
+	e.Value = json.Number(huge)
+	require.NoError(t, h.Append(ctx, e))
+	got, err := h.Entries(ctx, "w")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, json.Number(huge), got[0].Value, "no float rounding")
+	raw, err := os.ReadFile(historyFilePath(root))
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"value":`+huge)
+
+	for _, bad := range []string{"1e", "abc", "1,5", "NaN", strings.Repeat("9", MaxValueLen+1)} {
+		e.Value = json.Number(bad)
+		assert.Error(t, h.Append(ctx, e), bad)
+	}
+	// A hand-edited line with a bad value is skipped on read.
+	f, err := os.OpenFile(historyFilePath(root), os.O_APPEND|os.O_WRONLY, 0)
+	require.NoError(t, err)
+	_, err = f.WriteString(`{"watch":"w","status":"ok","value":"x","reason":"r"}` + "\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	got, err = h.Entries(ctx, "w")
+	require.NoError(t, err)
+	assert.Len(t, got, 1)
 }

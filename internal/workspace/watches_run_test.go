@@ -128,7 +128,7 @@ func TestCheckWatches_Thresholds(t *testing.T) {
 			require.Len(t, res, 1)
 			assert.Equal(t, c.status, res[0].Status, res[0].Reason)
 			assert.Contains(t, res[0].Reason, c.reason)
-			require.NotNil(t, res[0].Value)
+			require.NotEmpty(t, res[0].Value)
 			assert.Nil(t, res[0].Rows)
 			require.Len(t, r.calls, 1)
 			assert.Equal(t, watchValueRows, r.calls[0].maxRows, "a threshold check reads a few rows")
@@ -165,7 +165,7 @@ func TestCheckWatches_ThresholdShapesAreErrors(t *testing.T) {
 			assert.Contains(t, res[0].Reason, c.reason)
 			if c.status == watches.StatusError && c.reason != `column "n" is NULL` {
 				assert.Contains(t, res[0].Reason, "one row and one numeric column", "the error names the shape it wanted")
-				assert.Nil(t, res[0].Value, "a wrong shape is never an alert")
+				assert.Empty(t, res[0].Value, "a wrong shape is never an alert")
 			}
 		})
 	}
@@ -202,7 +202,7 @@ func TestCheckWatches_Rows(t *testing.T) {
 			require.NotNil(t, res[0].Rows)
 			assert.Equal(t, len(c.rs.Rows), *res[0].Rows)
 			assert.Equal(t, c.capped, res[0].RowsCapped)
-			assert.Nil(t, res[0].Value)
+			assert.Empty(t, res[0].Value)
 			assert.Equal(t, 1001, r.calls[0].maxRows, "a rows check reads at most 1,001 rows")
 		})
 	}
@@ -323,7 +323,7 @@ func TestCheckWatches_ADownConnectionIsAnErrorNamingIt(t *testing.T) {
 	res := check(t, ws, &scriptedRunner{err: connDown{"the remote service refused the token"}})
 	assert.Equal(t, watches.StatusError, res[0].Status, "never an alert")
 	assert.Contains(t, res[0].Reason, "could not connect to warehouse: the remote service refused the token")
-	assert.Nil(t, res[0].Value)
+	assert.Empty(t, res[0].Value)
 
 	// A saved query on the default connection says so.
 	putWatch(t, ws, "d", "question: {query: stuck}\nwhen: {rows: any}\n")
@@ -501,6 +501,5 @@ func TestCheckWatches_RecordsTheRevisionTimeAndDuration(t *testing.T) {
 	require.Len(t, all, 1)
 	assert.Equal(t, got.Rev, all[0].Rev, "the entry says which version of the file was checked")
 	assert.True(t, all[0].At.Equal(now))
-	require.NotNil(t, all[0].Value)
-	assert.EqualValues(t, 5, *all[0].Value)
+	assert.Equal(t, json.Number("5"), all[0].Value)
 }

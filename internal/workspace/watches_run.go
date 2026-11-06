@@ -47,6 +47,10 @@ const (
 	watchSampleBytes = 4096
 )
 
+// watchVetTimeout bounds the follow-up vet after a refusal, so a refused watch
+// cannot take a second statement timeout on top of the first.
+const watchVetTimeout = 10 * time.Second
+
 // WatchSample is the rows an alerting rows check read, capped. It exists for
 // the report that ran the check; nothing stores it.
 type WatchSample struct {
@@ -333,7 +337,7 @@ const policyRefusedText = "refused: a watch may only read (no writes, COPY, ATTA
 // not bind (an unknown column) is the statement's fault, not a policy denial:
 // the database's message is shown and only its class is stored.
 func bindFailure(ctx context.Context, runner ReadOnlyRunner, p watchPlan) (runFailed, bool) {
-	ctx, cancel := context.WithTimeout(ctx, CheckStatementTimeout)
+	ctx, cancel := context.WithTimeout(ctx, watchVetTimeout)
 	defer cancel()
 	verr := runner.VetReadOnlySQLIn(ctx, p.connection, p.sql, p.params)
 	var bf interface{ BindFailure() bool }
@@ -377,8 +381,7 @@ func (r *WatchResult) evalThreshold(w *watches.Watch, rs *engine.ResultSet, trun
 		*r = r.fail(err.Error())
 		return
 	}
-	f := v.float()
-	r.Value = &f
+	r.Value = v.number()
 	target := w.Question.Target()
 	if why, fired := crossed(w.When, v); fired {
 		r.Status = watches.StatusAlert
@@ -393,8 +396,25 @@ func (r *WatchResult) evalThreshold(w *watches.Watch, rs *engine.ResultSet, trun
 // (a BIGINT or DECIMAL beyond a double's safe range would otherwise compare
 // wrongly); a DOUBLE is compared as a double.
 type numVal struct {
-	rat *big.Rat // nil for a float
-	f   float64
+	rat   *big.Rat // nil for a float
+	f     float64
+	exact string // the decimal text a rat was read from, "" for an integer
+}
+
+// number is the value as the JSON number the history and --json keep: an
+// integer in full, a decimal as its exact text, a double in its shortest form.
+func (v numVal) number() json.Number {
+	shortest := func(f float64) json.Number { return json.Number(strconv.FormatFloat(f, 'g', -1, 64)) }
+	switch {
+	case v.rat == nil:
+		return shortest(v.f)
+	case v.rat.IsInt():
+		return json.Number(v.rat.Num().String())
+	case v.exact != "" && json.Valid([]byte(v.exact)):
+		return json.Number(v.exact)
+	}
+	f, _ := v.rat.Float64()
+	return shortest(f)
 }
 
 // cmp compares the value with a threshold: -1, 0 or 1.
@@ -409,14 +429,6 @@ func (v numVal) cmp(t watches.Threshold) int {
 		return 1
 	}
 	return 0
-}
-
-func (v numVal) float() float64 {
-	if v.rat != nil {
-		f, _ := v.rat.Float64()
-		return f
-	}
-	return v.f
 }
 
 // text is the value as a reason shows it.
@@ -590,7 +602,7 @@ func exactNum(text string) (numVal, bool) {
 	if !ok {
 		return numVal{}, false
 	}
-	return numVal{rat: r}, true
+	return numVal{rat: r, exact: text}, true
 }
 
 // evalRows counts the rows a rows check read and judges the count.

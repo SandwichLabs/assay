@@ -209,11 +209,11 @@ func TestAsNum_EveryIntegerWidth(t *testing.T) {
 	for _, v := range []any{int8(5), int16(5), int32(5), int64(5), int(5), uint8(5), uint16(5), uint32(5), uint64(5), uint(5), float32(5), float64(5), json.Number("5"), "5"} {
 		n, ok := asNum(v)
 		require.True(t, ok, "%T", v)
-		assert.InDelta(t, 5, n.float(), 0, "%T", v)
+		assert.Equal(t, json.Number("5"), n.number(), "%T", v)
 	}
 	n, ok := asNum(float32(0.95))
 	require.True(t, ok)
-	assert.Equal(t, 0.95, n.float(), "a FLOAT is its shortest decimal, not its widened binary value")
+	assert.Equal(t, json.Number("0.95"), n.number(), "a FLOAT is its shortest decimal, not its widened binary value")
 	for _, v := range []any{"nan", "1e3", "1/2", "", true, nil, []byte("1")} {
 		_, ok := asNum(v)
 		assert.False(t, ok, "%v", v)
@@ -228,4 +228,59 @@ func TestCheckWatches_ThresholdsAreExactBeyondFifteenDigits(t *testing.T) {
 	assert.Contains(t, res[0].Reason, "100,000,000,000,000,000,001, above 100,000,000,000,000,000,000")
 	res = check(t, ws, &scriptedRunner{rs: scalar("revenue", "HUGEINT", "100000000000000000000")})
 	assert.Equal(t, watches.StatusOK, res[0].Status, res[0].Reason)
+}
+
+// The value a check read is stored exactly, however big.
+func TestCheckWatches_TheStoredValueIsExact(t *testing.T) {
+	ws := watchWorkspace(t)
+	putWatch(t, ws, "w", "question: {metric: revenue}\nwhen: {above: 1}\n")
+	for in, want := range map[string]struct {
+		cell any
+		typ  string
+		num  string
+	}{
+		"hugeint above 2^64": {"123456789012345678901234567890", "HUGEINT", "123456789012345678901234567890"},
+		"decimal":            {json.Number("999999999999999.0000001"), "DECIMAL(25,7)", "999999999999999.0000001"},
+		"small integer":      {int8(7), "TINYINT", "7"},
+		"double":             {0.1, "DOUBLE", "0.1"},
+		"big double":         {1e21, "DOUBLE", "1e+21"},
+	} {
+		res := check(t, ws, &scriptedRunner{rs: scalar("revenue", want.typ, want.cell)})
+		assert.Equal(t, json.Number(want.num), res[0].Value, in)
+		out, err := json.Marshal(res[0])
+		require.NoError(t, err)
+		assert.Contains(t, string(out), `"value":`+want.num, in)
+	}
+	all, err := ws.WatchHistory().Entries(context.Background(), "w")
+	require.NoError(t, err)
+	require.Len(t, all, 5)
+	var stored []json.Number
+	for _, e := range all {
+		stored = append(stored, e.Value)
+	}
+	assert.Contains(t, stored, json.Number("123456789012345678901234567890"), "read back from the file")
+}
+
+func TestCheckWatches_ARefusedWatchsFollowUpVetIsShortBounded(t *testing.T) {
+	ws := watchWorkspace(t)
+	putWatch(t, ws, "w", "question: {query: stuck}\nwhen: {rows: any}\n")
+	r := &slowVet{scriptedRunner: scriptedRunner{err: refusedErr{"no"}}}
+	start := time.Now()
+	res := check(t, ws, r)
+	assert.Less(t, time.Since(start), watchVetTimeout+5*time.Second)
+	assert.True(t, r.hadDeadline, "the vet has its own deadline")
+	assert.LessOrEqual(t, r.limit, watchVetTimeout+time.Second)
+	assert.Contains(t, res[0].Reason, "refused:")
+}
+
+type slowVet struct {
+	scriptedRunner
+	hadDeadline bool
+	limit       time.Duration
+}
+
+func (s *slowVet) VetReadOnlySQLIn(ctx context.Context, _, _ string, _ map[string]any) error {
+	d, ok := ctx.Deadline()
+	s.hadDeadline, s.limit = ok, time.Until(d)
+	return nil
 }
