@@ -30,6 +30,7 @@ type scriptedRunner struct {
 	rs        *engine.ResultSet
 	truncated bool
 	err       error
+	vetErr    error
 	// onRun is called for each run; it may block until ctx ends.
 	onRun func(ctx context.Context, connection, sql string, params map[string]any, maxRows int) (*engine.ResultSet, bool, error)
 	calls []runCall
@@ -50,7 +51,7 @@ func (s *scriptedRunner) RunReadOnlySQLIn(ctx context.Context, connection, sql s
 }
 
 func (s *scriptedRunner) VetReadOnlySQLIn(context.Context, string, string, map[string]any) error {
-	return nil
+	return s.vetErr
 }
 
 type connDown struct{ msg string }

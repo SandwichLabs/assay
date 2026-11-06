@@ -687,3 +687,52 @@ func TestWatchCheck_ACanceledCheckSaysSoAndExits2(t *testing.T) {
 	require.NoError(t, herr)
 	assert.Contains(t, hist, "No checks recorded", "a canceled check records nothing")
 }
+
+// Every numeric type DuckDB has reaches a threshold as a number.
+func TestWatchCheck_ThresholdOverEveryNumericType(t *testing.T) {
+	root := watchWorkspaceCLI(t)
+	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	types := []string{"TINYINT", "SMALLINT", "INTEGER", "INT", "BIGINT", "HUGEINT", "UTINYINT", "USMALLINT", "UINTEGER", "UBIGINT", "UHUGEINT", "FLOAT", "REAL", "DOUBLE", "DECIMAL(10,2)", "DECIMAL(38,10)"}
+	for i, typ := range types {
+		id := "t" + string(rune('a'+i))
+		require.NoError(t, ws.Queries().Create(context.Background(), &queries.Query{ID: id, Title: id, SQL: "SELECT CAST(7 AS " + typ + ") AS n"}))
+		writeIn(t, root, "watches/"+id+".yaml", "question: {query: "+id+"}\nwhen: {above: 6}\n")
+		writeIn(t, root, "watches/"+id+"_ok.yaml", "question: {query: "+id+"}\nwhen: {above: 7}\n")
+	}
+	require.NoError(t, ws.Close())
+	got, code, stderr := checkJSON(t, root)
+	assert.Equal(t, 1, code, stderr)
+	for i, typ := range types {
+		id := "t" + string(rune('a'+i))
+		assert.Equal(t, "alert", got[id].Status, typ+": "+got[id].Reason)
+		assert.Equal(t, id+" is 7, above 6", got[id].Reason, typ)
+		assert.Equal(t, "ok", got[id+"_ok"].Status, typ+": "+got[id+"_ok"].Reason)
+	}
+}
+
+// An unknown column is the statement's fault, not a policy denial.
+func TestWatchCheck_AnUnknownColumnIsNotReportedAsRefused(t *testing.T) {
+	root := watchWorkspaceCLI(t)
+	ws, err := workspace.Open(root, workspace.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	require.NoError(t, ws.Queries().Create(context.Background(), &queries.Query{ID: "bad_col", Title: "Bad", SQL: "SELECT nosuchcol AS v FROM orders"}))
+	require.NoError(t, ws.Close())
+	writeIn(t, root, "watches/bad_col.yaml", "question: {query: bad_col}\nwhen: {above: 1}\n")
+	writeIn(t, root, "watches/copy_out.yaml", "question: {query: copy_out}\nwhen: {rows: any}\n")
+	ws, err = workspace.Open(root, workspace.WithLogger(testCmdLogger()))
+	require.NoError(t, err)
+	require.NoError(t, ws.Queries().Create(context.Background(), &queries.Query{ID: "copy_out", Title: "Copy", SQL: "COPY (SELECT 1) TO '" + filepath.Join(t.TempDir(), "x.csv") + "'"}))
+	require.NoError(t, ws.Close())
+
+	got, code, stderr := checkJSON(t, root)
+	assert.Equal(t, 2, code, stderr)
+	assert.Contains(t, got["bad_col"].Reason, "could not run: Binder Error")
+	assert.Contains(t, got["bad_col"].Reason, "nosuchcol")
+	assert.NotContains(t, got["bad_col"].Reason, "refused")
+	assert.Contains(t, got["copy_out"].Reason, "refused: a watch may only read", "a real denial keeps its wording")
+	hist, err := os.ReadFile(filepath.Join(root, ".slaw-local", "watches", "history.jsonl"))
+	require.NoError(t, err)
+	assert.Contains(t, string(hist), "could not run: Binder Error")
+	assert.NotContains(t, string(hist), "nosuchcol")
+}

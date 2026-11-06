@@ -172,24 +172,18 @@ var thresholdRE = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?$`)
 
 const thresholdHint = "a threshold must be a plain decimal number such as 0, -5 or 99.5, not quoted and without an exponent"
 
-// MaxThresholdDigits is how many significant digits a threshold may have, so
-// the float64 it is compared as is exact.
-const MaxThresholdDigits = 15
-
-// sigDigits counts a plain decimal's digits without its sign, point and
-// leading zeros.
-func sigDigits(text string) int {
-	s := strings.ReplaceAll(strings.TrimPrefix(text, "-"), ".", "")
-	return len(strings.TrimLeft(s, "0"))
-}
+// MaxThresholdLen is the longest a threshold may be written. Integer and
+// decimal values are compared with it exactly, so there is no digit limit
+// beyond this sanity cap.
+const MaxThresholdLen = 40
 
 // ParseThreshold reads a threshold written as a plain decimal.
 func ParseThreshold(text string) (Threshold, error) {
 	if !thresholdRE.MatchString(text) {
 		return Threshold{}, fmt.Errorf("%s (got %q)", thresholdHint, text)
 	}
-	if sigDigits(text) > MaxThresholdDigits {
-		return Threshold{}, fmt.Errorf("a threshold has at most %d significant digits (got %q)", MaxThresholdDigits, text)
+	if len(text) > MaxThresholdLen {
+		return Threshold{}, fmt.Errorf("a threshold is at most %d characters (got %d)", MaxThresholdLen, len(text))
 	}
 	f, err := strconv.ParseFloat(text, 64)
 	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
@@ -218,7 +212,7 @@ func (t Threshold) Float() float64 { return t.val }
 func (t Threshold) String() string { return t.text }
 
 // Display is the number with thousands separators, as a reason shows it.
-func (t Threshold) Display() string { return FormatNumber(t.val) }
+func (t Threshold) Display() string { return FormatRat(t.Rat()) }
 
 // UnmarshalYAML implements yaml.Unmarshaler.
 func (t *Threshold) UnmarshalYAML(n *yaml.Node) error {

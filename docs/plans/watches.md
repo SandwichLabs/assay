@@ -16,13 +16,13 @@ A **watch** is a standing question with a condition. Checking it runs the questi
 `<name>` follows the connection-name rule (`internal/connname`). The file is decoded with `internal/strictyaml`: a byte cap, known fields only, one document, no anchors.
 
 ```yaml
+version: 1                     # optional; absent means 1, a newer version needs a newer Slaw
 description: Orders stuck in pending for more than a day   # optional, one line
 question:
   query: stuck_orders          # a saved query id (queries/<id>.sql) ...
   params: {days: 1}            # ... bound through queries.Bind, never as SQL text
   # or
-  metric: revenue              # a metric, run at its grain total: SELECT metric('revenue')
-  connection: warehouse        # optional for metric; a saved query uses its own
+  metric: revenue              # a metric, run at its total on its own connection
 when:
   rows: any                    # any | none
   # or one of
@@ -31,7 +31,7 @@ when:
   outside: [10, 90]            # value < 10 or value > 90
 ```
 
-- **Exactly one question:** `query` or `metric`. Exactly one condition.
+- **Exactly one question:** `query` or `metric`. Exactly one condition. A metric runs on the connection its definition names; there is no `connection` field.
 - **Threshold values** are plain decimals. A threshold condition needs a result with **one row** and **one numeric column** (or a column named `value`). Any other shape is an `error` outcome, not an alert, and the message names the shape it got.
 - **`rows: any|none`** counts the result's rows. A check reads at most 1,001 rows. The alert lists the first 20 rows' first columns, capped in bytes, and says "1,000+" when the result reaches the cap.
 - **Unknown fields are refused.** The validator lives with the model.
@@ -50,7 +50,7 @@ when:
 
 ## History: `.slaw-local/watches/history.jsonl`
 
-- **One line per check:** watch name, file revision, time, outcome, value or row count, reason, duration. Result rows are never written, only the count and the reason. A watch over a `rows: any` question can name customers, so its sample rows stay in memory for the report.
+- **One line per check:** watch name, file revision, time, outcome, value or row count, reason, duration. Result rows are never written, only the count and the reason; an error's reason is stored as its error class only (`could not run: Conversion Error`), because database errors can quote values. A watch over a `rows: any` question can name customers, so its sample rows stay in memory for the report.
 - **Capped and pruned:** the newest 200 entries per watch, and at most 5 MB, oldest dropped first. Written append-and-compact under a file lock.
 - **"Last fired" and "last checked"** in Studio and `slaw watch list` come from here.
 

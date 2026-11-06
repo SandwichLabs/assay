@@ -244,6 +244,12 @@ func runWatchCheck(cmd *cobra.Command, args []string) error {
 	// Ctrl-C stops the check in flight; the results so far are still printed.
 	ctx, stop := signal.NotifyContext(cmdCtx(cmd), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go func() {
+		// After the first Ctrl-C the check winds down; the next one is the
+		// default signal action, which quits at once.
+		<-ctx.Done()
+		stop()
+	}()
 	results, runErr := workspace.CheckWatches(ctx, o.WS, args, r, time.Now())
 	if runErr != nil && len(results) == 0 {
 		return runErr // an unknown name or an immediate cancel: nothing ran

@@ -51,7 +51,7 @@ The file is read as strictly as a [semantics file](semantics.md#rules-every-yaml
 - At most **16 KiB** and **500** YAML nodes, checked before anything is parsed.
 - No control characters, no anchors or aliases, no explicit tags, no merge keys, one document, no unknown keys, no duplicate keys. Nothing is interpolated: `${ENV}` is just text.
 - The **name** is the file name without `.yaml` and follows the connection-name rule: `^[a-z_][a-z0-9_]{0,62}$`. A Windows device name (`con`, `nul`) is refused.
-- **Thresholds are plain decimals** with at most **15 significant digits** in all: `0`, `-5`, `99.5`, `0.00000000000001`. A quoted `"100"`, `1e3`, `0x10`, `+5`, `.5`, `.inf`, `.nan` and a 16-digit number are refused, not coerced.
+- **Thresholds are plain decimals**, at most **40 characters**: `0`, `-5`, `99.5`, `100000000000000000000`. A quoted `"100"`, `1e3`, `0x10`, `+5`, `.5`, `.inf` and `.nan` are refused, not coerced.
 - At most **500** files: the first 500 (by name) are listed, followed by one entry named `(truncated)` that says how many were left out.
 - A file that fails any of this is **not hidden**. `slaw watch list` shows it with its error (a reserved name such as `nul.yaml` says why), `slaw watch check` reports it as an `error`, and Slaw never overwrites it unless you choose to. A symbolic link is listed as "is a symbolic link; it is not read".
 
@@ -59,7 +59,7 @@ The file is read as strictly as a [semantics file](semantics.md#rules-every-yaml
 
 `slaw watch check [name...]` (all watches with no name) checks each watch once, one at a time.
 
-- The question goes through the **agent policy's read-only path in the tightest tier**, whatever the sandbox setting is. A watch file or saved query from a cloned repository cannot do more than read: a `COPY ... TO`, a `read_text` of a file outside `data/`, a `DROP` or an `ATTACH` is refused by the policy (see [agent-policy.md](agent-policy.md)), and the watch is an `error` that says `refused: a watch may only read (no writes, COPY, ATTACH or SET; files only inside data/)`.
+- The question goes through the **agent policy's read-only path in the tightest tier**, whatever the sandbox setting is. A watch file or saved query from a cloned repository cannot do more than read: a `COPY ... TO`, a `read_text` of a file outside `data/`, a `DROP` or an `ATTACH` is refused by the policy (see [agent-policy.md](agent-policy.md)), and the watch is an `error` that says `refused: a watch may only read (no writes, COPY, ATTACH or SET; files only inside data/)`. A statement that merely fails to bind (an unknown column, a typo) is not a refusal: it is an `error` showing the database's message (`could not run: Binder Error: ...`).
 - A **saved query** is bound with the same binder as `slaw query --saved` and the agent's `run_saved_query`: the statement is the query's own text, and a `params` value is typed by the query's declared parameters and travels as a bound parameter. A value that is not valid for the declared type (`days: lots` for an integer) is an `error` before anything runs. A declared parameter you do not give takes its default; a required one with no default is an `error` telling you to add `question.params.<name>`. A saved query on a connection the workspace does not define is an `error` that says so (`slaw conn list`).
 - A **metric** runs as `SELECT * FROM metric('<name>')` through the one metric expander, the same statement as the Semantics view's "Try it" with no dimensions.
 - Each statement is bounded by a **2 minute** timeout and by Ctrl-C. A threshold check reads at most **5** rows; a `rows` check reads at most **1,001**.
@@ -68,7 +68,7 @@ The file is read as strictly as a [semantics file](semantics.md#rules-every-yaml
 
 `above`, `below` and `outside` need a result with **exactly one row and one numeric column** (or, with several columns, exactly one named `value`, in any case). Any other shape is an `error`, never an alert, and the message names the shape it got: no rows, N rows, N columns, two columns named `value`, a text column, a `NULL`, a value that is not finite.
 
-Integer and decimal values (`BIGINT`, `HUGEINT`, `DECIMAL`) are compared with the threshold exactly, however large; a `DOUBLE` is compared as a double. A reason never shows a non-zero number as `0`: a value too small for six decimals is written in full.
+Integer and decimal values (every integer width, `HUGEINT`, `DECIMAL`) are compared with the threshold exactly, however large. A `FLOAT` or `DOUBLE` is compared as a double, with the threshold read as the nearest double, so a `DOUBLE` 0.95 is not below the threshold 0.95. A reason never shows a non-zero number as `0`: a value too small for six decimals is written in full.
 
 ### Row counts
 
@@ -82,7 +82,7 @@ Integer and decimal values (`BIGINT`, `HUGEINT`, `DECIMAL`) are compared with th
 | `alert` | The condition holds. The reason says why: `revenue is 1,240, above 1,000`, `stuck_orders returned 3 rows`. |
 | `error` | The watch did not run, or its result had the wrong shape. A connection that cannot connect is an `error` naming the connection (`could not connect to warehouse: ...`), never an alert. Also: a file that is not valid (`the file is not valid: ...`), a saved query or metric that does not exist, a statement the policy refuses, a timeout, a cancelled check. |
 
-One watch failing never stops the others. Ctrl-C (or a cancel in Studio) stops the check in flight: the results so far are printed, the interrupted watch is reported as an `error` and is not recorded, since it says nothing about the watch, and the command exits 2. Reasons are one line of at most 300 characters, with credential-shaped text redacted.
+One watch failing never stops the others. Ctrl-C (or a cancel in Studio) stops the check in flight: the results so far are printed, the interrupted watch is reported as an `error` and is not recorded, since it says nothing about the watch, and the command exits 2, even if an alert had already fired. After the first Ctrl-C a second one quits at once. Reasons are one line of at most 300 characters, with credential-shaped text redacted.
 
 A database error can quote a value of the row it choked on (`Could not convert string 'alice@example.com' to INT32`). The **report** that ran the check shows the database's message, without the wrapper chain and the `LINE n:` excerpt of the statement; the **history** keeps only its error class (`could not run: Conversion Error`), and for a connection failure only `could not connect to warehouse`. An alert's or an ok's reason is only our own formatting of the value or the row count.
 

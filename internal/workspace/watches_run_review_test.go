@@ -177,3 +177,55 @@ func TestCheckWatches_ASmallValueIsNeverShownAsZero(t *testing.T) {
 	res = check(t, ws, &scriptedRunner{rs: scalar("revenue", "DOUBLE", 0.0000004)}, "z")
 	assert.Equal(t, "revenue is 0.0000004, above 0.0000001", res[0].Reason)
 }
+
+type bindErr struct{ msg string }
+
+func (e bindErr) Error() string         { return e.msg }
+func (bindErr) BindFailure() bool       { return true }
+func (bindErr) DefinitionProblem() bool { return true }
+
+// A statement that does not bind is the statement's fault, not a policy denial.
+func TestCheckWatches_AStatementThatDoesNotBindIsNotReportedAsRefused(t *testing.T) {
+	ws := watchWorkspace(t)
+	putWatch(t, ws, "w", "question: {query: stuck}\nwhen: {rows: any}\n")
+	denied := refusedErr{"live bindings are read-only queries"}
+	bind := bindErr{"could not validate query: Binder Error: Referenced column \"nosuchcol\" not found in FROM clause!\n\nLINE 1: SELECT nosuchcol AS v"}
+	res := check(t, ws, &scriptedRunner{err: denied, vetErr: bind})
+	assert.Equal(t, watches.StatusError, res[0].Status)
+	assert.Equal(t, `could not run: Binder Error: Referenced column "nosuchcol" not found in FROM clause!`, res[0].Reason)
+	assert.NotContains(t, res[0].Reason, "refused")
+	entries, err := ws.WatchHistory().Entries(context.Background(), "w")
+	require.NoError(t, err)
+	assert.Equal(t, "could not run: Binder Error", entries[0].Reason, "only the class is stored")
+
+	// A real denial (the vet agrees, or says nothing about binding) keeps the wording.
+	for _, vet := range []error{nil, refusedErr{"COPY is a write"}, errors.New("could not validate query: disk gone")} {
+		res = check(t, ws, &scriptedRunner{err: denied, vetErr: vet})
+		assert.Contains(t, res[0].Reason, "refused: a watch may only read", "%v", vet)
+	}
+}
+
+func TestAsNum_EveryIntegerWidth(t *testing.T) {
+	for _, v := range []any{int8(5), int16(5), int32(5), int64(5), int(5), uint8(5), uint16(5), uint32(5), uint64(5), uint(5), float32(5), float64(5), json.Number("5"), "5"} {
+		n, ok := asNum(v)
+		require.True(t, ok, "%T", v)
+		assert.InDelta(t, 5, n.float(), 0, "%T", v)
+	}
+	n, ok := asNum(float32(0.95))
+	require.True(t, ok)
+	assert.Equal(t, 0.95, n.float(), "a FLOAT is its shortest decimal, not its widened binary value")
+	for _, v := range []any{"nan", "1e3", "1/2", "", true, nil, []byte("1")} {
+		_, ok := asNum(v)
+		assert.False(t, ok, "%v", v)
+	}
+}
+
+func TestCheckWatches_ThresholdsAreExactBeyondFifteenDigits(t *testing.T) {
+	ws := watchWorkspace(t)
+	putWatch(t, ws, "w", "question: {metric: revenue}\nwhen: {above: 100000000000000000000}\n")
+	res := check(t, ws, &scriptedRunner{rs: scalar("revenue", "HUGEINT", "100000000000000000001")})
+	assert.Equal(t, watches.StatusAlert, res[0].Status, res[0].Reason)
+	assert.Contains(t, res[0].Reason, "100,000,000,000,000,000,001, above 100,000,000,000,000,000,000")
+	res = check(t, ws, &scriptedRunner{rs: scalar("revenue", "HUGEINT", "100000000000000000000")})
+	assert.Equal(t, watches.StatusOK, res[0].Status, res[0].Reason)
+}

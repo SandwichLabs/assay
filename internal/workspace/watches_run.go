@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/big"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -172,7 +173,7 @@ func checkWatch(ctx context.Context, ws Workspace, w *watches.Watch, runner Read
 	}
 	rs, truncated, err := runWatchPlan(ctx, runner, plan)
 	if err != nil {
-		return res.failRun(runFailure(ctx, plan, err))
+		return res.failRun(runFailure(ctx, runner, plan, err))
 	}
 	if w.When.IsThreshold() {
 		res.evalThreshold(w, rs, truncated)
@@ -328,9 +329,23 @@ type runFailed struct{ shown, stored string }
 // policyRefusedText is the watch's wording for a statement the policy refuses.
 const policyRefusedText = "refused: a watch may only read (no writes, COPY, ATTACH or SET; files only inside data/)"
 
+// bindFailure asks the runner's vet why the gate refused. A statement that does
+// not bind (an unknown column) is the statement's fault, not a policy denial:
+// the database's message is shown and only its class is stored.
+func bindFailure(ctx context.Context, runner ReadOnlyRunner, p watchPlan) (runFailed, bool) {
+	ctx, cancel := context.WithTimeout(ctx, CheckStatementTimeout)
+	defer cancel()
+	verr := runner.VetReadOnlySQLIn(ctx, p.connection, p.sql, p.params)
+	var bf interface{ BindFailure() bool }
+	if verr == nil || !errors.As(verr, &bf) || !bf.BindFailure() {
+		return runFailed{}, false
+	}
+	return runFailed{"could not run: " + watches.CleanDBError(verr.Error()), "could not run: " + watches.ErrorClass(verr.Error())}, true
+}
+
 // runFailure says why a run failed. A database's own message can quote a row's
 // value, so it is shown but never stored: the history gets its error class.
-func runFailure(parent context.Context, p watchPlan, err error) runFailed {
+func runFailure(parent context.Context, runner ReadOnlyRunner, p watchPlan, err error) runFailed {
 	var cf interface{ ConnectFailure() bool }
 	var pr interface{ PolicyRefused() bool }
 	switch {
@@ -345,6 +360,9 @@ func runFailure(parent context.Context, p watchPlan, err error) runFailed {
 			fmt.Sprintf("could not connect to %s", p.label),
 		}
 	case errors.As(err, &pr) && pr.PolicyRefused():
+		if f, ok := bindFailure(parent, runner, p); ok {
+			return f
+		}
 		return runFailed{policyRefusedText, policyRefusedText}
 	}
 	return runFailed{"could not run: " + watches.CleanDBError(err.Error()), "could not run: " + watches.ErrorClass(err.Error())}
@@ -525,6 +543,16 @@ func asNum(v any) (numVal, bool) {
 		return numVal{rat: new(big.Rat).SetInt64(int64(x))}, true
 	case int32:
 		return numVal{rat: new(big.Rat).SetInt64(int64(x))}, true
+	case int16:
+		return numVal{rat: new(big.Rat).SetInt64(int64(x))}, true
+	case int8:
+		return numVal{rat: new(big.Rat).SetInt64(int64(x))}, true
+	case uint16:
+		return numVal{rat: new(big.Rat).SetInt64(int64(x))}, true
+	case uint8:
+		return numVal{rat: new(big.Rat).SetInt64(int64(x))}, true
+	case uint:
+		return numVal{rat: new(big.Rat).SetInt(new(big.Int).SetUint64(uint64(x)))}, true
 	case uint64:
 		return numVal{rat: new(big.Rat).SetInt(new(big.Int).SetUint64(x))}, true
 	case uint32:
@@ -532,7 +560,13 @@ func asNum(v any) (numVal, bool) {
 	case float64:
 		return finiteFloat(x)
 	case float32:
-		return finiteFloat(float64(x))
+		// The shortest decimal of the float32, as the engine's own wire form
+		// does: 0.95 as a FLOAT is 0.95, not 0.949999988.
+		f, err := strconv.ParseFloat(strconv.FormatFloat(float64(x), 'g', -1, 32), 64)
+		if err != nil {
+			return numVal{}, false
+		}
+		return finiteFloat(f)
 	case json.Number:
 		return exactNum(x.String())
 	case string:

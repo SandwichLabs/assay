@@ -117,6 +117,9 @@ func (h *Handler) VetReadOnlySQLIn(ctx context.Context, connection, sqlStr strin
 	_, _, _, reason, err := h.readOnlyVerdict(ctx, connection, sqlStr, params)
 	if errors.Is(err, ErrReadOnlyBindingDenied) && reason != "" {
 		if definitionReason(reason) {
+			if strings.HasPrefix(reason, "could not validate query:") {
+				return &BindFailure{Err: errors.New(reason)}
+			}
 			return &DefinitionError{Err: errors.New(reason)}
 		}
 		return errors.New(reason)
