@@ -212,7 +212,15 @@ func (t Threshold) Float() float64 { return t.val }
 func (t Threshold) String() string { return t.text }
 
 // Display is the number with thousands separators, as a reason shows it.
-func (t Threshold) Display() string { return FormatRat(t.Rat()) }
+// It is the text as written, exact however many digits, with trailing zeros of
+// the fraction dropped.
+func (t Threshold) Display() string {
+	s := t.text
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
+	}
+	return groupDecimal(s)
+}
 
 // UnmarshalYAML implements yaml.Unmarshaler.
 func (t *Threshold) UnmarshalYAML(n *yaml.Node) error {
@@ -229,11 +237,9 @@ func (t *Threshold) UnmarshalYAML(n *yaml.Node) error {
 
 // MarshalYAML writes the number as it was read, never with an exponent.
 func (t Threshold) MarshalYAML() (any, error) {
-	tag := "!!int"
-	if strings.Contains(t.text, ".") {
-		tag = "!!float"
-	}
-	return &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: t.text}, nil
+	// No tag: yaml resolves the digits itself (!!int, or !!float for an integer
+	// beyond uint64), so the encoder never forces a tag the text does not have.
+	return &yaml.Node{Kind: yaml.ScalarNode, Value: t.text}, nil
 }
 
 // MarshalJSON writes the number as a JSON number.

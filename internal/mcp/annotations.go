@@ -32,6 +32,7 @@ var destructiveContentTools = map[string]bool{
 // and DDL are not listed.
 var idempotentTools = map[string]bool{
 	"write_artifact":         true,
+	"write_watch":            true,
 	"save_query":             true,
 	"build_query":            true,
 	"create_or_update_skill": true,

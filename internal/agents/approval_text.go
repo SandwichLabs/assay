@@ -50,7 +50,7 @@ func tierNeeded(category string) SandboxMode {
 func categoryWhat(category string) string {
 	switch category {
 	case "content":
-		return "writes files in the workspace folder (artifacts, notebooks, skills, saved queries)"
+		return "writes files in the workspace folder (artifacts, notebooks, skills, saved queries, watches)"
 	case "data":
 		return "changes rows in a connection"
 	case "schema":
@@ -79,6 +79,8 @@ func contentTarget(req *Request) string {
 		return "artifacts/" + nameOr(req, "<name>") + "/ in the workspace folder"
 	case "create_or_update_skill":
 		return "skills/" + nameOr(req, "<name>") + "/SKILL.md in the workspace folder"
+	case "write_watch":
+		return "watches/" + nameOr(req, "<name>") + ".yaml in the workspace folder"
 	case "save_query", "build_query":
 		return "a saved query in queries/ in the workspace folder"
 	default:
@@ -100,7 +102,7 @@ func nameOr(req *Request, fallback string) string {
 // without a write.
 func approvalNeededData(dry map[string]any) map[string]any {
 	data := map[string]any{"valid": true, "needs_approval": true, "nothing_written": true}
-	for _, k := range []string{"queries", "columns"} {
+	for _, k := range []string{"queries", "columns", "file", "warnings"} {
 		if v, ok := dry[k]; ok {
 			data[k] = v
 		}

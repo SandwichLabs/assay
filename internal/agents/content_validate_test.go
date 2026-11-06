@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SandwichLabs/slaw/internal/notebooks"
+	"github.com/SandwichLabs/slaw/internal/queries"
 	"github.com/SandwichLabs/slaw/internal/skills"
 )
 
@@ -135,6 +136,22 @@ func contentCases() []contentCase {
 				"definition": map[string]any{"term": "Churn", "text": "text\n## smuggled\nsecond term"}},
 			written: func(t *testing.T, fx *artifactFixture) int {
 				list, err := fx.h.access.Proposals().List(context.Background())
+				require.NoError(t, err)
+				return len(list)
+			},
+		},
+		{
+			tool: "write_watch",
+			valid: map[string]any{"name": "stuck_orders", "question": map[string]any{"query": "stuck"},
+				"when": map[string]any{"rows": "any"}},
+			invalid: map[string]any{"name": "stuck_orders", "question": map[string]any{"query": "stuck"},
+				"when": map[string]any{"above": "1e3"}},
+			prepare: func(t *testing.T, fx *artifactFixture) map[string]any {
+				require.NoError(t, fx.h.access.Queries().Create(context.Background(), &queries.Query{ID: "stuck", Title: "stuck", SQL: "SELECT 1"}))
+				return nil
+			},
+			written: func(t *testing.T, fx *artifactFixture) int {
+				list, err := watchProvider(t, fx.h.access).Watches().List(context.Background())
 				require.NoError(t, err)
 				return len(list)
 			},

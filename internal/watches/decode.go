@@ -180,7 +180,7 @@ func validateCondition(c *Condition) error {
 		if len(c.Outside) != 2 {
 			return invalid("when.outside needs exactly two numbers, [low, high] (got %d)", len(c.Outside))
 		}
-		if lo, hi := c.Outside[0].Float(), c.Outside[1].Float(); lo >= hi {
+		if c.Outside[0].Rat().Cmp(c.Outside[1].Rat()) >= 0 {
 			return invalid("when.outside needs low < high (got [%s, %s])", c.Outside[0], c.Outside[1])
 		}
 	}

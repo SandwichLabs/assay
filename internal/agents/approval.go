@@ -236,6 +236,14 @@ func describeWrite(ctx context.Context, req *Request, userDB *sql.DB, class sqlC
 	case "create_or_update_skill":
 		ar.Rows = -1
 		ar.Summary = fmt.Sprintf("Save skill %s", stringParam(req.Params["name"]))
+	case "write_watch":
+		ar.Rows = -1
+		verb := "Save"
+		if rev, _ := req.Params["rev"].(string); rev != "" {
+			verb = "Replace"
+		}
+		ar.Summary = fmt.Sprintf("%s watch %s%s", verb, stringParam(req.Params["name"]), watchAsks(req))
+		ar.SQL = watchCardFile(req)
 	case "write_artifact":
 		ar.Rows = -1
 		verb := "Save"

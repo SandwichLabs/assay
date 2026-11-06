@@ -32,6 +32,7 @@ func toolGroups() []toolGroup {
 		{"Schema", "propose_schema first, then create_table once the user confirms", []string{"propose_schema", "create_table", "add_column", "drop_table", "import_csv"}},
 		{"Build and show", "", []string{"build_query", "save_query", "present_data", "add_query_cell", "add_markdown_cell", "create_dashboard", "write_artifact"}},
 		{"Meaning", "", []string{"list_definitions", "get_definition", "propose_definition"}},
+		{"Watches", "", []string{"list_watches", "get_watch", "write_watch"}},
 		{"Edit a notebook", "get_notebook first for the rev", []string{"update_cell", "delete_cell", "move_cell"}},
 	}
 }

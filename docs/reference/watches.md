@@ -12,7 +12,7 @@ watches/
 
 The folder is created by whatever writes the first file; `slaw workspace init` does not make an empty one.
 
-> **What exists today.** A watch is checked only when you ask: `slaw watch check`, or Check in Studio's [Watches view](#studio). There is no scheduler, no background service, no notification and no delivery; a fired watch is reported where the check ran, and recorded in a local [history](#history). Agent tools for watches are a later step of the same plan ([`docs/plans/watches.md`](../plans/watches.md)). Because nothing runs by itself, a cloned workspace's watches need no enabling step yet; that gate arrives with scheduling, when a watch first runs without a person asking.
+> **What exists today.** A watch is checked only when you ask: `slaw watch check`, or Check in Studio's [Watches view](#studio). There is no scheduler, no background service, no notification and no delivery; a fired watch is reported where the check ran, and recorded in a local [history](#history). An agent can list, read and write watch files but cannot check one ([Agent](#agent)); the plan is [`docs/plans/watches.md`](../plans/watches.md). Because nothing runs by itself, a cloned workspace's watches need no enabling step yet; that gate arrives with scheduling, when a watch first runs without a person asking.
 
 ## The file: `watches/<name>.yaml`
 
@@ -146,10 +146,29 @@ The **Watches** view (nav entry beside Semantics) is the same surface as `slaw w
 
 Nothing in Studio can check, save or delete a watch for an agent: these are the person's actions, and no agent tool or MCP method reaches them.
 
+## Agent
+
+Three tools, the same for the in-app agent and for MCP clients (`docs/reference/mcp.md`):
+
+| Tool | Tier | What it does |
+|---|---|---|
+| `list_watches` | every tier (introspect) | Each watch: `name`, `description`, `question`, `when`, `condition`, `rev`, and for a file that cannot be read its `error`. If the watch has been checked, `last_checked` and `last_status` (`ok`, `alert` or `error`) from the [history](#history). |
+| `get_watch` | every tier (introspect) | One watch's fields, its canonical YAML (drawn by the same encoder a save uses) and its `rev`. |
+| `write_watch` | `read-write` and `full` (content) | Creates or replaces `watches/<name>.yaml`. |
+
+- **Reads show a status, never results.** The agent is handed the history through a read-only view (no way to append). `list_watches` reports when a watch was last checked and its status, and nothing else: no reason, no value, no row count, no duration, no sample rows (the history holds none).
+- **`write_watch`** takes `name`, `question` (`{query, params?}` or `{metric}`), `when` (`{rows}`, `{above}`, `{below}` or `{outside: [low, high]}`), an optional `description` and an optional `rev`.
+  - It is validated by the decoder and encoder that Studio's New watch form and `slaw watch` use, so a bad name, a threshold that is not a plain decimal, two conditions and the rest are refused with the decoder's words. Thresholds may be sent as numbers or as text; a number with more than 15 significant digits is refused as a JSON number (it has already been rounded), so send it as text. The same holds for `params`.
+  - The saved query or metric must exist (a missing one is refused: `save_query` first, or a metric is proposed with `propose_definition`), and `params` must name parameters the query declares. A required parameter with no default and no value is a **warning** in the reply, not a refusal.
+  - Without `rev` it only creates, and an existing name is refused. With the `rev` from `get_watch` (or `list_watches`, for an unreadable file) it replaces the file; a stale `rev` is a conflict and changes nothing.
+  - The reply carries the canonical `file`, the new `rev`, any `warnings`, and a note that the watch is written and not checked. A refusal that has a canonical text (everything past the decoder, such as a missing query) returns it in the error's data.
+- **Gating is a content tool's.** `read-only` refuses it; "Ask before changes" shows the approval card ("Save watch NAME: query stuck_orders, fires when any rows", with the canonical file shown below it); headless MCP with the setting on validates first, then answers "valid and ready, not saved" with the canonical `file` and `warnings` and nothing written, as `write_artifact` does. See [agent-policy.md](agent-policy.md).
+- **No tool checks a watch.** There is no tool or MCP method that runs a check, reads a reason or sees result rows. Tell the person to check in Studio's Watches view or with `slaw watch check`. A test fails if a tool is added that offers to.
+
 ## Sharing
 
 A watch file travels in git like any other file. In a `.slaw` bundle it is an entry `watches/<name>.yaml` of kind `watch`: `slaw export bundle --watches NAME` (with no selection flags everything is exported, watches included). The file is decoded with the store's strict decoder while the bundle opens, so one bad watch refuses the whole bundle before anything is written. Import writes the file's own bytes; a name that exists is renamed (`stuck_orders_2`), replaced against the revision just read, or skipped, and a watch whose saved query or metric the same bundle renamed is pointed at the new name; one whose query or metric was skipped because the workspace already has its own is told so in the import's notes. **The history is never bundled**: no path under `.slaw-local/` is accepted as an entry. See [workspaces.md](workspaces.md#sharing-without-git-slaw-bundles).
 
 ## Who can do what
 
-Checking a watch is **your action**. No agent tool and no MCP method checks a watch, as with [assertions](semantics.md). The watcher reports a file change under `watches/` as a `watch` event, so an editor or `git pull` shows up in a running Studio.
+Checking a watch is **your action**. No agent tool and no MCP method checks a watch, as with [assertions](semantics.md); an agent can [write the file](#agent) and you check it. The watcher reports a file change under `watches/` as a `watch` event, so an editor or `git pull` shows up in a running Studio.
