@@ -238,27 +238,54 @@ function tickLabel(t: number, st: Step, multiYear: boolean, multiDay: boolean): 
   }
 }
 
+// Nominal length of a step in ms (months 28 days, years 365: lower bounds), for
+// "never finer than the spacing of the data".
+function stepMs(st: Step): number {
+  const u = { second: 1000, minute: MIN, hour: HOUR, day: DAY, month: 28 * DAY, year: 365 * DAY }[st.unit]
+  return u * st.n
+}
+
+export interface TimePlan {
+  // tick times (calendar boundaries inside [min, max])
+  ticks: number[]
+  // the label of any time at the plan's granularity ("Apr 3", "Apr '25", ...)
+  format: (t: number) => string
+  // the step is a calendar bucket (month, quarter, year): a label names the bucket, not a day
+  bucketed: boolean
+  // false when nothing fit and the ticks are just the two ends
+  exact: boolean
+}
+
+// timePlan: the step timeTicks would use, as ticks plus the formatter for it.
+// `minStepMs` rules out steps shorter than that (a column chart passes its
+// smallest gap between columns).
+export function timePlan(min: number, max: number, maxTicks = 6, floor: TimeUnit = 'second', minStepMs = 0): TimePlan {
+  const cap = Math.max(2, Math.floor(maxTicks))
+  const multiYear = new Date(min).getUTCFullYear() !== new Date(max).getUTCFullYear()
+  const multiDay = Math.floor(min / DAY) !== Math.floor(max / DAY)
+  const fmt = (st: Step) => (t: number) => tickLabel(t, st, multiYear, multiDay)
+  if (!(max > min) || !Number.isFinite(min) || !Number.isFinite(max)) return { ticks: [], format: fmt(STEPS[0]), bucketed: false, exact: false }
+  for (const st of STEPS) {
+    // never finer than the data: a month-resolution label has no weeks in it
+    if (UNIT_RANK[st.unit] < UNIT_RANK[floor] || stepMs(st) < minStepMs * 0.9) continue
+    const ts = ticksFor(min, max, st)
+    if (ts.length <= cap) {
+      if (ts.length < 2) continue
+      return { ticks: ts, format: fmt(st), bucketed: UNIT_RANK[st.unit] >= UNIT_RANK.month, exact: true }
+    }
+  }
+  // Nothing fits: fall back to the two ends, labelled to suit the span.
+  const end: Step = max - min < DAY ? { unit: 'second', n: 1 } : STEPS[STEPS.length - 1]
+  return { ticks: [min, max], format: fmt(end), bucketed: false, exact: false }
+}
+
 // timeTicks chooses the finest granularity (minutes up to centuries; days,
 // weeks, months, quarters, years in between) that keeps the tick count at or
 // under maxTicks, and labels the ticks to match: "Apr 3", "Apr '25", "Q2 '25",
 // "2025". Ticks are real calendar boundaries inside [min, max].
 export function timeTicks(min: number, max: number, maxTicks = 6, floor: TimeUnit = 'second'): TimeTick[] {
-  const cap = Math.max(2, Math.floor(maxTicks))
-  const multiYear = new Date(min).getUTCFullYear() !== new Date(max).getUTCFullYear()
-  const multiDay = Math.floor(min / DAY) !== Math.floor(max / DAY)
-  if (!(max > min) || !Number.isFinite(min) || !Number.isFinite(max)) return []
-  for (const st of STEPS) {
-    // never finer than the data: a month-resolution label has no weeks in it
-    if (UNIT_RANK[st.unit] < UNIT_RANK[floor]) continue
-    const ts = ticksFor(min, max, st)
-    if (ts.length <= cap) {
-      if (ts.length < 2) continue
-      return ts.map((t) => ({ t, label: tickLabel(t, st, multiYear, multiDay) }))
-    }
-  }
-  // Nothing fits: fall back to the two ends, labelled to suit the span.
-  const end: Step = max - min < DAY ? { unit: 'second', n: 1 } : STEPS[STEPS.length - 1]
-  return [min, max].map((t) => ({ t, label: tickLabel(t, end, multiYear, multiDay) }))
+  const p = timePlan(min, max, maxTicks, floor)
+  return p.ticks.map((t) => ({ t, label: p.format(t) }))
 }
 
 // timeGranularity: the finest unit a label states, so ticks are never finer
