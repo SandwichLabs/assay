@@ -21,14 +21,14 @@ func (a *App) prefsStore() (*prefs.Store, error) {
 // GetPreferences returns the user's app-level preferences (theme, appearance).
 // A missing or unreadable settings file yields the defaults; a parse error is
 // logged here, never returned, so a bad edit can't lock the user out of the UI.
-// A read leaves the file alone: the first write moves it aside to
-// settings.json.corrupt-<time>, and TakePreferencesNotice tells the person.
+// A read leaves the file alone, but says so up front (the notice event and
+// TakePreferencesNotice); the first write moves it aside to
+// settings.json.corrupt-<time> and says that too.
 func (a *App) GetPreferences() (prefs.Preferences, error) {
-	s, err := a.prefsStore()
-	if err != nil {
+	if _, err := a.prefsStore(); err != nil {
 		return prefs.Defaults(), nil
 	}
-	p, err := s.Load()
+	p, err := a.recents.Preferences()
 	if err != nil {
 		a.logger.Warn("preferences: falling back to defaults", "error", err)
 	}

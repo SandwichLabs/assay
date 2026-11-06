@@ -48,6 +48,8 @@ type Lock struct {
 	// that directory and Release unlinks relative to it.
 	dirfd int
 	at    bool
+	// keep: Release leaves the file in place (AcquirePersistentAt).
+	keep bool
 }
 
 // Path is the lock file's path.
@@ -78,9 +80,11 @@ func (l *Lock) Release() error {
 	}
 	var firstErr error
 	var rmErr error
-	if l.at {
+	switch {
+	case l.keep: // persistent lock: closing the descriptor drops the flock, the file stays
+	case l.at:
 		rmErr = unix.Unlinkat(l.dirfd, l.path, 0)
-	} else {
+	default:
 		rmErr = os.Remove(l.path)
 	}
 	if rmErr != nil && !os.IsNotExist(rmErr) && !errors.Is(rmErr, syscall.ENOENT) {

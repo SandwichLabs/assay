@@ -175,3 +175,23 @@ func TestAcquireAtIsRelativeToTheDirectoryDescriptor(t *testing.T) {
 	_, err = os.Stat(filepath.Join(moved, "hub.lock"))
 	assert.True(t, os.IsNotExist(err))
 }
+
+func TestAcquirePersistentAt_KeepsTheFileAndStillExcludes(t *testing.T) {
+	dir, err := os.Open(t.TempDir())
+	require.NoError(t, err)
+	defer dir.Close() //nolint:errcheck
+
+	l, err := AcquirePersistentAt(dir, "p.lock")
+	require.NoError(t, err)
+	_, err = AcquirePersistentAt(dir, "p.lock")
+	var held *HeldError
+	require.ErrorAs(t, err, &held)
+
+	require.NoError(t, l.Release())
+	_, err = os.Stat(filepath.Join(dir.Name(), "p.lock"))
+	require.NoError(t, err, "Release leaves a persistent lock file in place")
+
+	l2, err := AcquirePersistentAt(dir, "p.lock")
+	require.NoError(t, err)
+	require.NoError(t, l2.Release())
+}

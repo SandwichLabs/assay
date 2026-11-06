@@ -16,6 +16,18 @@ import (
 // swapping the directory's path for a symlink after dir was checked cannot
 // redirect the lock. dir must stay open until Release returns.
 func AcquireAt(dir *os.File, name string, payload []byte) (*Lock, error) {
+	return acquireAt(dir, name, payload, false)
+}
+
+// AcquirePersistentAt is AcquireAt for a lock whose file is never unlinked:
+// Release only drops the flock. Waiters therefore always lock the same inode
+// (no open-then-unlinked race), at the cost of a leftover empty file. It writes
+// no payload. The same symlink, owner and hard-link checks apply.
+func AcquirePersistentAt(dir *os.File, name string) (*Lock, error) {
+	return acquireAt(dir, name, nil, true)
+}
+
+func acquireAt(dir *os.File, name string, payload []byte, keep bool) (*Lock, error) {
 	const maxAttempts = 3
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		fd, err := unix.Openat(int(dir.Fd()), name, openFlags|unix.O_CLOEXEC, 0o600)
@@ -50,10 +62,12 @@ func AcquireAt(dir *os.File, name string, payload []byte) (*Lock, error) {
 			f.Close() //nolint:errcheck
 			return nil, fmt.Errorf("failed to make the lock file private: %w", err)
 		}
-		l := &Lock{f: f, path: name, dirfd: int(dir.Fd()), at: true}
-		if err := l.Write(payload); err != nil {
-			_ = l.Release()
-			return nil, err
+		l := &Lock{f: f, path: name, dirfd: int(dir.Fd()), at: true, keep: keep}
+		if payload != nil {
+			if err := l.Write(payload); err != nil {
+				_ = l.Release()
+				return nil, err
+			}
 		}
 		return l, nil
 	}

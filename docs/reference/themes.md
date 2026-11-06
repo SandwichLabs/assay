@@ -52,10 +52,16 @@ without restarting.
 Studio's settings survive an older one saving the file.
 
 Every change to the file (theme, recent workspaces, update choice, the MCP
-switch) reads it, changes one thing and replaces it atomically under a lock file
-(`settings.lock`, present only while a write is in progress), so two Slaw
-processes never drop each other's change. If `settings.json` does not parse,
-Slaw never overwrites it: the next change moves it to
+switch) reads it, changes only what it means to change and replaces it
+atomically under a lock (`settings.lock`, an empty file that stays beside
+`settings.json`; the operating system's file lock, not the file, is the lock).
+Two Slaw processes writing different settings therefore both land. The theme
+and appearance fields are written only when they changed in that window, so a
+window opened before another one changed the theme does not put the old theme
+back; if two windows change the *same* field, the later save wins.
+
+If `settings.json` does not parse, Slaw never overwrites it. Studio says so at
+startup (default settings are in use), and the next change moves the file to
 `settings.json.corrupt-<UTC time>` beside it (private, 0600), starts from the
 defaults and shows a notice naming that copy. See
 [Troubleshooting](../troubleshooting.md#my-settings-were-reset-to-defaults).

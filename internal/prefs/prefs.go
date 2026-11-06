@@ -163,14 +163,16 @@ type Store struct {
 	lockTimeout time.Duration // 0 = defaultLockTimeout
 	notice      string        // set when a corrupt file was moved aside; see TakeNotice
 	logger      *slog.Logger  // nil = silent
+	notify      func(string)  // called (with s.mu held; must not call the Store) when a notice is raised
+	warned      bool          // the "unreadable, using defaults" notice was raised
 }
 
 // ErrCorrupt is wrapped by the error Load returns when settings.json exists but
 // is not valid preferences JSON.
 var ErrCorrupt = errors.New("preferences file is corrupt")
 
-// lockName is the cross-process lock file inside the config dir. It exists
-// only while a write is in progress.
+// lockName is the cross-process lock file inside the config dir. It is empty
+// and stays in place between writes; the kernel flock, not the file, is the lock.
 const lockName = "settings.lock"
 
 // defaultLockTimeout bounds how long Modify waits for another process's write.
@@ -212,6 +214,42 @@ func (s *Store) WithLogger(l *slog.Logger) *Store {
 	return s
 }
 
+// WithNotify registers fn to be called whenever a notice is raised (a corrupt
+// file found at startup, or moved aside by a write), so a UI can show it at
+// once. fn runs with the Store's mutex held and must not call back into it.
+func (s *Store) WithNotify(fn func(string)) *Store {
+	s.notify = fn
+	return s
+}
+
+// raise records a notice for TakeNotice and tells the notify hook. s.mu is held.
+func (s *Store) raise(msg string) {
+	s.notice = msg
+	if s.logger != nil {
+		s.logger.Warn(msg)
+	}
+	if s.notify != nil {
+		s.notify(msg)
+	}
+}
+
+// NoteUnreadable raises, once per Store, the up-front notice for a settings
+// file that does not parse: defaults are in use, and the next change keeps a
+// copy of the file. Callers pass the error Load returned; other errors are
+// ignored.
+func (s *Store) NoteUnreadable(err error) {
+	if !errors.Is(err, ErrCorrupt) {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.warned {
+		return
+	}
+	s.warned = true
+	s.raise(fmt.Sprintf("Your settings file %s could not be read, so default settings are in use. The next time Slaw saves a setting it keeps a copy of that file as settings.json.corrupt-<time> beside it and starts over from the defaults.", s.SettingsPath()))
+}
+
 // Dir returns the store's root directory.
 func (s *Store) Dir() string { return s.dir }
 
@@ -227,13 +265,11 @@ func (s *Store) ThemesDir() string { return filepath.Join(s.dir, "themes") }
 // change the document uses Modify, which moves a corrupt file aside first
 // instead of overwriting it.
 func (s *Store) Load() (Preferences, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	return s.read()
 }
 
-// read is Load without the mutex. The document is replaced by rename, so a
-// reader without the file lock sees the old or the new file, never a torn one.
+// read takes no lock: the document is replaced by rename, so a reader sees the
+// old or the new file, never a torn one, and never waits on a writer.
 func (s *Store) read() (Preferences, error) {
 	data, err := os.ReadFile(s.SettingsPath())
 	if errors.Is(err, fs.ErrNotExist) {
@@ -301,10 +337,7 @@ func (s *Store) Modify(fn func(*Preferences) error) error {
 		if mvErr != nil {
 			return fmt.Errorf("refusing to overwrite a corrupt preferences file: %w", mvErr)
 		}
-		s.notice = fmt.Sprintf("Your settings file could not be read, so it was moved to %s and settings were reset to defaults. Fix or delete that copy; it is not used.", moved)
-		if s.logger != nil {
-			s.logger.Warn(s.notice)
-		}
+		s.raise(fmt.Sprintf("Your settings file could not be read, so it was moved to %s and settings were reset to defaults. Fix or delete that copy; it is not used.", moved))
 	}
 	if err := fn(&p); err != nil {
 		return err
@@ -313,7 +346,10 @@ func (s *Store) Modify(fn func(*Preferences) error) error {
 }
 
 // lock takes the cross-process lock file, waiting up to the timeout for another
-// process's write to finish, and returns its release func.
+// process's write to finish, and returns its release func. The lock file is
+// persistent (never unlinked), so every waiter locks the same inode. A
+// transient error is retried until the deadline; an unsafe lock file (symlink,
+// foreign owner, hard links) is refused at once.
 func (s *Store) lock() (func(), error) {
 	dir, err := os.Open(s.dir)
 	if err != nil {
@@ -325,12 +361,11 @@ func (s *Store) lock() (func(), error) {
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		l, err := filelock.AcquireAt(dir, lockName, []byte(fmt.Sprintf("%d\n", os.Getpid())))
+		l, err := filelock.AcquirePersistentAt(dir, lockName)
 		if err == nil {
 			return func() { _ = l.Release(); _ = dir.Close() }, nil
 		}
-		var held *filelock.HeldError
-		if !errors.As(err, &held) {
+		if errors.Is(err, filelock.ErrUnsafe) {
 			_ = dir.Close()
 			return nil, fmt.Errorf("failed to lock preferences: %w", err)
 		}

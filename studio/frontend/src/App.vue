@@ -19,6 +19,7 @@ import { workspaceOpen, workspaceInfo, startWorkspaceTracking, syncWorkspaceStat
 let unsubBeforeClose: (() => void) | null = null
 let unsubOpenPath: (() => void) | null = null
 let unsubInstalling: (() => void) | null = null
+let unsubPrefsNotice: (() => void) | null = null
 
 // A different workspace is a different place: land on Home, not on whatever
 // route (and notebook id) the old one left behind. A reload that merely picks
@@ -59,6 +60,8 @@ onMounted(async () => {
     // EventsOff(name) would remove every listener for the event name.
     unsubBeforeClose = EventsOn('app:before-close', handleBeforeClose)
     // A quit is held while an update installs (the installer must not be orphaned).
+    // A settings file that could not be read (found at startup, or moved aside by a later write).
+    unsubPrefsNotice = EventsOn('app:prefs-notice', (msg: string) => { if (msg) appNotice.value = msg })
     unsubInstalling = EventsOn('app:update-installing', () => { appNotice.value = INSTALLING_NOTICE })
   } catch (e) {
     // No Wails runtime (or a failed first sync): the Launcher still has to show.
@@ -83,6 +86,7 @@ onUnmounted(() => {
   unsubBeforeClose?.()
   unsubOpenPath?.()
   unsubInstalling?.()
+  unsubPrefsNotice?.()
 })
 </script>
 

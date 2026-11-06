@@ -80,14 +80,21 @@ func TestRecents_SavePreferencesKeepsTheListFromDisk(t *testing.T) {
 	require.NoError(t, err)
 	r.Record("/w/two", "2", "Two")
 
+	// A key from a newer build, already on disk, must survive; Extra on the
+	// saved copy is never written.
+	require.NoError(t, s.Modify(func(p *Preferences) error {
+		p.Extra["other"] = json.RawMessage(`"kept"`)
+		return nil
+	}))
 	stale.Theme = "schoolhouse-dark"
-	stale.Extra["other"] = json.RawMessage(`"kept"`)
+	stale.Extra["ignored"] = json.RawMessage(`"no"`)
 	require.NoError(t, r.SavePreferences(stale))
 	assert.Len(t, r.List(), 2, "a stale copy must not roll the list back")
 	got, err := s.Load()
 	require.NoError(t, err)
 	assert.Equal(t, "schoolhouse-dark", got.Theme)
 	assert.JSONEq(t, `"kept"`, string(got.Extra["other"]))
+	assert.NotContains(t, got.Extra, "ignored")
 
 	// A copy that carries no list also keeps the one on disk.
 	require.NoError(t, r.SavePreferences(Defaults()))

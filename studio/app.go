@@ -238,7 +238,7 @@ func NewApp(logger *slog.Logger) *App {
 	app.pages = newPageHost(logger, viewLibs(), app.emitEvent)
 	app.setLLMSnapshot(app.llmCfg)
 	if dir, err := prefs.DefaultDir(logger); err == nil {
-		app.prefs = prefs.NewStore(dir).WithLogger(logger)
+		app.prefs = prefs.NewStore(dir).WithLogger(logger).WithNotify(func(msg string) { app.emitEvent("app:prefs-notice", msg) })
 		app.recents = prefs.NewRecents(app.prefs, logger)
 	} else {
 		logger.Warn("preferences disabled: no config dir", "error", err)

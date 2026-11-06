@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -36,6 +37,14 @@ type Recent struct {
 type Recents struct {
 	store  *Store
 	logger *slog.Logger
+
+	// base is the document this process last handed the frontend (Preferences)
+	// or saved (SavePreferences); SavePreferences writes only the fields that
+	// differ from it, so a window holding a stale copy cannot roll back another
+	// window's change.
+	baseMu  sync.Mutex
+	base    Preferences
+	baseSet bool
 }
 
 // NewRecents returns the recents list over store (which may be nil). logger may
@@ -85,7 +94,39 @@ func (r *Recents) modify(fn func(*Preferences) error) error {
 	if !r.has() {
 		return errNoStore
 	}
-	return r.store.Modify(fn)
+	return r.store.Modify(func(p *Preferences) error {
+		r.warnBadKeys(p)
+		return fn(p)
+	})
+}
+
+// warnBadKeys logs a warning for each of this package's sub-keys whose value
+// has the wrong shape: it reads as empty, so the next write replaces it.
+func (r *Recents) warnBadKeys(p *Preferences) {
+	check := func(key string, into any) {
+		if raw, ok := p.Extra[key]; ok && json.Unmarshal(raw, into) != nil {
+			r.logger.Warn("preferences: unexpected value, it will be replaced on this write", "key", key)
+		}
+	}
+	check(RecentsKey, &[]Recent{})
+	check(UpdatesKey, &UpdateSettings{})
+	check(MCPKey, &[]MCPEntry{})
+}
+
+// Preferences loads the document for the frontend and remembers it as the
+// baseline for SavePreferences. A corrupt file reads as the defaults (the UI
+// still starts) and raises the store's up-front notice; the error is returned
+// for the caller to log.
+func (r *Recents) Preferences() (Preferences, error) {
+	if !r.has() {
+		return Defaults(), errNoStore
+	}
+	p, err := r.store.Load()
+	r.store.NoteUnreadable(err)
+	r.baseMu.Lock()
+	r.base, r.baseSet = p, true
+	r.baseMu.Unlock()
+	return p, err
 }
 
 // recentsFrom decodes the list from p; an undecodable list reads as empty.
@@ -236,29 +277,47 @@ func (r *Recents) IDs() map[string]string {
 	return out
 }
 
-// SavePreferences saves p, but takes the recents list (and the other keys the
-// frontend does not round-trip) from the file on disk instead of p: the frontend
-// round-trips only the fields it knows, and a stale copy of the list must never
-// roll it back. The error is "unavailable" when there is no store.
+// SavePreferences saves p, but writes only the known fields that differ from the
+// copy this process last handed the frontend or saved, onto what is on disk
+// now. The frontend round-trips its whole state, loaded once at startup, so
+// writing it back whole would roll back another window's theme or scale change;
+// unknown and package-owned keys (the recent list, update and MCP settings, keys
+// from a newer build) are never taken from p. With no baseline yet, every known
+// field is written. The error is "unavailable" when there is no store.
 func (r *Recents) SavePreferences(p Preferences) error {
+	p = p.Normalize()
+	r.baseMu.Lock()
+	base, have := r.base, r.baseSet
+	r.baseMu.Unlock()
 	err := r.modify(func(cur *Preferences) error {
-		extra := map[string]json.RawMessage{}
-		for k, v := range p.Extra {
-			extra[k] = v
-		}
-		for _, key := range []string{RecentsKey, UpdatesKey, MCPKey} {
-			if raw, ok := cur.Extra[key]; ok {
-				extra[key] = raw
-			} else {
-				delete(extra, key)
-			}
-		}
-		p.Extra = extra
-		*cur = p
+		mergeChanged(cur, base, p, have)
 		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("failed to save preferences: %w", err)
 	}
+	r.baseMu.Lock()
+	r.base, r.baseSet = p, true
+	r.baseMu.Unlock()
 	return nil
+}
+
+// mergeChanged copies into cur each known field of next that differs from base
+// (all of them when haveBase is false).
+func mergeChanged(cur *Preferences, base, next Preferences, haveBase bool) {
+	if !haveBase || next.Theme != base.Theme {
+		cur.Theme = next.Theme
+	}
+	if !haveBase || next.SystemLight != base.SystemLight {
+		cur.SystemLight = next.SystemLight
+	}
+	if !haveBase || next.SystemDark != base.SystemDark {
+		cur.SystemDark = next.SystemDark
+	}
+	if !haveBase || next.ReduceMotion != base.ReduceMotion {
+		cur.ReduceMotion = next.ReduceMotion
+	}
+	if !haveBase || next.UIScale != base.UIScale {
+		cur.UIScale = next.UIScale
+	}
 }
