@@ -29,6 +29,7 @@ type Counts struct {
 	Skills      int
 	Artifacts   int
 	Semantics   int
+	Watches     int
 	Connections int // 1 when the bundle carries connection definitions, else 0
 }
 
@@ -50,6 +51,8 @@ func (m Manifest) Counts() Counts {
 			}
 		case KindSemantics:
 			c.Semantics++
+		case KindWatch:
+			c.Watches++
 		case KindConnections:
 			c.Connections = 1
 		}

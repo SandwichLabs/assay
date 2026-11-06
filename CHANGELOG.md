@@ -4,6 +4,15 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Added
+
+- **Watches (#247, phase 0).**
+  - A watch is a standing question with a condition, kept as `watches/<name>.yaml`: a saved query (with parameters) or a metric, and `rows: any|none` or an `above`, `below` or `outside` threshold.
+  - `slaw watch list|show|check|history` lists them and checks them on demand through the agent policy's read-only path. `check` exits 0 when every watch is ok, 1 when any alert fired, 2 when none fired but some could not be checked.
+  - Each check is logged in `.slaw-local/watches/history.jsonl` (outcome and reason, never result rows; it stays on this computer and is never bundled).
+  - `.slaw` bundles carry `watches/<name>.yaml` entries.
+  - Nothing runs by itself yet: no scheduler, no notifications. Studio's Watches view comes next. See `docs/reference/watches.md`.
+
 ## [0.6.4] - 2026-11-06
 
 Date labels on column charts, and settings that survive a corrupt file and two Slaw processes writing at once (#333, #334).

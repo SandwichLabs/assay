@@ -677,6 +677,17 @@ func (e *DefinitionError) Error() string           { return e.Err.Error() }
 func (e *DefinitionError) Unwrap() error           { return e.Err }
 func (e *DefinitionError) DefinitionProblem() bool { return true }
 
+// BindFailure is a statement the database could not bind (an unknown column or
+// table, a syntax error), as opposed to one the policy refuses. BindFailure lets
+// a caller that cannot import agents (the watch check) show the database's
+// message instead of a policy refusal.
+type BindFailure struct{ Err error }
+
+func (e *BindFailure) Error() string           { return e.Err.Error() }
+func (e *BindFailure) Unwrap() error           { return e.Err }
+func (e *BindFailure) DefinitionProblem() bool { return true }
+func (e *BindFailure) BindFailure() bool       { return true }
+
 // binderErrorPrefixes are DuckDB's stable error-class names for a statement
 // that is wrong. This is the one place the vet looks at the database's message
 // text: EXPLAIN's failure reaches the policy as a string.

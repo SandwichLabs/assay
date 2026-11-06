@@ -24,6 +24,7 @@ import (
 	"github.com/SandwichLabs/slaw/internal/semantics/proposals"
 	"github.com/SandwichLabs/slaw/internal/skills"
 	"github.com/SandwichLabs/slaw/internal/trustfile"
+	"github.com/SandwichLabs/slaw/internal/watches"
 )
 
 // Workspace is an open workspace folder: its configuration (committed, local
@@ -75,6 +76,14 @@ type Workspace interface {
 	// Semantics is the workspace's semantics/ folder: entities, metrics, joins
 	// and the glossary, one yaml file each (docs/reference/semantics.md).
 	Semantics() semantics.Store
+	// Watches is the workspace's watches/ folder: standing questions with a
+	// condition, one yaml file each (docs/reference/watches.md). Checking them
+	// is the person's action (CheckWatches); no agent tool or MCP method
+	// reaches it.
+	Watches() watches.Store
+	// WatchHistory is the record of checks, kept under .slaw-local/watches/:
+	// machine-local, git-ignored and never bundled.
+	WatchHistory() watches.History
 	// Proposals is the inbox of proposed semantic definitions
 	// (.slaw-local/proposals/): machine-local, git-ignored and never bundled.
 	// Accepting one (proposals.Accept) is the person's act; agent tools are
@@ -222,6 +231,8 @@ type workspace struct {
 	sk skills.Store
 	af artifacts.Store
 	sm semantics.Store
+	wt watches.Store
+	wh watches.History
 	pr proposals.Store
 
 	mu       sync.RWMutex
@@ -285,6 +296,8 @@ func Open(dir string, opts ...Option) (Workspace, error) {
 	w.sk = skills.NewFileStore(root, skills.WithObserver(obs), skills.WithLogger(w.logger))
 	w.af = artifacts.NewFileStore(root, artifacts.WithObserver(obs))
 	w.sm = semantics.NewFileStore(root, semantics.WithObserver(obs), semantics.WithLogger(w.logger))
+	w.wt = watches.NewFileStore(root, watches.WithObserver(obs), watches.WithLogger(w.logger))
+	w.wh = watches.NewFileHistory(root)
 	w.pr = proposals.NewFileStore(root, proposals.WithObserver(obs), proposals.WithLogger(w.logger))
 	return w, nil
 }
@@ -491,6 +504,10 @@ func (w *workspace) Queries() queries.Store     { return w.qs }
 func (w *workspace) Skills() skills.Store       { return w.sk }
 func (w *workspace) Artifacts() artifacts.Store { return w.af }
 func (w *workspace) Semantics() semantics.Store { return w.sm }
+
+func (w *workspace) Watches() watches.Store { return w.wt }
+
+func (w *workspace) WatchHistory() watches.History { return w.wh }
 
 func (w *workspace) Proposals() proposals.Store { return w.pr }
 

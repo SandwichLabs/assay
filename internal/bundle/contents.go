@@ -37,7 +37,9 @@ type Contents struct {
 	Artifacts     []ContentItem `json:"artifacts"`
 	// Semantics are the definitions under semantics/: ids look like
 	// "metrics/net_revenue" or "glossary".
-	Semantics   []ContentItem       `json:"semantics"`
+	Semantics []ContentItem `json:"semantics"`
+	// Watches are the standing questions under watches/ (never their history).
+	Watches     []ContentItem       `json:"watches"`
 	Connections []ContentConnection `json:"connections"`
 }
 
@@ -46,7 +48,7 @@ type Contents struct {
 // definitions, each marked portable or not. The workspace's own default
 // database is left out: a bundle has no data to go with it.
 func ContentsOf(ctx context.Context, t Target) (*Contents, error) {
-	out := &Contents{WorkspaceName: t.Name(), Notebooks: []ContentItem{}, Queries: []ContentItem{}, Skills: []ContentItem{}, Artifacts: []ContentItem{}, Semantics: []ContentItem{}, Connections: []ContentConnection{}}
+	out := &Contents{WorkspaceName: t.Name(), Notebooks: []ContentItem{}, Queries: []ContentItem{}, Skills: []ContentItem{}, Artifacts: []ContentItem{}, Semantics: []ContentItem{}, Watches: []ContentItem{}, Connections: []ContentConnection{}}
 	nbs, err := t.Notebooks().List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list notebooks: %w", err)
@@ -85,6 +87,9 @@ func ContentsOf(ctx context.Context, t Target) (*Contents, error) {
 	}
 	if out.Semantics, err = semanticsItems(ctx, t); err != nil {
 		return nil, fmt.Errorf("failed to list semantic definitions: %w", err)
+	}
+	if out.Watches, err = watchItems(ctx, t); err != nil {
+		return nil, fmt.Errorf("failed to list watches: %w", err)
 	}
 	out.Connections = append(contentConnections("team", t.Config().Connections), contentConnections("this computer", t.Local().Connections)...)
 	sort.SliceStable(out.Connections, func(i, j int) bool { return out.Connections[i].Name < out.Connections[j].Name })

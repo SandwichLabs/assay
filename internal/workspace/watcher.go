@@ -23,6 +23,7 @@ import (
 	"github.com/SandwichLabs/slaw/internal/semantics"
 	"github.com/SandwichLabs/slaw/internal/semantics/proposals"
 	"github.com/SandwichLabs/slaw/internal/skills"
+	"github.com/SandwichLabs/slaw/internal/watches"
 )
 
 // ChangeKind is what changed on disk.
@@ -43,6 +44,8 @@ const (
 	// KindSemantics is a file under semantics/: ID is "entities/<name>",
 	// "metrics/<name>", "joins/<name>" or "glossary".
 	KindSemantics ChangeKind = "semantics"
+	// KindWatch is a file under watches/: ID is the watch name.
+	KindWatch ChangeKind = "watch"
 	// KindProposal is a proposed semantic definition in .slaw-local/proposals/
 	// (ID is the proposal id). An agent in this process files proposals through
 	// the workspace's own store, which the watcher does not report; Studio
@@ -90,7 +93,7 @@ func WithDebounce(d time.Duration) WatchOption { return func(o *watchOpts) { o.d
 // recursive on Linux, so every directory that can hold a watched file is
 // registered on its own: the root (for slaw.yaml and the content directories
 // appearing later), notebooks/, queries/, skills/, artifacts/, each
-// skills/<name>/ and artifacts/<name>/ (and artifacts/<name>/html/, html/assets/ and html/assets/<folder>/), semantics/ and its three folders, .slaw-local/ and .slaw-local/proposals/, and directories created afterwards are added as they appear.
+// skills/<name>/ and artifacts/<name>/ (and artifacts/<name>/html/, html/assets/ and html/assets/<folder>/), semantics/ and its three folders, watches/, .slaw-local/ and .slaw-local/proposals/, and directories created afterwards are added as they appear.
 //
 // Its own stores' writes are ignored by content hash: a store announces the
 // hash of what it is about to write, and the watcher drops any event whose
@@ -228,7 +231,7 @@ func (w *Watcher) addTree() error {
 	if !w.addDir(w.root) {
 		return fmt.Errorf("failed to watch workspace %s", w.root)
 	}
-	for _, d := range []string{notebooks.Dir, queries.Dir, skills.Dir, artifacts.Dir, semantics.Dir} {
+	for _, d := range []string{notebooks.Dir, queries.Dir, skills.Dir, artifacts.Dir, semantics.Dir, watches.Dir} {
 		w.addDir(filepath.Join(w.root, d))
 	}
 	w.addSemanticsSubdirs()
@@ -284,6 +287,11 @@ func (w *Watcher) relevant() []string {
 	if names, err := filestore.ListDir(w.root, queries.Dir, queries.Extension); err == nil {
 		for _, n := range names {
 			add(queries.Dir + "/" + n)
+		}
+	}
+	if names, err := filestore.ListDir(w.root, watches.Dir, watches.Extension); err == nil {
+		for _, n := range names {
+			add(watches.Dir + "/" + n)
 		}
 	}
 	add(semantics.Dir + "/" + semantics.GlossaryFile)
@@ -354,6 +362,8 @@ func classify(rel string) (ChangeKind, string, bool) {
 		return KindNotebook, strings.TrimSuffix(parts[1], notebooks.Extension), true
 	case len(parts) == 2 && parts[0] == queries.Dir && strings.HasSuffix(parts[1], queries.Extension) && !filestore.IsTemp(parts[1]):
 		return KindQuery, strings.TrimSuffix(parts[1], queries.Extension), true
+	case len(parts) == 2 && parts[0] == watches.Dir && strings.HasSuffix(parts[1], watches.Extension) && !filestore.IsTemp(parts[1]):
+		return KindWatch, strings.TrimSuffix(parts[1], watches.Extension), true
 	case len(parts) == 2 && parts[0] == semantics.Dir && parts[1] == semantics.GlossaryFile:
 		return KindSemantics, "glossary", true
 	case len(parts) == 3 && parts[0] == semantics.Dir && isSemanticsSubdir(parts[1]) && strings.HasSuffix(parts[2], semantics.Extension) && !filestore.IsTemp(parts[2]):
@@ -528,7 +538,7 @@ func (w *Watcher) handle(ev fsnotify.Event) bool {
 // anything was queued.
 func (w *Watcher) handleNewDir(abs, rel string) bool {
 	parts := strings.Split(rel, "/")
-	isWatchedDir := (len(parts) == 1 && (parts[0] == notebooks.Dir || parts[0] == queries.Dir || parts[0] == skills.Dir || parts[0] == artifacts.Dir || parts[0] == semantics.Dir)) ||
+	isWatchedDir := (len(parts) == 1 && (parts[0] == notebooks.Dir || parts[0] == queries.Dir || parts[0] == skills.Dir || parts[0] == artifacts.Dir || parts[0] == semantics.Dir || parts[0] == watches.Dir)) ||
 		(len(parts) == 1 && parts[0] == LocalDir) ||
 		rel == proposals.Dir ||
 		(len(parts) == 2 && parts[0] == semantics.Dir && isSemanticsSubdir(parts[1])) ||

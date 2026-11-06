@@ -127,6 +127,7 @@ func exportGroups(ctx context.Context, t Target, sel Selection) []exportGroup {
 			return ids, err
 		}},
 		{KindSemantics, sel.Semantics, func() ([]string, error) { return semanticsIDs(ctx, t) }},
+		{KindWatch, sel.Watches, func() ([]string, error) { return watchIDs(ctx, t) }},
 		{KindArtifact, sel.Artifacts, func() ([]string, error) {
 			l, err := t.Artifacts().List(ctx)
 			ids := make([]string, 0, len(l))
