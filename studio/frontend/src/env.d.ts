@@ -114,6 +114,14 @@ interface AppApi {
   RunAssertions(kind: string, name: string): Promise<AssertionRow[]>
   ProfileJoin(name: string): Promise<JoinProfile>
   RunMetric(name: string, dims: string[]): Promise<QueryResult>
+  // Watches (E7): standing questions with a condition, checked when the person asks
+  ListWatches(): Promise<WatchList>
+  GetWatch(name: string): Promise<WatchDetail>
+  WatchHistory(name: string, limit: number): Promise<WatchEntry[]>
+  CheckWatches(names: string[]): Promise<WatchCheckRun>
+  PreviewWatch(draft: WatchDraft): Promise<string>
+  SaveWatch(draft: WatchDraft): Promise<string>
+  DeleteWatch(name: string, rev: string): Promise<void>
   ListTables(): Promise<string[]>
   DescribeTable(name: string): Promise<TableInfo>
   GetTableData(name: string, page: number, pageSize: number, sortCol: string, sortDir: string): Promise<TableData>
@@ -711,6 +719,34 @@ interface JoinProfile {
   rev: string
 }
 
+// WatchWhen mirrors studio.WatchWhen: a watch's condition. Thresholds are the text
+// of the file, so a large integer is never rounded by a JavaScript number.
+interface WatchWhen { rows?: 'any' | 'none' | ''; above?: string; below?: string; outside?: string[] }
+interface WatchQuestion { query?: string; params?: Record<string, string>; metric?: string }
+// WatchDraft mirrors studio.WatchDraft: the New watch / Edit form's answer. rev is
+// the revision the form loaded ('' creates); overwrite is "Keep mine".
+interface WatchDraft { name: string; description?: string; question: WatchQuestion; when: WatchWhen; rev?: string; overwrite?: boolean }
+// WatchEntry mirrors watches.Entry: one recorded check (never the rows it read).
+interface WatchEntry {
+  watch: string; rev?: string; at: string; status: 'ok' | 'alert' | 'error'
+  value?: number | string; rows?: number; rows_capped?: boolean; reason: string; duration_ms: number
+}
+// WatchSummary mirrors studio.WatchSummary: one row of the list.
+interface WatchSummary {
+  name: string; description?: string; question: WatchQuestion; when: WatchWhen
+  question_text?: string; when_text?: string; rev?: string
+  error?: string // a file that could not be read
+  last?: WatchEntry; last_checked?: string; last_fired?: string; last_status?: '' | 'ok' | 'alert' | 'error'
+}
+interface WatchList { watches: WatchSummary[]; alerts: number; history_error?: string }
+interface WatchDetail extends WatchSummary { text: string }
+// WatchSample mirrors workspace.WatchSample: the first rows of an alerting rows
+// check. It exists in the result of the check only; nothing stores it.
+interface WatchSample { columns: string[]; rows: string[][]; capped?: boolean }
+// WatchResult mirrors workspace.WatchResult: a check's outcome plus the sample.
+interface WatchResult extends WatchEntry { question: string; condition: string; sample?: WatchSample; history_error?: string }
+interface WatchCheckRun { results: WatchResult[]; cancelled?: boolean }
+
 interface PageSummary {
   id: string
   title: string
@@ -1086,11 +1122,12 @@ interface BundleContent {
   skills: BundleContentItem[]
   artifacts: BundleContentItem[]
   semantics: BundleContentItem[]
+  watches: BundleContentItem[]
   connections: BundleContentConnection[]
 }
 interface BundleSelection {
   all: boolean
-  notebooks: string[]; queries: string[]; skills: string[]; artifacts: string[]; semantics: string[]
+  notebooks: string[]; queries: string[]; skills: string[]; artifacts: string[]; semantics: string[]; watches: string[]
   sharedConnections: boolean
   teamConnections: string[]
   localConnections: string[]
@@ -1098,11 +1135,11 @@ interface BundleSelection {
 interface BundleExportRequest { path: string; selection: BundleSelection; passphrase: string }
 interface BundleExportResult {
   path: string; cancelled: boolean; encrypted: boolean
-  notebooks: number; queries: number; skills: number; artifacts: number; semantics: number; connections: number
+  notebooks: number; queries: number; skills: number; artifacts: number; semantics: number; watches: number; connections: number
   bytes: number; warnings: string[]
 }
 type BundleAction = 'rename' | 'overwrite' | 'skip'
-interface BundlePreviewItem { key: string; kind: 'notebook' | 'query' | 'skill' | 'artifact' | 'semantics'; id: string; title: string; size: number; conflict: boolean; noRename?: boolean }
+interface BundlePreviewItem { key: string; kind: 'notebook' | 'query' | 'skill' | 'artifact' | 'semantics' | 'watch'; id: string; title: string; size: number; conflict: boolean; noRename?: boolean }
 interface BundlePreviewConnection {
   key: string; name: string; type: string; summary: string
   details: string[]; risks: string[]; askedWritable: boolean

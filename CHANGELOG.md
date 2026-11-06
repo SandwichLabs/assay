@@ -11,7 +11,13 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
   - `slaw watch list|show|check|history` lists them and checks them on demand through the agent policy's read-only path. `check` exits 0 when every watch is ok, 1 when any alert fired, 2 when none fired but some could not be checked.
   - Each check is logged in `.slaw-local/watches/history.jsonl` (outcome and reason, never result rows; it stays on this computer and is never bundled).
   - `.slaw` bundles carry `watches/<name>.yaml` entries.
-  - Nothing runs by itself yet: no scheduler, no notifications. Studio's Watches view comes next. See `docs/reference/watches.md`.
+  - Nothing runs by itself yet: no scheduler, no notifications. See `docs/reference/watches.md`.
+- **Watches in Studio (#247, phase 0).**
+  - A Watches view beside Semantics lists each watch with its question, condition, last outcome and when it last fired.
+  - Check all, a Check button per watch and Stop (a check can be stopped; the watches checked before it keep their results). A fired watch shows its reason in an alert panel, with the first rows it read for a `rows` check (kept in memory only), and an error shows its reason in its row.
+  - Each watch has a history panel, and the nav entry shows a badge counting the watches whose newest check fired.
+  - New watch and Edit: a form that picks a saved query (with its declared parameters) or a metric and a condition, previews the file and saves it with a conflict check. A watch file changed outside Studio appears in the view.
+  - The Export dialog offers watches.
 
 ## [0.6.4] - 2026-11-06
 

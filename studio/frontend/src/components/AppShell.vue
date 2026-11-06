@@ -20,6 +20,7 @@ import { shortcutLabel } from '../composables/useModal'
 import { workspaceInfo } from '../composables/useWorkspace'
 import { useAgentChat } from '../composables/useAgentChat'
 import { openProposals, refreshProposalBadge, startProposalBadge } from '../composables/useProposalBadge'
+import { firedWatches, refreshWatchBadge, startWatchBadge } from '../composables/useWatchBadge'
 import { hasWailsRuntime } from '../lib/wails'
 
 const theme = useTheme()
@@ -42,15 +43,17 @@ const navItems = [
   { path: '/queries', label: 'Queries', icon: 'terminal' },
   { path: '/skills', label: 'Skills', icon: 'bookOpen' },
   { path: '/semantics', label: 'Semantics', icon: 'network' },
+  { path: '/watches', label: 'Watches', icon: 'eye' },
   { path: '/agent', label: 'Assistant', icon: 'bot' },
   { path: '/import', label: 'Import', icon: 'download' },
   { path: '/settings', label: 'Settings', icon: 'settings' },
 ]
 
-// The Agent entry says a turn is running; Semantics says how many proposals wait.
+// The Agent entry says a turn is running; Semantics says how many proposals wait; Watches how many fired.
 function navLabel(item: { path: string; label: string }) {
   if (item.path === '/agent' && agentBusy.value) return 'Assistant, a turn is running'
   if (item.path === '/semantics' && openProposals.value) return `Semantics, ${openProposals.value} ${openProposals.value === 1 ? 'proposal' : 'proposals'} waiting`
+  if (item.path === '/watches' && firedWatches.value) return `Watches, ${firedWatches.value} ${firedWatches.value === 1 ? 'watch has' : 'watches have'} fired`
   return item.label
 }
 function navTitle(item: { path: string; label: string }) {
@@ -112,6 +115,7 @@ const unsubs: Array<() => void> = []
 
 onMounted(() => {
   unsubs.push(startProposalBadge())
+  unsubs.push(startWatchBadge())
   window.addEventListener('slaw:open-agent', openAgentFromEvent)
   window.addEventListener('keydown', onGlobalKeydown)
 })
@@ -123,7 +127,7 @@ onUnmounted(() => {
   if (hasWailsRuntime()) WindowSetTitle('Slaw')
 })
 
-watch(() => info.value?.sessionId, () => { void refreshProposalBadge() })
+watch(() => info.value?.sessionId, () => { void refreshProposalBadge(); void refreshWatchBadge() })
 
 watch(errorMessage, (msg) => {
   if (msg) setTimeout(() => { errorMessage.value = '' }, 4000)
@@ -183,6 +187,7 @@ watch(() => info.value?.name, (name) => {
           <span>{{ item.label }}</span>
           <i v-if="item.path === '/agent' && agentBusy" class="agent-busy" data-testid="agent-busy-nav" aria-hidden="true"></i>
           <span v-if="item.path === '/semantics' && openProposals" class="nav-badge" data-testid="semantics-badge" aria-hidden="true">{{ openProposals }}</span>
+          <span v-if="item.path === '/watches' && firedWatches" class="nav-badge" data-testid="watches-badge" aria-hidden="true">{{ firedWatches }}</span>
         </router-link>
       </nav>
 

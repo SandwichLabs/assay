@@ -8,16 +8,18 @@ import Icon from './Icon.vue'
 import { askConfirm } from '../composables/useConfirm'
 
 const props = defineProps<{
-  kind: 'notebook' | 'query' | 'skill' | 'artifact'
+  kind: 'notebook' | 'query' | 'skill' | 'artifact' | 'watch'
   // Workspace-relative file, e.g. notebooks/weekly-revenue.slnb.
   path: string
   // The file was deleted on disk rather than changed.
   deleted?: boolean
   busy?: boolean
+  // Hide "Save mine as a copy" (a form that has no copy to make).
+  noCopy?: boolean
 }>()
 const emit = defineEmits<{ reload: []; overwrite: []; saveCopy: [] }>()
 
-const thing = computed(() => ({ notebook: 'notebook', query: 'query', skill: 'skill', artifact: 'artifact' })[props.kind])
+const thing = computed(() => ({ notebook: 'notebook', query: 'query', skill: 'skill', artifact: 'artifact', watch: 'watch' })[props.kind])
 
 async function reload() {
   const ok = await askConfirm({
@@ -57,7 +59,7 @@ async function overwrite() {
     <div class="row">
       <button class="btn btn-primary btn-sm" type="button" :disabled="busy" data-testid="conflict-reload" @click="reload">{{ deleted ? 'Close it' : 'Reload from disk' }}</button>
       <button class="btn btn-sm" type="button" :disabled="busy" data-testid="conflict-overwrite" @click="overwrite">Keep mine</button>
-      <button class="btn btn-sm" type="button" :disabled="busy" data-testid="conflict-copy" @click="emit('saveCopy')">Save mine as a copy</button>
+      <button v-if="!noCopy" class="btn btn-sm" type="button" :disabled="busy" data-testid="conflict-copy" @click="emit('saveCopy')">Save mine as a copy</button>
     </div>
   </div>
 </template>

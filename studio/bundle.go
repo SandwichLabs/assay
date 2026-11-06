@@ -167,6 +167,7 @@ type BundleExportResult struct {
 	Skills    int      `json:"skills"`
 	Artifacts int      `json:"artifacts"`
 	Semantics int      `json:"semantics"`
+	Watches   int      `json:"watches"`
 	Connected int      `json:"connections"`
 	Bytes     int      `json:"bytes"`
 	Warnings  []string `json:"warnings"`
@@ -236,7 +237,7 @@ func (a *App) ExportBundle(req BundleExportRequest) (*BundleExportResult, error)
 	n := res.Manifest.Counts()
 	return &BundleExportResult{
 		Path: path, Encrypted: res.Encrypted, Bytes: len(res.Data), Warnings: append([]string{}, res.Manifest.Warnings...),
-		Notebooks: n.Notebooks, Queries: n.Queries, Skills: n.Skills, Artifacts: n.Artifacts, Semantics: n.Semantics, Connected: n.Connections,
+		Notebooks: n.Notebooks, Queries: n.Queries, Skills: n.Skills, Artifacts: n.Artifacts, Semantics: n.Semantics, Watches: n.Watches, Connected: n.Connections,
 	}, nil
 }
 
