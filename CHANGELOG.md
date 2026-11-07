@@ -4,27 +4,35 @@ All notable changes to Slaw are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-07
+
+Watches: standing questions with a condition, kept as files and checked on demand from Studio or `slaw watch check` (#247, phase 0).
+
+**Opening in an older Slaw:** a `.slaw` bundle that includes watches does not open in Slaw 0.6.4 or older (it is reported as corrupt). Untick Watches in the Export dialog, or pass selection flags to `slaw export bundle` without `--watches`, to share with an older Slaw.
+
 ### Added
 
+- **Watches (#247, phase 0).**
+  - A watch is a standing question with a condition, kept as `watches/<name>.yaml`: a saved query (with parameters) or a metric, and `rows: any|none` or an `above`, `below` or `outside` threshold.
+  - Thresholds are plain decimals (at most 40 characters) and are kept, compared and displayed exactly, including integers beyond 64 bits.
+  - `slaw watch list|show|check|history` lists them and checks them on demand through the agent policy's read-only path. `check` exits 0 when every watch is ok, 1 when any alert fired, and 2 when none fired but some could not be checked, or for a usage error, an interrupted check, or a workspace another process has open.
+  - While Studio (or `slaw mcp serve`) has the workspace open, `slaw watch check` refuses before anything runs and records nothing (exit 2): check from Studio instead.
+  - Each check is logged in `.slaw-local/watches/history.jsonl`: the outcome, the reason, the value or row count and how long it took, never result rows. An error's reason is kept as its class only, so a value a database error quoted is not stored. The history stays on this computer and is never bundled.
+  - `.slaw` bundles carry `watches/<name>.yaml` entries (`slaw export bundle --watches NAME` picks them). On import, a watch whose saved query or metric the same bundle renamed is pointed at the new name, and one invalid watch refuses the whole bundle.
+  - Nothing runs by itself yet: no scheduler, no notifications. See `docs/reference/watches.md`.
+- **Watches in Studio (#247, phase 0).**
+  - A Watches view beside Semantics lists each watch with its question, condition, last outcome and when it last fired.
+  - Check all, a Check button per watch and Stop. Rows show `queued`, `checking…` and their result live; a stopped check shows as `stopped` and is never recorded, and the watches checked before it keep their results.
+  - A fired watch shows its reason in an alert panel, with the first rows it read for a `rows` check (kept in memory only), and an error shows its reason in its row.
+  - Each watch has a history panel, and the nav entry shows a badge counting the watches whose newest check fired. A check run by `slaw watch check` refreshes a running Studio's list and badge.
+  - New watch, Edit and Delete: a form that picks a saved query (with its declared parameters) or a metric and a condition, previews the file and saves it with a conflict check; Delete asks first and refuses if the file changed. A watch file changed outside Studio appears in the view.
+  - The Export dialog offers watches.
 - **Watches for the agent (#247, phase 0).**
   - New tools `list_watches` and `get_watch` (read-only, every tier) and `write_watch` (creates or replaces `watches/<name>.yaml`), for the in-app agent and MCP clients alike.
   - `write_watch` is a content tool like `write_artifact`: refused under `read-only`, asks first when "Ask before changes" is on, and, when nobody can approve (headless MCP), is checked before the gate (a bad shape, or a saved query or metric that does not exist, is refused with the reason; a valid request comes back "valid and ready, not saved" with the canonical file). With an approver the card comes first, as for the other content tools, and shows the canonical file. It validates with the same decoder and encoder as Studio's New watch form, replaces only against the `rev` it read, and warns when a required query parameter has no value.
   - The agent sees when a watch was last checked and its status, never a reason or any rows, and no tool or MCP method can check a watch: the person checks in Studio or with `slaw watch check`.
-  - A JSON number with more than 15 significant digits is refused (it has already been rounded); send it as a string. Integer thresholds beyond 64 bits are now written and read back exactly, and the displayed threshold is exact.
+  - A JSON number that arrives with more than 15 significant digits, in a threshold or in `params`, is refused, since it has already been rounded. A number sent as a JSON number may have been rounded even so, so send long numbers as strings to keep them exact.
   - The `semantic-layer` skill says how to write a watch.
-- **Watches (#247, phase 0).**
-  - A watch is a standing question with a condition, kept as `watches/<name>.yaml`: a saved query (with parameters) or a metric, and `rows: any|none` or an `above`, `below` or `outside` threshold.
-  - `slaw watch list|show|check|history` lists them and checks them on demand through the agent policy's read-only path. `check` exits 0 when every watch is ok, 1 when any alert fired, 2 when none fired but some could not be checked.
-  - Each check is logged in `.slaw-local/watches/history.jsonl` (outcome and reason, never result rows; it stays on this computer and is never bundled).
-  - `.slaw` bundles carry `watches/<name>.yaml` entries.
-  - Nothing runs by itself yet: no scheduler, no notifications. See `docs/reference/watches.md`.
-- **Watches in Studio (#247, phase 0).**
-  - A Watches view beside Semantics lists each watch with its question, condition, last outcome and when it last fired.
-  - Check all, a Check button per watch and Stop (a check can be stopped; the watches checked before it keep their results). A fired watch shows its reason in an alert panel, with the first rows it read for a `rows` check (kept in memory only), and an error shows its reason in its row.
-  - Each watch has a history panel, and the nav entry shows a badge counting the watches whose newest check fired.
-  - New watch and Edit: a form that picks a saved query (with its declared parameters) or a metric and a condition, previews the file and saves it with a conflict check. A watch file changed outside Studio appears in the view.
-  - The Export dialog offers watches.
-  - Rows show `queued`, `checking…` and their result live while Check all runs; a stopped check shows as `stopped` and is never recorded; a check run by `slaw watch check` refreshes a running Studio's list and badge.
 
 ## [0.6.4] - 2026-11-06
 
@@ -448,7 +456,8 @@ The first public release. Vibe is an agentic desktop workspace for working with 
 - Older data-holding `.vibe` (SQLCipher) files are not opened.
 - Linux builds target glibc 2.35 or newer and WebKitGTK 4.1; musl and older distributions are unsupported.
 
-[Unreleased]: https://github.com/SandwichLabs/slaw/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/SandwichLabs/slaw/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/SandwichLabs/slaw/compare/v0.6.4...v0.7.0
 [0.6.4]: https://github.com/SandwichLabs/slaw/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/SandwichLabs/slaw/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/SandwichLabs/slaw/compare/v0.6.1...v0.6.2
