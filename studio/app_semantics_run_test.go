@@ -104,7 +104,7 @@ func TestRunMetric_Binding(t *testing.T) {
 func TestRunMetric_HostileMetricIsRefused(t *testing.T) {
 	app := appWithDefinitions(t)
 	outside := filepath.Join(t.TempDir(), "secret.csv")
-	require.NoError(t, os.WriteFile(outside, []byte("region,amount\nx,99\n"), 0o644))
+	require.NoError(t, os.WriteFile(outside, []byte("region,amount\nx,99*99\n"), 0o644))
 	require.NoError(t, app.ws.Queries().Create(context.Background(), &queries.Query{ID: "pv_base", Title: "pv", SQL: "SELECT region, amount FROM read_csv('" + outside + "')"}))
 	putDef(t, app, semantics.KindMetric, "pv", "version: 1\nname: pv\nquery: pv_base\nmeasure: sum(amount)\nassertions:\n  - {kind: not_null}\n")
 	_, err := app.RunMetric("pv", nil)
@@ -117,7 +117,11 @@ func TestRunMetric_HostileMetricIsRefused(t *testing.T) {
 	assert.Equal(t, "fail", rows[0].Status, "a definition the policy refuses does not compile")
 	assert.Contains(t, rows[0].Error, "outside the workspace", "the policy refused it")
 	assert.Equal(t, "error", rows[1].Status, "its assertion was not run")
-	assert.False(t, strings.Contains(rows[0].Error+rows[1].Error, "99"))
+	// The hostile value carries a '*' because a TempDir path — whose random
+	// suffix is digits — can spell a plain 99 by chance, and the refusal
+	// quotes the query with the file's path in it. '*' cannot appear in one,
+	// so only the data itself can trip this.
+	assert.False(t, strings.Contains(rows[0].Error+rows[1].Error, "99*99"))
 }
 
 // Try it stops at the grid's cap and says so, without inventing a total.
